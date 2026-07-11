@@ -4,7 +4,15 @@ import { searchStandards } from '@/lib/curriculum/search';
 import { chatJson, UpstageError } from '@/lib/upstage/client';
 import { standardsRecommendationMessages } from '@/lib/upstage/prompts';
 
-const requestSchema = z.object({ schoolLevel: z.enum(['elementary', 'middle', 'high']), gradeBand: z.string().min(1), subject: z.string().min(1), query: z.string().min(2) });
+const requestSchema = z.object({
+    schoolLevel: z.enum(['elementary', 'middle', 'high']),
+    gradeBand: z.string().min(1),
+    subject: z.string().min(1).optional(),
+    subjects: z.array(z.string().min(1)).min(1).max(3).optional(),
+    query: z.string().min(2),
+}).superRefine((value, context) => {
+    if (!value.subject && !value.subjects?.length) context.addIssue({ code: 'custom', path: ['subjects'], message: '과목을 한 개 이상 선택해주세요.' });
+});
 const responseSchema = z.object({ recommendations: z.array(z.object({ code: z.string(), score: z.number().min(0).max(100), reason: z.string().min(1), keyPhrase: z.string().min(1) })).min(1).max(5) });
 
 export async function POST(request) {

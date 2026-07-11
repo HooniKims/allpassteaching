@@ -213,7 +213,7 @@ test('keeps every overview value in document-model order', async () => {
     // Given distinct values for each ordered overview field
     const base = makeGeneratedPlan();
     const plan = makeGeneratedPlan({
-        metadata: { date: '2030-03-04', place: '순서장소', className: '순서학급', teacherName: '순서교사' },
+        metadata: { date: '2030-03-04', period: '4', place: '순서장소', className: '순서학급', teacherName: '순서교사' },
         subject: '순서과목',
         unitTitle: '순서단원',
         standards: [{ code: '순서-기준', text: '순서 성취기준 문장' }],
@@ -228,7 +228,7 @@ test('keeps every overview value in document-model order', async () => {
     const [overviewTable] = tableParts(documentXml);
 
     // Then its values appear once through the model's meaningful field order
-    const orderedValues = ['2030-03-04', '순서장소', '순서학급', '순서교사', '초등학교 5학년', '순서과목', '순서단원', '1/1', '순서 수업모형', '[순서-기준] 순서 성취기준 문장', '1. 순서 학습목표 하나', '2. 순서 학습목표 둘', '순서 핵심 질문?', '순서 준비물 하나, 순서 준비물 둘'];
+    const orderedValues = ['2030. 3. 4. / 4교시', '순서장소', '순서학급', '순서교사', '초등학교 5학년', '순서과목', '순서단원', '1/1', '순서 수업모형', '[순서-기준] 순서 성취기준 문장', '1. 순서 학습목표 하나', '2. 순서 학습목표 둘', '순서 핵심 질문?', '순서 준비물 하나, 순서 준비물 둘'];
     let previousIndex = -1;
     for (const value of orderedValues) {
         const valueIndex = overviewTable.indexOf(value);

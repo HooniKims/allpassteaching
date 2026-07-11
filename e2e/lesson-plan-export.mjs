@@ -41,6 +41,12 @@ export async function exportAllFormats(page, metadata, editedValues) {
             expect(documentText).toContain(editedValues.lessonTitle);
             expect(documentText).toContain('후속 학습 및 정리');
             expect(documentText).toContain(editedValues.nextSessionConnection);
+            if (format === 'hwpx') {
+                const rowHeights = [...xml.matchAll(/<hp:tr>([\s\S]*?)<\/hp:tr>/g)].map(([, row]) => Number(row.match(/<hp:cellSz\b[^>]*\bheight="(\d+)"/)?.[1] ?? 0));
+                expect(new Set(rowHeights).size).toBeGreaterThan(1);
+                expect(xml).not.toContain('2026-07-11T');
+                expect(documentText).toContain('3교시');
+            }
             expect(documentText).not.toContain('수업 후 연계');
             expect(documentText).not.toContain('다음 학습 연결');
         }

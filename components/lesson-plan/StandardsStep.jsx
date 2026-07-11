@@ -13,7 +13,12 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
     const [status, setStatus] = useState('idle');
     const [message, setMessage] = useState('');
     const activeRecommendation = useRef(null);
-    const scope = useMemo(() => ({ schoolLevel: basics.schoolLevel, gradeBand: gradeBand(basics), subject: basics.subject, query }), [basics, query]);
+    const scope = useMemo(() => ({
+        schoolLevel: basics.schoolLevel,
+        gradeBand: gradeBand(basics),
+        subjects: basics.mappedSubjects?.length ? basics.mappedSubjects : [basics.subject],
+        query,
+    }), [basics, query]);
     const direct = useMemo(() => searchStandards(catalog, scope, 30), [scope]);
     const visible = recommendations.length ? recommendations : direct;
     useEffect(() => () => { activeRecommendation.current?.abort(); activeRecommendation.current = null; }, []);
@@ -38,7 +43,7 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
         }
     };
     return <div className="standards-step">
-        <header><p className="eyebrow">2단계 · 성취기준</p><h1>성취기준을 선택해주세요</h1><p>{basics.subject} · {gradeBand(basics)}학년군에 맞는 기준만 보여드립니다.</p></header>
+        <header><p className="eyebrow">2단계 · 성취기준</p><h1>성취기준을 선택해주세요</h1><p>{basics.displaySubject || basics.subject} · {gradeBand(basics)}학년군 · {(basics.mappedSubjects?.length ? basics.mappedSubjects : [basics.subject]).join('·')} 기준만 보여드립니다.</p></header>
         <div className="standards-toolbar"><label>코드 또는 내용 검색<input aria-label="성취기준 검색" value={query} onChange={event => {
             activeRecommendation.current?.abort(); activeRecommendation.current = null;
             setQuery(event.target.value); setRecommendations([]); setStatus('idle'); setMessage('');
