@@ -1,0 +1,10 @@
+.DS_Store
+.superpowers/
+.worktrees/
+.next/
+node_modules/
+.env*
+!.env.example
+test-results/
+playwright-report/
+.omo/evidence/
