@@ -1,5 +1,6 @@
 import { createElement } from 'react';
+import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
 
 export default function Home() {
-    return createElement('main', null, createElement('h1', null, '수업 지도안 만들기'));
+    return createElement(LessonPlanWorkspace);
 }
