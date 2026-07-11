@@ -1,3 +1,29 @@
-:root { color-scheme: light; }
+@font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-4Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-5Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-6SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-7Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+
+:root {
+    color-scheme: light;
+    --color-canvas: #f6f5f2;
+    --color-surface: #ffffff;
+    --color-subdued: #f1f0ec;
+    --color-ink: #2f302d;
+    --color-muted: #65655f;
+    --color-border: #d9d8d2;
+    --color-action: #176f5b;
+    --color-action-hover: #105947;
+    --color-action-tint: #e8f3ef;
+    --color-error: #b42318;
+    --radius-control: 7px;
+    --radius-panel: 10px;
+    --shadow-focus: 0 0 0 3px rgba(23, 111, 91, 0.18);
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; }
+html { background: var(--color-canvas); color: var(--color-ink); }
+body { margin: 0; min-height: 100vh; font-family: 'Paperlogy', system-ui, sans-serif; font-size: 16px; line-height: 1.55; }
+button, input, select, textarea { font: inherit; }
+:focus-visible { outline: 2px solid var(--color-action); outline-offset: 2px; }
+h1, h2, h3, p { text-wrap: pretty; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; } }

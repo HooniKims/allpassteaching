@@ -6,5 +6,12 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
-    return <html lang="ko"><body>{children}</body></html>;
+    return (
+        <html lang="ko">
+            <head>
+                <link rel="preload" href="/fonts/paperlogy/Paperlogy-4Regular.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+            </head>
+            <body>{children}</body>
+        </html>
+    );
 }
