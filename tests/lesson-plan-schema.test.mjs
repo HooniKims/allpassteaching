@@ -1,21 +1,47 @@
 import { test, expect } from 'vitest';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
+import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
-function plan(overrides = {}) {
-    return {
-        title: '식물의 성장 조건', schoolLevel: 'elementary', grade: '5', subject: '과학',
-        standards: [{ code: '6과12-01', text: '식물의 성장 조건을 탐구한다.' }],
-        learningGoals: ['성장 조건을 설명할 수 있다.'], materials: ['화분'], instructionModel: { id: 'inquiry', name: '탐구·발견 학습', reason: '관찰 중심' },
-        sessions: [{ id: 'session-1', order: 1, title: '조건 탐구', sessionMinutes: 40, stages: [
-            { phase: '도입', teacherActivities: ['질문한다.'], studentActivities: ['예상한다.'], minutes: 5, materialsAndNotes: [] },
-            { phase: '전개', teacherActivities: ['안내한다.'], studentActivities: ['관찰한다.'], minutes: 30, materialsAndNotes: ['안전'] },
-            { phase: '정리', teacherActivities: ['정리한다.'], studentActivities: ['설명한다.'], minutes: 5, materialsAndNotes: [] },
-        ] }], assessment: [{ element: '관찰', evidence: '기록지', feedback: '즉시 피드백' }], supportStrategies: ['문장 틀 제공'], reflectionPrompt: '다음 수업에서 보완할 점은?', ...overrides,
-    };
-}
+test('표준 과정안 필드를 포함한 완전한 지도안을 검증한다', () => {
+    const parsed = lessonPlanSchema.parse(makeGeneratedPlan());
 
-test('accepts a complete plan with exact session minutes', () => expect(lessonPlanSchema.safeParse(plan()).success).toBe(true));
+    expect(parsed.essentialQuestion).toBeTruthy();
+    expect(parsed.sessions[0].stages[0]).toMatchObject({
+        learningElement: expect.any(String),
+        teacherQuestions: expect.any(Array),
+        expectedStudentResponses: expect.any(Array),
+        supportNotes: expect.any(Array),
+    });
+    expect(parsed.assessment[0]).toMatchObject({ method: expect.any(String), levelFeedback: expect.any(Object) });
+});
+
+test('행정 정보의 빈 문자열을 허용하고 누락된 하위 필드는 빈 문자열로 채운다', () => {
+    const parsed = lessonPlanSchema.parse(makeGeneratedPlan({ metadata: {} }));
+
+    expect(parsed.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
+});
+
+test.each([
+    ['unitTitle', plan => { plan.unitTitle = ''; }],
+    ['essentialQuestion', plan => { plan.essentialQuestion = ''; }],
+    ['nextSessionConnection', plan => { plan.sessions[0].nextSessionConnection = ''; }],
+    ['learningElement', plan => { plan.sessions[0].stages[0].learningElement = ''; }],
+    ['teacherQuestions', plan => { plan.sessions[0].stages[0].teacherQuestions = []; }],
+    ['expectedStudentResponses', plan => { plan.sessions[0].stages[0].expectedStudentResponses = []; }],
+    ['assessment.method', plan => { plan.assessment[0].method = ''; }],
+    ['levelFeedback.needsSupport', plan => { plan.assessment[0].levelFeedback.needsSupport = ''; }],
+])('%s 필드가 비어 있으면 거부한다', (_field, makeInvalid) => {
+    const invalid = makeGeneratedPlan();
+    makeInvalid(invalid);
+
+    expect(lessonPlanSchema.safeParse(invalid).success).toBe(false);
+});
+
+test('두 차시 fixture도 유효한 표준 과정안이다', () => {
+    expect(lessonPlanSchema.safeParse(makeTwoSessionPlan()).success).toBe(true);
+});
+
 test('rejects a session whose stage minutes do not match', () => {
-    const invalid = plan(); invalid.sessions[0].stages[1].minutes = 20;
+    const invalid = makeGeneratedPlan(); invalid.sessions[0].stages[1].minutes = 20;
     expect(lessonPlanSchema.safeParse(invalid).success).toBe(false);
 });
