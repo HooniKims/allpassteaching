@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LessonBasicsStep } from '@/components/lesson-plan/LessonBasicsStep.jsx';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
@@ -8,7 +8,7 @@ import { generationDraft, makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 
 afterEach(() => {
     vi.restoreAllMocks();
-    window.localStorage.clear();
+    window.sessionStorage.clear();
 });
 
 const legacyBasics = { schoolLevel: '', grade: '', subject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', error: '' };
@@ -63,7 +63,7 @@ test('updates the lesson place under basics metadata', async () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ place: '과학실' }) }));
 });
 
-test('maps a directly entered subject to confirmed official subjects', async () => {
+test('selecting the final direct-input subject reveals the mapping field', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ mappings: [
@@ -77,13 +77,15 @@ test('maps a directly entered subject to confirmed official subjects', async () 
         mappedSubjects: ['과학'],
     }} onChange={onChange}/>);
 
-    await user.click(screen.getByRole('radio', { name: '직접 입력' }));
-    await user.clear(screen.getByLabelText('직접 입력 과목'));
+    await user.selectOptions(screen.getByLabelText('과목'), '__custom__');
+    expect(screen.queryByRole('group', { name: '과목 입력 방식' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('직접 입력 과목')).toBeVisible();
     await user.type(screen.getByLabelText('직접 입력 과목'), '환경');
     await user.click(screen.getByRole('button', { name: '관련 공식 과목 찾기' }));
 
-    expect(await screen.findByText('과학')).toBeInTheDocument();
-    expect(screen.getByText('사회')).toBeInTheDocument();
+    const mappingPanel = screen.getByRole('region', { name: '관련 공식 과목 확인' });
+    expect(await within(mappingPanel).findByText('과학')).toBeInTheDocument();
+    expect(within(mappingPanel).getByText('사회')).toBeInTheDocument();
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
         subject: '환경',
         displaySubject: '환경',
@@ -91,10 +93,23 @@ test('maps a directly entered subject to confirmed official subjects', async () 
     }));
 });
 
+test('school grade changes the available elementary subjects', async () => {
+    const user = userEvent.setup();
+    render(<BasicsHarness/>);
+
+    await user.selectOptions(screen.getByLabelText('학교급'), 'elementary');
+    await user.selectOptions(screen.getByLabelText('학년'), '2');
+    expect(screen.getByRole('option', { name: '바른 생활' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '실과' })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('학년'), '6');
+    expect(screen.getByRole('option', { name: '실과' })).toBeInTheDocument();
+});
+
 test('keeps date and period metadata in the generation request', async () => {
     const user = userEvent.setup();
     const basics = { ...generationDraft.basics, metadata: { date: '2026-07-11', period: '3', place: '과학실', className: '5학년 1반', teacherName: '김교사' } };
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, basics, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, basics, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ plan: makeGeneratedPlan({ metadata: basics.metadata }) })));
     render(<LessonPlanWorkspace/>);
 
@@ -109,7 +124,7 @@ test('adds empty metadata keys to a generation request loaded from a legacy draf
     const user = userEvent.setup();
     const basics = structuredClone(generationDraft.basics);
     delete basics.metadata;
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, basics, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, basics, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ plan: makeGeneratedPlan() })));
     render(<LessonPlanWorkspace/>);
 
@@ -124,7 +139,7 @@ test('생성 성공 시 원본을 별도로 저장하고 이후 편집은 현재
     const user = userEvent.setup();
     const generatedPlan = makeGeneratedPlan({ title: 'AI 생성 원본' });
     generatedPlan.sessions[0].stages[0].teacherQuestions[0] = 'AI 생성 원본 발문';
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ plan: generatedPlan })));
     render(<LessonPlanWorkspace/>);
 
@@ -134,7 +149,7 @@ test('생성 성공 시 원본을 별도로 저장하고 이후 편집은 현재
     await user.type(title, '교사 편집 제목');
 
     await waitFor(() => {
-        const saved = JSON.parse(window.localStorage.getItem('allpass.lesson-plan')).data;
+        const saved = JSON.parse(window.sessionStorage.getItem('allpass.lesson-plan')).data;
         expect(saved.plan.title).toBe('교사 편집 제목');
         expect(saved.originalPlan.title).toBe('AI 생성 원본');
         expect(saved.originalPlan.sessions[0].stages[0].teacherQuestions[0]).toBe('AI 생성 원본 발문');
@@ -144,7 +159,7 @@ test('생성 성공 시 원본을 별도로 저장하고 이후 편집은 현재
 test('ignores a late generation response after navigating back', async () => {
     const user = userEvent.setup();
     const pending = deferred();
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending.promise));
     render(<LessonPlanWorkspace/>);
 
@@ -161,7 +176,7 @@ test('ignores a late generation response after navigating back', async () => {
 test('aborts an active generation request when the workspace unmounts', async () => {
     const user = userEvent.setup();
     const pending = deferred();
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending.promise));
     const { unmount } = render(<LessonPlanWorkspace/>);
 
@@ -177,7 +192,7 @@ test('aborts an active generation request when the workspace unmounts', async ()
 
 test('shows a retryable error when the generation request is rejected', async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
     render(<LessonPlanWorkspace/>);
 
@@ -189,7 +204,7 @@ test('shows a retryable error when the generation request is rejected', async ()
 
 test('shows a retryable error when the generation response is not JSON', async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>error</html>', { status: 500 })));
     render(<LessonPlanWorkspace/>);
 
@@ -202,7 +217,7 @@ test('shows a retryable error when the generation response is not JSON', async (
 test('keeps the edited generated plan when regeneration fails', async () => {
     const user = userEvent.setup();
     const plan = makeGeneratedPlan({ title: '보존할 편집 지도안' });
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: {
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: {
         ...generationDraft,
         basics: { ...generationDraft.basics, intent: '수정한 수업 의도' },
         step: 4,

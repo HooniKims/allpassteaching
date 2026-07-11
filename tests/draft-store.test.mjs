@@ -3,7 +3,7 @@ import { DRAFT_VERSION, loadDraft, saveDraft, clearDraft } from '@/lib/draft-sto
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 
-beforeEach(() => window.localStorage.clear());
+beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 test('round-trips the current draft version with its reached-step boundary', () => { saveDraft({ step: 2 }); expect(loadDraft()).toEqual({ step: 2, maxReached: 2 }); });
 test('편집 지도안과 생성 원본을 서로 독립된 값으로 저장하고 불러온다', () => {
     const originalPlan = makeGeneratedPlan({ title: '생성 원본' });
@@ -53,13 +53,13 @@ test('현재 형식 지도안의 빈 편집값을 저장하고 그대로 불러�
     expect(loaded.plan.assessment[0].method).toBe('');
 });
 test('drops an incompatible persisted draft version', () => {
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 0, data: { unsafe: true } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 0, data: { unsafe: true } }));
     expect(loadDraft()).toBeNull();
 });
 test('migrates a version-one generated draft with date normalization and a generation snapshot', () => {
     const plan = makeGeneratedPlan({ metadata: { date: '2026-07-11T09:00', place: '', className: '', teacherName: '' } });
     const basics = { schoolLevel: 'elementary', grade: '5', subject: '과학', mode: 'single', sessions: 1, intent: '식물 관찰', studentNeeds: '', metadata: plan.metadata };
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { step: 4, basics, standards: plan.standards, instructionModel: plan.instructionModel, plan } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { step: 4, basics, standards: plan.standards, instructionModel: plan.instructionModel, plan } }));
 
     const loaded = loadDraft();
 
@@ -69,3 +69,9 @@ test('migrates a version-one generated draft with date normalization and a gener
     expect(loaded.maxReached).toBe(4);
 });
 test('clears a saved draft', () => { saveDraft({ step: 1 }); clearDraft(); expect(loadDraft()).toBeNull(); });
+test('moves a legacy persistent draft into the current tab before removing the permanent copy', () => {
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 1, basics: { studentNeeds: '김학생 지원 정보' } } }));
+    expect(loadDraft()).toMatchObject({ step: 1, basics: { studentNeeds: '김학생 지원 정보' } });
+    expect(window.localStorage.getItem('allpass.lesson-plan')).toBeNull();
+    expect(window.sessionStorage.getItem('allpass.lesson-plan')).toContain('김학생 지원 정보');
+});

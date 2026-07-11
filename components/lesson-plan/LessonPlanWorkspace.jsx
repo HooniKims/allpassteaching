@@ -13,7 +13,7 @@ import { createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMet
 const emptyBasics = { schoolLevel: '', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
 const emptyDraft = { step: 1, maxReached: 1, basics: emptyBasics, standards: [] };
 
-export function LessonPlanWorkspace() {
+export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
     const [ready, setReady] = useState(false);
     const [draft, setDraft] = useState(emptyDraft);
     const [generation, setGeneration] = useState({ status: 'idle', message: '' });
@@ -29,6 +29,7 @@ export function LessonPlanWorkspace() {
         setReady(true);
     }, []);
     useEffect(() => { if (!ready) return; const timer = setTimeout(() => saveDraft(draft), 300); return () => clearTimeout(timer); }, [draft, ready]);
+    useEffect(() => { if (ready) onDraftChange(draft); }, [draft, onDraftChange, ready]);
     useEffect(() => () => { activeGeneration.current?.abort(); activeGeneration.current = null; }, []);
     const cancelGeneration = () => {
         activeGeneration.current?.abort();

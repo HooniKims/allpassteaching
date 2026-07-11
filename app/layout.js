@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata = {
     title: '올패스 티칭',
-    description: '2022 개정 교육과정 기반 수업 지도안 작성 도구',
+    description: '2022 개정 교육과정 기반 지도안·학습지·수행평가·OCR 채점·세특 작성 도구',
 };
 
 export default function RootLayout({ children }) {

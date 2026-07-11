@@ -1,0 +1,49 @@
+import { beforeEach, expect, test } from 'vitest';
+import { createEmptyWorkflow, loadWorkflow, saveWorkflow, WORKFLOW_KEY, WORKFLOW_VERSION } from '@/lib/workflow-store';
+import { sourceHash } from '@/lib/source-hash';
+
+beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
+
+test('stable source hashes ignore object key order and change with source content', () => {
+    expect(sourceHash({ lesson: { subject: '과학', grade: '5' } })).toBe(sourceHash({ lesson: { grade: '5', subject: '과학' } }));
+    expect(sourceHash({ subject: '과학' })).not.toBe(sourceHash({ subject: '수학' }));
+});
+
+test('current-tab persistence keeps structured results for refresh but never selected PDF objects', () => {
+    const project = {
+        ...createEmptyWorkflow(),
+        activeProcess: 'grading',
+        worksheet: { document: { title: '식물 학습지' } },
+        assessment: { task: { title: '식물 수행평가' } },
+        submissions: [{
+            id: 'student-1', studentName: '김학생', fileName: '김학생.pdf', status: 'done',
+            extractedText: '관찰 결과', grading: { totalScore: 85 }, file: new File(['pdf'], '김학생.pdf', { type: 'application/pdf' }),
+        }],
+        records: [{ submissionId: 'student-1', studentName: '김학생', text: '세특 문장' }],
+    };
+
+    saveWorkflow(project);
+    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const loaded = loadWorkflow();
+
+    expect(raw).not.toContain('"file"');
+    expect(loaded).toMatchObject({ activeProcess: 'grading', worksheet: project.worksheet, assessment: project.assessment, submissions: [{ studentName: '김학생', extractedText: '관찰 결과' }], records: [{ studentName: '김학생', text: '세특 문장' }] });
+    expect(loaded.submissions[0]).not.toHaveProperty('file');
+    expect(window.localStorage.getItem(WORKFLOW_KEY)).toBeNull();
+});
+
+test('migrates the earlier activeStage name and supplies empty collections', () => {
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 0, data: { activeStage: 'worksheet', worksheet: { title: '기존 학습지' } } }));
+
+    const loaded = loadWorkflow();
+
+    expect(WORKFLOW_VERSION).toBe(2);
+    expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, submissions: [], records: [] });
+});
+
+test('moves a legacy persistent workflow into the current tab and removes the permanent copy', () => {
+    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 1, data: { lessonSnapshot: { basics: { studentNeeds: '김학생 지원 정보' } } } }));
+    expect(loadWorkflow()).toMatchObject({ lessonSnapshot: { basics: { studentNeeds: '김학생 지원 정보' } } });
+    expect(window.localStorage.getItem(WORKFLOW_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).toContain('김학생 지원 정보');
+});

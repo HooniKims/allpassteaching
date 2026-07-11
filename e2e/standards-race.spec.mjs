@@ -8,7 +8,7 @@ test('검색어가 바뀌면 늦게 도착한 이전 AI 추천을 무시한다',
     const firstReleased = new Promise(resolve => { releaseFirst = resolve; });
     await page.route('**/api/recommend-standards', async route => {
         const { query } = route.request().postDataJSON();
-        if (query !== '빛의 성질') {
+        if (!query.endsWith('빛의 성질')) {
             markFirstStarted();
             await firstReleased;
             await route.fulfill({ json: { recommendations: [{ code: '6과11-02', text: '식물의 구조와 기능', reason: '오래된 A 추천' }] } });

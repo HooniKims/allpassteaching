@@ -11,7 +11,7 @@
 
 ## 1. Product Brief
 
-Designing a lesson-planning workbench for Korean elementary, middle, and general high-school teachers on the web. The primary goal is to move from lesson intent to a curriculum-aligned, editable plan without hiding teacher judgment. The experience must feel calm, exact, trustworthy, and comfortable during long document work.
+Designing an all-in-one teaching workbench for Korean elementary, middle, and general high-school teachers on the web. The primary journey moves from lesson intent to a curriculum-aligned plan, worksheet, performance assessment, evidence-checked grading, and subject record without hiding teacher judgment. The experience must feel calm, exact, trustworthy, and comfortable during long document work.
 
 ## 2. Personas and Constraints
 
@@ -19,6 +19,7 @@ Designing a lesson-planning workbench for Korean elementary, middle, and general
 - Curriculum-expert subject teacher: needs source codes, direct search, and control over AI suggestions.
 - Low-confidence digital user: needs plain Korean labels, forgiving errors, and no hidden gestures.
 - Keyboard or low-vision user: needs visible focus, robust contrast, semantic landmarks, and non-color status cues.
+- Teacher processing a class set: needs student-by-student progress, isolated failures, a clear recovery action, and protection from accidentally retaining original submissions.
 
 ## 3. Visual Thesis
 
@@ -40,18 +41,31 @@ Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, butto
 
 ## 6. Layout and Primitives
 
-- Desktop: 220px persistent step sidebar and a flexible reading column capped near 920px.
-- Mobile: sidebar becomes a top progress summary with previous/next actions.
-- Primitives: Button, Field, ChoiceTile, StatusMessage, StepNavigation, GenerationSummary, Dialog, LessonTable.
+- Desktop: a full-width process rail sits above the existing 220px lesson-step sidebar and a flexible reading column capped near 920px. Later processes use a centered work surface capped near 1120px.
+- Mobile: the process rail scrolls horizontally without truncating labels; the lesson sidebar becomes a top progress summary with previous/next actions.
+- Primitives: Button, Field, ChoiceTile, StatusMessage, StepNavigation, ProcessTabs, GenerationSummary, PrerequisiteNotice, StaleNotice, StructuredEditor, BatchItem, ApprovalState, Dialog, LessonTable.
 - GenerationSummary uses a border-only surface, definition-list facts, an explicit warning sentence, and separate edit/regenerate actions. It never hides or replaces the generated document.
 - ChoiceTile is a card only because the full container is selectable; informational sections have no card chrome.
+- ProcessTabs always expose all five processes and pair color with `완료`, `검토 필요`, or `선행 단계 필요` text. Arrow keys move focus; selecting a blocked process shows a prerequisite explanation instead of silently redirecting.
+- StructuredEditor uses white document sections separated by rules. Repeated sections have explicit add/remove controls and preserve visible labels; it does not become a dashboard card grid.
+- BatchItem is a bordered student row with name, file metadata, current status, progress or error copy, and its next valid action. One failed row never changes successful siblings.
+- ApprovalState distinguishes AI draft, teacher edited, and teacher approved. Editing an approved score removes approval and explains why.
+- StaleNotice preserves an existing downstream document and names which upstream source changed, with a single regenerate action.
 - Minimum touch target is 44px. All fields have visible labels and linked error/helper text.
 
 ## 7. Interaction and Motion
 
 Motion communicates state only: 160–200ms opacity/transform for step changes and dialog entry. Loading uses textual status and a restrained progress indicator. `prefers-reduced-motion` removes nonessential transitions. Hover never exists without a click/focus affordance.
 
-## 8. Accessibility and Accepted Debt
+## 8. Workflow Content and Privacy
+
+- AI output is consistently labeled `AI 초안` until teacher approval. No stage implies that scores or school-record text are final.
+- OCR upload copy states that PDFs are sent to Upstage for extraction and originals are not retained. Student names, extracted text, grading, and records use current-tab storage for refresh recovery and are removed when the tab closes; legacy permanent storage is migrated and deleted.
+- `학생 자료 모두 지우기` is visible from the OCR and record stages and requires confirmation naming the irreversible scope.
+- Empty states explain the exact prerequisite and provide one action to open it. Error states preserve teacher edits and provide a retry that affects only the failed item.
+- Dense rubric tables may scroll horizontally on narrow screens, with the criterion column remaining readable and no clipped inputs.
+
+## 9. Accessibility and Accepted Debt
 
 Target WCAG 2.2 AA, complete keyboard flow, `:focus-visible`, live announcements for generation and errors, and explicit labels for every input. There is no accepted accessibility debt for the MVP. Visual QA must inspect Korean orphaned particles, clipped glyphs, and mobile overflow.
 

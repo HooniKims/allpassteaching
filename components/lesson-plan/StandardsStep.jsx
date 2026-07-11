@@ -17,7 +17,7 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
         schoolLevel: basics.schoolLevel,
         gradeBand: gradeBand(basics),
         subjects: basics.mappedSubjects?.length ? basics.mappedSubjects : [basics.subject],
-        query,
+        query: [basics.displaySubject, query].filter(Boolean).join(' '),
     }), [basics, query]);
     const direct = useMemo(() => searchStandards(catalog, scope, 30), [scope]);
     const visible = recommendations.length ? recommendations : direct;

@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "benchmark:upstage": "node scripts/benchmark-upstage-models.mjs",
+    "check:upstage-ocr": "node --env-file=.env scripts/check-upstage-ocr.mjs",
     "curriculum:build": "node scripts/build-curriculum.mjs"
   },
   "dependencies": {

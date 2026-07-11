@@ -94,3 +94,16 @@ test('aborts an active recommendation request when the step unmounts', async () 
         vi.unstubAllGlobals();
     }
 });
+
+test('includes a directly entered display subject in the AI recommendation query', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ recommendations: [] })));
+    try {
+        render(<StandardsStep basics={{ ...basics, displaySubject: '경제', mappedSubjects: ['사회'] }} selected={[]} onChange={() => {}} onBack={() => {}} onNext={() => {}}/>);
+        await user.click(screen.getByRole('button', { name: 'AI로 추천받기' }));
+        await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+        expect(JSON.parse(fetch.mock.calls[0][1].body).query).toContain('경제');
+    } finally {
+        vi.unstubAllGlobals();
+    }
+});

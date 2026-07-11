@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { normalizeLessonMetadata } from '@/lib/lesson-input';
+import { CUSTOM_SUBJECT_VALUE, catalogSubjectsFor, subjectGroupsFor } from '@/lib/subject-options';
 
 const gradeOptions = { elementary: ['1','2','3','4','5','6'], middle: ['1','2','3'], high: ['1','2','3'] };
-const subjectOptions = { elementary: ['국어','수학','사회','과학','도덕','체육','음악','미술','영어','통합교과','실과·기술가정·정보'], middle: ['국어','수학','사회','과학','도덕','체육','음악','미술','영어','실과·기술가정·정보','중학교 선택'], high: ['국어','수학','사회','과학','도덕','체육','음악','미술','영어','한문','교양'] };
 
 export function LessonBasicsStep({ value, onChange, onNext }) {
-    const subjectMode = value.subjectMode ?? 'official';
+    const subjectGroups = subjectGroupsFor(value.schoolLevel, value.grade);
+    const officialValues = subjectGroups.flatMap(group => group.options.map(item => item.value));
+    const storedSubject = value.displaySubject || value.subject || '';
+    const subjectMode = value.subjectMode === 'custom' || (storedSubject && !officialValues.includes(storedSubject)) ? 'custom' : 'official';
+    const selectedSubject = subjectMode === 'custom' ? CUSTOM_SUBJECT_VALUE : storedSubject;
     const [mappingOptions, setMappingOptions] = useState(() => (value.mappedSubjects ?? []).map(subject => ({ subject, reason: '' })));
     const [mappingStatus, setMappingStatus] = useState('idle');
     const [mappingMessage, setMappingMessage] = useState('');
@@ -18,20 +22,17 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
         if (!value.schoolLevel || !value.grade || !subjectReady || !value.intent.trim()) return update('error', '필수 정보를 확인해주세요');
         onNext();
     };
-    const updateSubjectMode = nextMode => {
+    const selectSubject = selected => {
         setMappingOptions([]);
         setMappingStatus('idle');
         setMappingMessage('');
-        onChange({ ...value, subjectMode: nextMode, subject: '', displaySubject: '', mappedSubjects: [], error: '' });
+        if (selected === CUSTOM_SUBJECT_VALUE) {
+            onChange({ ...value, subjectMode: 'custom', subject: '', displaySubject: '', mappedSubjects: [], error: '' });
+            return;
+        }
+        const mappedSubjects = catalogSubjectsFor(value.schoolLevel, value.grade, selected);
+        onChange({ ...value, subjectMode: 'official', subject: selected, displaySubject: selected, mappedSubjects, error: '' });
     };
-    const updateOfficialSubject = subject => onChange({
-        ...value,
-        subjectMode: 'official',
-        subject,
-        displaySubject: subject,
-        mappedSubjects: subject ? [subject] : [],
-        error: '',
-    });
     const updateCustomSubject = displaySubject => {
         setMappingOptions([]);
         setMappingStatus('idle');
@@ -79,15 +80,11 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
         {value.error && <p className="form-alert" role="alert">{value.error}</p>}
         <div className="field-grid">
             <label>학교급<select aria-label="학교급" value={value.schoolLevel} onChange={event => onChange({ ...value, schoolLevel: event.target.value, grade: '', subject: '', displaySubject: '', mappedSubjects: [], error: '' })}><option value="">선택</option><option value="elementary">초등학교</option><option value="middle">중학교</option><option value="high">일반고등학교</option></select></label>
-            <label>학년<select aria-label="학년" value={value.grade} disabled={!value.schoolLevel} onChange={event => update('grade', event.target.value)}><option value="">선택</option>{(gradeOptions[value.schoolLevel] || []).map(grade => <option key={grade} value={grade}>{grade}학년</option>)}</select></label>
-            {subjectMode === 'official' && <label>과목<select aria-label="과목" value={value.subject} disabled={!value.schoolLevel} onChange={event => updateOfficialSubject(event.target.value)}><option value="">선택</option>{(subjectOptions[value.schoolLevel] || []).map(subject => <option key={subject}>{subject}</option>)}</select></label>}
-            {subjectMode === 'custom' && <label>직접 입력 과목<input aria-label="직접 입력 과목" value={value.displaySubject ?? ''} disabled={!value.schoolLevel} onChange={event => updateCustomSubject(event.target.value)} placeholder="예: 환경, 미디어 리터러시"/></label>}
+            <label>학년<select aria-label="학년" value={value.grade} disabled={!value.schoolLevel} onChange={event => onChange({ ...value, grade: event.target.value, subjectMode: 'official', subject: '', displaySubject: '', mappedSubjects: [], error: '' })}><option value="">선택</option>{(gradeOptions[value.schoolLevel] || []).map(grade => <option key={grade} value={grade}>{grade}학년</option>)}</select></label>
+            <label>과목<select aria-label="과목" value={selectedSubject} disabled={!value.schoolLevel || !value.grade} onChange={event => selectSubject(event.target.value)}><option value="">선택</option>{subjectGroups.map(group => <optgroup key={group.label} label={group.label}>{group.options.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
         </div>
-        <fieldset className="subject-mode"><legend>과목 입력 방식</legend><div className="subject-mode__choices">
-            <label><input type="radio" name="subjectMode" checked={subjectMode === 'official'} onChange={() => updateSubjectMode('official')}/> 목록에서 선택</label>
-            <label><input type="radio" name="subjectMode" checked={subjectMode === 'custom'} onChange={() => updateSubjectMode('custom')}/> 직접 입력</label>
-        </div></fieldset>
         {subjectMode === 'custom' && <section className="subject-mapping" aria-label="관련 공식 과목 확인">
+            <label>직접 입력 과목<input aria-label="직접 입력 과목" value={value.displaySubject ?? ''} disabled={!value.schoolLevel} onChange={event => updateCustomSubject(event.target.value)} placeholder="예: 환경, 미디어 리터러시"/></label>
             <div className="subject-mapping__action"><p>직접 입력한 과목과 연결할 공식 과목을 확인해주세요.</p><button className="secondary-button" type="button" onClick={mapSubject} disabled={!value.schoolLevel || !value.grade || !value.displaySubject?.trim() || !value.intent?.trim() || mappingStatus === 'loading'}>{mappingStatus === 'loading' ? '찾는 중…' : '관련 공식 과목 찾기'}</button></div>
             {mappingMessage && <p className="form-alert" role="alert">{mappingMessage}</p>}
             {!!mappingOptions.length && <div className="subject-mapping-list">{mappingOptions.map(item => <label key={item.subject}>

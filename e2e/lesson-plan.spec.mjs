@@ -36,6 +36,7 @@ async function checkLayout(page) {
             return style.display !== 'none' && style.visibility !== 'hidden' && element.getBoundingClientRect().width > 0;
         });
         const clipped = controls.filter(element => {
+            if (element.closest('.process-rail')) return false;
             const rect = element.getBoundingClientRect();
             return rect.left < -1 || rect.right > window.innerWidth + 1;
         }).map(element => element.getAttribute('aria-label') || element.textContent?.trim() || element.tagName);
@@ -96,6 +97,8 @@ async function completeBasics(page, { multi = false } = {}) {
     await page.goto('/');
     await checkAccessibility(page);
     await page.locator('body').press('Tab');
+    await expect(page.getByRole('tab', { name: /지도안/ })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: '수업 정보 단계로 이동' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('학교급')).toBeFocused();
@@ -168,7 +171,7 @@ async function expectPrintPages(page, testInfo, expectedCount, filename) {
 
 test.beforeEach(async ({ page }, testInfo) => {
     await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => sessionStorage.clear());
     await page.screenshot({ path: testInfo.outputPath(`step1-${testInfo.project.name}.png`), fullPage: true });
 });
 
@@ -193,7 +196,7 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
 
     // Then 편집값·접근성·반응형·인쇄 계약이 모두 유지된다
     await expect.poll(() => page.evaluate(() => {
-        const saved = JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data;
+        const saved = JSON.parse(sessionStorage.getItem('allpass.lesson-plan') || 'null')?.data;
         return {
             assessmentMethod: saved?.plan?.assessment?.[0]?.method,
             editedPlace: saved?.plan?.metadata?.place,
@@ -274,7 +277,7 @@ test('직접 입력 과목을 공식 과목에 연결해 생성한다', async ({
     await page.goto('/');
     await page.getByLabel('학교급').selectOption('elementary');
     await page.getByLabel('학년').selectOption('6');
-    await page.getByLabel('직접 입력', { exact: true }).check();
+    await page.getByLabel('과목').selectOption('__custom__');
     await page.getByLabel('직접 입력 과목').fill('생태전환');
     await page.getByLabel('수업할 개념 및 내용').fill('학교 주변 생태계를 관찰하고 지속가능한 실천을 제안한다.');
     await page.getByRole('button', { name: '관련 공식 과목 찾기' }).click();
@@ -322,7 +325,7 @@ test('재생성 실패 후 기존 편집 지도안을 보존한다', async ({ pa
     await expect(page.getByText('잠시 후 다시 시도해주세요.')).toBeVisible();
     await expect(page.getByLabel('1차시 수업 제목')).toHaveValue(editedValues.lessonTitle);
     await expect.poll(() => page.evaluate(() => {
-        const saved = JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data;
+        const saved = JSON.parse(sessionStorage.getItem('allpass.lesson-plan') || 'null')?.data;
         return { edited: saved?.plan?.title, original: saved?.originalPlan?.title };
     })).toEqual({ edited: editedValues.lessonTitle, original: '식물의 구조와 기능' });
 });

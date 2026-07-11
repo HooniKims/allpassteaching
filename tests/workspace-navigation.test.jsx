@@ -12,7 +12,7 @@ test('shows the approved four-step navigation', () => {
 test('moves from a generated plan to completed earlier steps and back without deleting the plan', async () => {
     const user = userEvent.setup();
     const plan = makeGeneratedPlan();
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: {
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: {
         ...generationDraft,
         step: 4,
         maxReached: 4,
