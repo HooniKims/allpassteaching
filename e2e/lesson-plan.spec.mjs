@@ -13,6 +13,15 @@ const standard = {
     keyPhrase: '구조와 기능',
 };
 const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '6학년 1반', teacherName: '김교사' };
+const editedValues = {
+    teacherQuestion: '구조를 보고 알 수 있는 점은?\n기능과는 어떤 관계일까요?',
+    expectedStudentResponse: '관찰한 구조가 기능을 돕는다.',
+    assessmentMethod: '관찰 기록지와 구두 설명',
+    needsSupportFeedback: '문장 틀로 구조를 먼저 설명한다.',
+    meetsFeedback: '구조와 기능의 관계를 증거로 설명한다.',
+    exceedsFeedback: '여러 기관의 공통점과 차이점을 비교한다.',
+    nextSessionConnection: '다음 학습에서 식물 기관의 기능을 비교한다.',
+};
 const evidenceDirectory = path.resolve('.omo/evidence/task8-lesson-plan');
 
 async function checkAccessibility(page) {
@@ -115,18 +124,19 @@ async function selectStandardAndModel(page, testInfo, { expectResult = true } = 
 }
 
 async function editFormalPlan(page) {
+    const [firstQuestion, secondQuestion] = editedValues.teacherQuestion.split('\n');
     const question = page.getByLabel('1차시 도입 주요 발문');
-    await question.fill('구조를 보고 알 수 있는 점은?');
+    await question.fill(firstQuestion);
     await question.press('End');
     await question.press('Enter');
-    await question.type('기능과는 어떤 관계일까요?');
-    await expect(question).toHaveValue('구조를 보고 알 수 있는 점은?\n기능과는 어떤 관계일까요?');
-    await page.getByLabel('1차시 도입 예상 학생 반응').fill('관찰한 구조가 기능을 돕는다.');
-    await page.getByLabel('1차시 평가 1 평가 방법').fill('관찰 기록지와 구두 설명');
-    await page.getByLabel('1차시 평가 1 도움이 필요한 학생 피드백').fill('문장 틀로 구조를 먼저 설명한다.');
-    await page.getByLabel('1차시 평가 1 기대 수준 학생 피드백').fill('구조와 기능의 관계를 증거로 설명한다.');
-    await page.getByLabel('1차시 평가 1 심화 수준 학생 피드백').fill('여러 기관의 공통점과 차이점을 비교한다.');
-    await page.getByLabel('1차시 후속 학습 및 정리').fill('다음 학습에서 식물 기관의 기능을 비교한다.');
+    await question.type(secondQuestion);
+    await expect(question).toHaveValue(editedValues.teacherQuestion);
+    await page.getByLabel('1차시 도입 예상 학생 반응').fill(editedValues.expectedStudentResponse);
+    await page.getByLabel('1차시 평가 1 평가 방법').fill(editedValues.assessmentMethod);
+    await page.getByLabel('1차시 평가 1 도움이 필요한 학생 피드백').fill(editedValues.needsSupportFeedback);
+    await page.getByLabel('1차시 평가 1 기대 수준 학생 피드백').fill(editedValues.meetsFeedback);
+    await page.getByLabel('1차시 평가 1 심화 수준 학생 피드백').fill(editedValues.exceedsFeedback);
+    await page.getByLabel('1차시 후속 학습 및 정리').fill(editedValues.nextSessionConnection);
 }
 
 async function exportAllFormats(page) {
@@ -192,9 +202,19 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await exportAllFormats(page);
 
     // Then 편집값·접근성·반응형·인쇄 계약이 모두 유지된다
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data?.plan?.assessment?.[0]?.method)).toBe('관찰 기록지와 구두 설명');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data?.plan?.assessment?.[0]?.method)).toBe(editedValues.assessmentMethod);
     await page.reload();
-    await expect(page.getByLabel('1차시 평가 1 평가 방법')).toHaveValue('관찰 기록지와 구두 설명');
+    await expect(page.getByLabel('1차시 수업 일자')).toHaveValue(metadata.date);
+    await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
+    await expect(page.getByLabel('1차시 대상 학급')).toHaveValue(metadata.className);
+    await expect(page.getByLabel('1차시 수업자')).toHaveValue(metadata.teacherName);
+    await expect(page.getByLabel('1차시 도입 주요 발문')).toHaveValue(editedValues.teacherQuestion);
+    await expect(page.getByLabel('1차시 도입 예상 학생 반응')).toHaveValue(editedValues.expectedStudentResponse);
+    await expect(page.getByLabel('1차시 평가 1 평가 방법')).toHaveValue(editedValues.assessmentMethod);
+    await expect(page.getByLabel('1차시 평가 1 도움이 필요한 학생 피드백')).toHaveValue(editedValues.needsSupportFeedback);
+    await expect(page.getByLabel('1차시 평가 1 기대 수준 학생 피드백')).toHaveValue(editedValues.meetsFeedback);
+    await expect(page.getByLabel('1차시 평가 1 심화 수준 학생 피드백')).toHaveValue(editedValues.exceedsFeedback);
+    await expect(page.getByLabel('1차시 후속 학습 및 정리')).toHaveValue(editedValues.nextSessionConnection);
     await captureResponsiveResult(page, testInfo);
     if (testInfo.project.name === 'desktop') await expectPrintPages(page, 2, 'browser-print-single.pdf');
 });
