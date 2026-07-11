@@ -67,6 +67,28 @@ test('keeps an opaque Upstage request indeterminate without inventing a percent'
     });
 });
 
+test('ignores measured progress while an opaque Upstage request is waiting', () => {
+    // Given
+    const operation = createOperation({ kind: 'ocr', label: '답안 분석', startedAt: 1_000 });
+
+    // When
+    const waiting = advanceOperation(operation, { measuredProgress: 70, phase: 'upstageWaiting' });
+
+    // Then
+    expect(waiting).toMatchObject({ progress: null, progressKind: 'indeterminate' });
+});
+
+test('ignores measured progress outside an explicitly measurable upload', () => {
+    // Given
+    const operation = createOperation({ kind: 'generate', label: '세특 생성', startedAt: 1_000 });
+
+    // When
+    const generating = advanceOperation(operation, { measuredProgress: 70, phase: 'generating' });
+
+    // Then
+    expect(generating).toMatchObject({ progress: 50, progressKind: 'estimated' });
+});
+
 test('keeps upload indeterminate until measured byte progress is supplied', () => {
     // Given
     const operation = createOperation({ kind: 'upload', label: 'PDF 업로드', startedAt: 1_000 });
@@ -112,12 +134,12 @@ test('derives duration estimates from matching session moving averages', () => {
 test('labels remaining time as approximate', () => {
     // Given
     const operation = createOperation({
-        kind: 'ocr',
-        label: '답안 분석',
+        kind: 'upload',
+        label: '답안 업로드',
         startedAt: 0,
         estimate: { averageSeconds: 100, rangeSeconds: [80, 120], sampleCount: 2, source: 'session-average' },
     });
-    const advanced = advanceOperation(operation, { measuredProgress: 25 });
+    const advanced = advanceOperation(operation, { measuredProgress: 25, phase: 'uploading' });
 
     // When
     const timing = getOperationTiming(advanced, 20_000);
@@ -192,6 +214,54 @@ test('cancellation preserves completed results and is idempotent', () => {
     expect(cancelled.completedResults).toEqual([{ itemId: 'student-1', status: 'fulfilled', value: { score: 90 } }]);
     expect(cancelledAgain).toBe(cancelled);
 });
+
+test('advancing a state deep-copies existing completed results', () => {
+    // Given
+    const operation = advanceOperation(
+        createOperation({ kind: 'grade', label: '일괄 채점', totalItems: 2, startedAt: 1_000 }),
+        { completedResults: [{ itemId: 'student-1', value: { score: 90 } }], successItems: 1 },
+    );
+
+    // When
+    const advanced = advanceOperation(operation, { currentItem: { id: 'student-2' } });
+    advanced.completedResults[0].value.score = 0;
+
+    // Then
+    expect(advanced.completedResults).not.toBe(operation.completedResults);
+    expect(advanced.completedResults[0].value).not.toBe(operation.completedResults[0].value);
+    expect(operation.completedResults[0].value.score).toBe(90);
+});
+
+test('cancelling a state deep-copies completed results', () => {
+    // Given
+    const operation = advanceOperation(
+        createOperation({ kind: 'grade', label: '일괄 채점', totalItems: 2, startedAt: 1_000 }),
+        { completedResults: [{ itemId: 'student-1', value: { evidence: { page: 3 } } }], successItems: 1 },
+    );
+
+    // When
+    const cancelled = cancelOperation(operation, 5_000);
+    cancelled.completedResults[0].value.evidence.page = 99;
+
+    // Then
+    expect(cancelled.completedResults).not.toBe(operation.completedResults);
+    expect(cancelled.completedResults[0].value).not.toBe(operation.completedResults[0].value);
+    expect(operation.completedResults[0].value.evidence.page).toBe(3);
+});
+
+test.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -10])(
+    'uses a stable Korean fallback for invalid remaining seconds: %s',
+    invalidSeconds => {
+        // Given
+        const fallback = '남은 시간 계산 중';
+
+        // When
+        const label = formatRemainingSeconds(invalidSeconds);
+
+        // Then
+        expect(label).toBe(fallback);
+    },
+);
 
 test('normalizes zero and invalid batch counts without exceeding one hundred percent', () => {
     // Given
