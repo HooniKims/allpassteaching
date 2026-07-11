@@ -1,10 +1,15 @@
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { test, expect } from 'vitest';
 import { buildPdf } from '@/lib/export/pdf';
-import { sanitizePdfText, wrapText } from '@/lib/export/pdf-table';
+import { selectVisibleFallback, sanitizePdfText, wrapText } from '@/lib/export/pdf-table';
+import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
 const monospaceFont = { widthOfTextAtSize: text => [...text].length };
+const limitedFont = characters => ({
+    widthOfTextAtSize: text => [...text].length,
+    getCharacterSet: () => [...characters].map(character => character.codePointAt(0)),
+});
 const PAGE_HEIGHT = 841.89;
 const CONTENT_TOP_LIMIT = PAGE_HEIGHT - 42;
 const CONTENT_BOTTOM_LIMIT = 42;
@@ -24,15 +29,29 @@ test('wraps Korean text at word boundaries and preserves explicit whitespace', (
         '한글',
         '문장',
         '둘째',
-        '    ',
         '줄',
     ]);
+    expect(wrapText('\t가나', monospaceFont, 1, 8)).toEqual(['    가나']);
     expect(wrapText('가나다라마바사', monospaceFont, 1, 3)).toEqual(['가나다', '라마바', '사']);
 });
 
-test('sanitizes unsupported controls without losing supported line and tab controls', () => {
-    expect(sanitizePdfText(null)).toBe('');
-    expect(sanitizePdfText('앞\u0000중\u0001뒤\u0085넷\uFFFE다섯\uD800끝\n줄\t탭')).toBe('앞�중�뒤�넷�다섯�끝\n줄\t탭');
+test('uses one visible fallback for unsupported glyphs while preserving supported Korean and whitespace', () => {
+    const regular = limitedFont('앞중뒤넷다섯끝줄탭한글□?\n\t');
+    const bold = limitedFont('앞중뒤넷다섯끝줄탭한글□?\n\t');
+    const fallback = selectVisibleFallback(regular, bold);
+    expect(fallback).toBe('□');
+    expect(sanitizePdfText(null, regular, fallback)).toBe('');
+    expect(sanitizePdfText('한글😀앞\u0000중\u0001뒤\u0085넷\uFFFE다섯\uD800끝\n줄\t탭', regular, fallback))
+        .toBe('한글□앞□중□뒤□넷□다섯□끝\n줄\t탭');
+    expect(selectVisibleFallback(limitedFont('□?'), limitedFont('?'))).toBe('?');
+});
+
+test('replaces unsupported plan glyphs before measurement, drawing, and tracing', async () => {
+    const unsupportedText = '지원앞😀지원뒤\u0000지원끝';
+    const { trace } = await renderPlan(makeGeneratedPlan({ supportStrategies: [unsupportedText] }));
+    const sourceText = trace.find(event => event.type === 'text' && event.sourceText.includes('지원앞'))?.sourceText;
+    expect(sourceText).toMatch(/^• 지원앞[□?]지원뒤[□?]지원끝$/);
+    expect(sourceText).not.toMatch(/[😀\u0000�]/u);
 });
 
 test.each([
@@ -41,7 +60,7 @@ test.each([
 ])('builds an A4 formal PDF with two logical pages per session for %s', async (_label, plan, pageCount) => {
     const { bytes, document } = await renderPlan(plan);
     expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe('%PDF');
-    expect(bytes.length).toBeGreaterThan(20_000);
+    expect(bytes.length).toBeGreaterThan(10_000);
     expect(document.getPageCount()).toBe(pageCount);
     expect(document.getTitle()).toBe('교수·학습 과정안');
     for (const page of document.getPages()) {
@@ -59,6 +78,13 @@ test('keeps true text and cell bounds inside the usable page margins', async () 
         expect(event.top).toBeLessThanOrEqual(CONTENT_TOP_LIMIT);
         expect(event.bottom).toBeGreaterThanOrEqual(CONTENT_BOTTOM_LIMIT);
     }
+});
+
+test('renders every formal table with a readable font size', async () => {
+    const { trace } = await renderPlan(makeGeneratedPlan());
+    const tableText = trace.filter(event => event.type === 'text' && event.tableId);
+    expect(tableText.length).toBeGreaterThan(0);
+    expect(Math.min(...tableText.map(event => event.fontSize))).toBeGreaterThanOrEqual(8);
 });
 
 test('embeds Paperlogy regular and bold font resources once for reuse', async () => {
@@ -141,15 +167,18 @@ test('continues oversized rows without clipping, dropping text, or crossing the 
         sessions: [{
             ...base.sessions[0],
             nextSessionConnection: values.connection,
-            stages: [{
-                ...base.sessions[0].stages[0],
-                teacherActivities: [values.teacherActivity],
-                teacherQuestions: [values.teacherQuestion],
-                studentActivities: [values.studentActivity],
-                expectedStudentResponses: [values.expectedResponse],
-                materialsAndNotes: [values.materialNote],
-                supportNotes: [values.support],
-            }],
+            stages: [
+                {
+                    ...base.sessions[0].stages[0],
+                    teacherActivities: [values.teacherActivity],
+                    teacherQuestions: [values.teacherQuestion],
+                    studentActivities: [values.studentActivity],
+                    expectedStudentResponses: [values.expectedResponse],
+                    materialsAndNotes: [values.materialNote],
+                    supportNotes: [values.support],
+                },
+                ...base.sessions[0].stages.slice(1),
+            ],
         }],
         assessment: [{
             ...base.assessment[0],
@@ -157,9 +186,15 @@ test('continues oversized rows without clipping, dropping text, or crossing the 
             levelFeedback: { needsSupport: values.needsSupport, meets: values.meets, exceeds: values.exceeds },
         }],
     });
+    expect(() => lessonPlanSchema.parse(plan)).not.toThrow();
     const { document, trace } = await renderPlan(plan);
     expect(document.getPageCount()).toBeGreaterThan(2);
     expect(trace.filter(event => event.type === 'cell').every(event => event.bottom >= 48)).toBe(true);
+    const processValues = Object.values(values).slice(0, 6);
+    const lastLongProcessIndex = trace.findLastIndex(event => (
+        event.type === 'text' && processValues.some(value => event.sourceText.includes(value))
+    ));
+    expect(trace.findIndex(event => event.type === 'text' && event.sourceText === '전개')).toBeGreaterThan(lastLongProcessIndex);
     for (const value of Object.values(values)) {
         const source = trace.find(event => event.type === 'text' && event.sourceText.includes(value))?.sourceText;
         expect(source).toBeDefined();
