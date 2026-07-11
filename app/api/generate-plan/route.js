@@ -19,16 +19,18 @@ function validAgainstDraft(plan, draft) {
     const generatedStandards = new Map(plan.standards.map(item => [item.code, item.text]));
     const standardsMatch = plan.standards.length === draft.standards.length && generatedStandards.size === selectedStandards.size && draft.standards.every(item => generatedStandards.get(item.code) === item.text);
     const metadataMatches = Object.entries(draft.basics.metadata).every(([key, value]) => plan.metadata[key] === value);
+    const basicsMatch = plan.schoolLevel === draft.basics.schoolLevel && plan.grade === draft.basics.grade && plan.subject === draft.basics.subject;
+    const instructionModelMatches = plan.instructionModel.id === draft.instructionModel.id && plan.instructionModel.name === draft.instructionModel.name;
     const sessionIds = new Set(plan.sessions.map(session => session.id));
     const sessionsMatch = plan.sessions.length === draft.basics.sessions && sessionIds.size === plan.sessions.length && plan.sessions.every((session, sessionIndex) => session.order === sessionIndex + 1 && session.sessionMinutes === draft.basics.sessionMinutes && session.stages.length === lessonPhases.length && session.stages.every((stage, stageIndex) => stage.phase === lessonPhases[stageIndex]));
-    return metadataMatches && standardsMatch && sessionsMatch;
+    return metadataMatches && basicsMatch && instructionModelMatches && standardsMatch && sessionsMatch;
 }
 
 function parsePlan(value, draft) {
     const requiredFields = generationRequiredFieldsSchema.safeParse(value);
     if (!requiredFields.success) return { success: false, issues: requiredFields.error.issues };
     const parsed = lessonPlanSchema.safeParse(value);
-    return parsed.success && validAgainstDraft(parsed.data, draft) ? { success: true, data: parsed.data } : { success: false, issues: parsed.success ? [{ message: '행정 정보, 성취기준 또는 차시 구성이 요청과 다릅니다.' }] : parsed.error.issues };
+    return parsed.success && validAgainstDraft(parsed.data, draft) ? { success: true, data: parsed.data } : { success: false, issues: parsed.success ? [{ message: '기본 정보, 수업 모형, 행정 정보, 성취기준 또는 차시 구성이 요청과 다릅니다.' }] : parsed.error.issues };
 }
 
 function parseGeneratedContent(content, draft) {

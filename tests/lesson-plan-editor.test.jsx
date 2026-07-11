@@ -1,8 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { test, expect, vi } from 'vitest';
+import { afterEach, test, expect, vi } from 'vitest';
 import { LessonPlanEditor } from '@/components/lesson-plan/LessonPlanEditor.jsx';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+});
 
 test('renders every session as two formal document pages with semantic tables', () => {
     // Given
@@ -181,6 +186,75 @@ test('keeps all export, copy, and restore controls available', () => {
     expect(screen.getByRole('button', { name: '파일로 저장' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '텍스트 복사' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '생성 원본으로 되돌리기' })).toBeInTheDocument();
+});
+
+test('does not request an export for an invalid edited plan and explains the first issue', async () => {
+    const user = userEvent.setup();
+    const invalid = makeGeneratedPlan({ title: '' });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<LessonPlanEditor plan={invalid} onChange={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: '파일로 저장' }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith('입력 내용을 확인해주세요. 수업 제목: 내용을 입력해주세요.');
+    expect(screen.getByRole('button', { name: '파일로 저장' })).not.toBeDisabled();
+});
+
+test('surfaces the server message for an oversized export and recovers exporting state', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        code: 'request_too_large',
+        message: '지도안 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.',
+    }), { status: 413, headers: { 'Content-Type': 'application/json' } })));
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: '파일로 저장' }));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('지도안 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.'));
+    expect(screen.getByRole('button', { name: '파일로 저장' })).not.toBeDisabled();
+});
+
+test('uses a generic export error when the server response is not JSON', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('gateway failure', { status: 502 })));
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: '파일로 저장' }));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('내보내기 파일을 만들지 못했습니다.'));
+});
+
+test('explains a network failure and recovers exporting state', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: '파일로 저장' }));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('네트워크 오류로 내보내기를 요청하지 못했습니다. 다시 시도해주세요.'));
+    expect(screen.getByRole('button', { name: '파일로 저장' })).not.toBeDisabled();
+});
+
+test('downloads a valid exported plan', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Blob(['exported']), { status: 200 })));
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:exported');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: '파일로 저장' }));
+
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce());
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:exported');
 });
 
 test('copies every editable lesson-plan field and announces success', async () => {

@@ -1,5 +1,8 @@
 import { test, expect } from 'vitest';
-import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
+import {
+    LESSON_PLAN_LIMITS,
+    lessonPlanSchema,
+} from '@/lib/lesson-plan-schema';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
 test('표준 과정안 필드를 포함한 완전한 지도안을 검증한다', () => {
@@ -43,5 +46,65 @@ test('두 차시 fixture도 유효한 표준 과정안이다', () => {
 
 test('rejects a session whose stage minutes do not match', () => {
     const invalid = makeGeneratedPlan(); invalid.sessions[0].stages[1].minutes = 20;
+    expect(lessonPlanSchema.safeParse(invalid).success).toBe(false);
+});
+
+test('accepts lesson-plan collection boundaries', () => {
+    const plan = makeGeneratedPlan();
+    plan.standards = Array.from({ length: LESSON_PLAN_LIMITS.standards }, (_, index) => ({ code: `code-${index}`, text: '성취기준' }));
+    plan.learningGoals = Array.from({ length: LESSON_PLAN_LIMITS.learningGoals }, () => '학습 목표');
+    plan.materials = Array.from({ length: LESSON_PLAN_LIMITS.materials }, () => '준비물');
+    plan.assessment = Array.from({ length: LESSON_PLAN_LIMITS.assessment }, () => structuredClone(plan.assessment[0]));
+    plan.supportStrategies = Array.from({ length: LESSON_PLAN_LIMITS.supportStrategies }, () => '지원 전략');
+    plan.sessions = Array.from({ length: LESSON_PLAN_LIMITS.sessions }, (_, index) => ({
+        ...structuredClone(plan.sessions[0]),
+        id: `session-${index + 1}`,
+        order: index + 1,
+    }));
+    const templateStage = plan.sessions[0].stages[1];
+    for (const key of ['teacherActivities', 'studentActivities', 'teacherQuestions', 'expectedStudentResponses', 'supportNotes', 'materialsAndNotes']) {
+        templateStage[key] = Array.from({ length: LESSON_PLAN_LIMITS.stageItems }, () => '활동 내용');
+    }
+    plan.sessions[0].stages = Array.from({ length: LESSON_PLAN_LIMITS.stages }, () => ({
+        ...structuredClone(templateStage),
+        minutes: 4,
+    }));
+
+    expect(lessonPlanSchema.safeParse(plan).success).toBe(true);
+});
+
+test.each([
+    ['standards', plan => { plan.standards = Array.from({ length: LESSON_PLAN_LIMITS.standards + 1 }, () => structuredClone(plan.standards[0])); }],
+    ['learningGoals', plan => { plan.learningGoals = Array.from({ length: LESSON_PLAN_LIMITS.learningGoals + 1 }, () => '학습 목표'); }],
+    ['materials', plan => { plan.materials = Array.from({ length: LESSON_PLAN_LIMITS.materials + 1 }, () => '준비물'); }],
+    ['sessions', plan => { plan.sessions = Array.from({ length: LESSON_PLAN_LIMITS.sessions + 1 }, () => structuredClone(plan.sessions[0])); }],
+    ['stages', plan => { plan.sessions[0].stages = Array.from({ length: LESSON_PLAN_LIMITS.stages + 1 }, () => ({ ...structuredClone(plan.sessions[0].stages[0]), minutes: 1 })); plan.sessions[0].sessionMinutes = LESSON_PLAN_LIMITS.stages + 1; }],
+    ['stage items', plan => { plan.sessions[0].stages[0].teacherActivities = Array.from({ length: LESSON_PLAN_LIMITS.stageItems + 1 }, () => '활동'); }],
+    ['assessment', plan => { plan.assessment = Array.from({ length: LESSON_PLAN_LIMITS.assessment + 1 }, () => structuredClone(plan.assessment[0])); }],
+    ['supportStrategies', plan => { plan.supportStrategies = Array.from({ length: LESSON_PLAN_LIMITS.supportStrategies + 1 }, () => '지원'); }],
+])('rejects %s above its collection boundary', (_field, makeInvalid) => {
+    const invalid = makeGeneratedPlan();
+    makeInvalid(invalid);
+
+    expect(lessonPlanSchema.safeParse(invalid).success).toBe(false);
+});
+
+test('accepts string length boundaries and rejects longer strings', () => {
+    const valid = makeGeneratedPlan({
+        title: '제'.repeat(LESSON_PLAN_LIMITS.shortText),
+        reflectionPrompt: '문'.repeat(LESSON_PLAN_LIMITS.proseText),
+    });
+    const shortTooLong = makeGeneratedPlan({ title: '제'.repeat(LESSON_PLAN_LIMITS.shortText + 1) });
+    const proseTooLong = makeGeneratedPlan({ reflectionPrompt: '문'.repeat(LESSON_PLAN_LIMITS.proseText + 1) });
+
+    expect(lessonPlanSchema.safeParse(valid).success).toBe(true);
+    expect(lessonPlanSchema.safeParse(shortTooLong).success).toBe(false);
+    expect(lessonPlanSchema.safeParse(proseTooLong).success).toBe(false);
+});
+
+test('rejects 1000 assessment rows', () => {
+    const invalid = makeGeneratedPlan();
+    invalid.assessment = Array.from({ length: 1000 }, () => structuredClone(invalid.assessment[0]));
+
     expect(lessonPlanSchema.safeParse(invalid).success).toBe(false);
 });

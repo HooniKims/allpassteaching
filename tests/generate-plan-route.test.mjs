@@ -19,15 +19,62 @@ test('returns a consistent 400 response for malformed request JSON', async () =>
 test('returns a validated lesson plan', async () => {
     const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
     const draft = { ...generationDraft, basics: { ...generationDraft.basics, metadata } };
-    process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(makeGeneratedPlan({ metadata }))));
+    const generated = makeGeneratedPlan({ metadata });
+    process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(generated)));
 
     const response = await POST(request(draft));
 
     expect(response.status).toBe(200);
-    expect((await response.json()).plan.metadata).toEqual(metadata);
+    expect((await response.json()).plan).toEqual(generated);
+    expect(fetch).toHaveBeenCalledOnce();
     const upstreamRequest = JSON.parse(fetch.mock.calls[0][1].body);
     const modelDraft = JSON.parse(upstreamRequest.messages[1].content);
     expect(modelDraft.basics.metadata).toEqual(metadata);
+});
+
+const generationInvariantCases = [
+    ['schoolLevel', plan => { plan.schoolLevel = 'middle'; }],
+    ['grade', plan => { plan.grade = '6'; }],
+    ['subject', plan => { plan.subject = '사회'; }],
+    ['instructionModel.id', plan => { plan.instructionModel.id = 'direct'; }],
+    ['instructionModel.name', plan => { plan.instructionModel.name = '직접 교수 모형'; }],
+];
+
+test.each(generationInvariantCases)('repairs generated %s that differs from the selected draft', async (_field, changePlan) => {
+    const invalid = makeGeneratedPlan();
+    changePlan(invalid);
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(invalid)).mockResolvedValueOnce(completion(makeGeneratedPlan())));
+
+    const response = await POST(request(generationDraft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('keeps the AI-generated instruction model reason without triggering repair', async () => {
+    const generated = makeGeneratedPlan({ instructionModel: { ...makeGeneratedPlan().instructionModel, reason: 'AI가 수업 맥락에 맞춰 작성한 선정 이유' } });
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(generated)));
+
+    const response = await POST(request(generationDraft));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).plan.instructionModel.reason).toBe(generated.instructionModel.reason);
+    expect(fetch).toHaveBeenCalledOnce();
+});
+
+test.each(generationInvariantCases)('returns 422 when generated %s still differs after repair', async (_field, changePlan) => {
+    const invalid = makeGeneratedPlan();
+    changePlan(invalid);
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(invalid)));
+
+    const response = await POST(request(generationDraft));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual(expect.objectContaining({ code: 'invalid_generation' }));
+    expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 test('defaults omitted request metadata before generation', async () => {

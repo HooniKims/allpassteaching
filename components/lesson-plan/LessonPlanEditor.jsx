@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { buildDocumentModel } from '@/lib/export/document-model.js';
+import { lessonPlanSchema } from '@/lib/lesson-plan-schema.js';
 import { AssessmentEditor } from './AssessmentEditor.jsx';
 import { OverviewTable } from './OverviewTable.jsx';
 import { SessionEditor } from './SessionEditor.jsx';
@@ -7,6 +8,27 @@ import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
 import { lessonPlanClipboardText } from './lesson-plan-clipboard.js';
 
 const sharedFieldsNoteId = 'shared-plan-fields-note';
+const issueFieldLabels = {
+    title: '수업 제목',
+    standards: '성취기준',
+    learningGoals: '학습 목표',
+    materials: '준비물',
+    sessions: '차시 구성',
+    assessment: '평가 계획',
+    supportStrategies: '개별화·지원 전략',
+    reflectionPrompt: '수업 후 성찰',
+};
+
+function firstIssueMessage(issue) {
+    const label = issueFieldLabels[issue.path[0]] ?? '입력 내용';
+    if (issue.code === 'custom') return `${label}: ${issue.message}`;
+    if (issue.code === 'too_small') return `${label}: 내용을 입력해주세요.`;
+    if (issue.code === 'too_big') {
+        const unit = issue.origin === 'array' ? '개' : '자';
+        return `${label}: ${issue.maximum}${unit} 이하로 줄여주세요.`;
+    }
+    return `${label}: 형식이 올바른지 확인해주세요.`;
+}
 
 export function LessonPlanEditor({ plan, onChange }) {
     const original = useRef(null);
@@ -44,14 +66,33 @@ export function LessonPlanEditor({ plan, onChange }) {
         update(structuredClone(original.current));
     };
     const download = async () => {
+        const checked = lessonPlanSchema.safeParse(value);
+        if (!checked.success) {
+            window.alert(`입력 내용을 확인해주세요. ${firstIssueMessage(checked.error.issues[0])}`);
+            return;
+        }
         setExporting(true);
         try {
-            const response = await fetch(`/api/export/${format}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(value),
-            });
-            if (!response.ok) throw new Error('내보내기 파일을 만들지 못했습니다.');
+            let response;
+            try {
+                response = await fetch(`/api/export/${format}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(checked.data),
+                });
+            } catch {
+                throw new Error('네트워크 오류로 내보내기를 요청하지 못했습니다. 다시 시도해주세요.');
+            }
+            if (!response.ok) {
+                let message = '내보내기 파일을 만들지 못했습니다.';
+                try {
+                    const errorBody = await response.json();
+                    if (typeof errorBody?.message === 'string' && errorBody.message) message = errorBody.message;
+                } catch {
+                    // JSON이 아닌 오류 응답은 공통 메시지로 안내한다.
+                }
+                throw new Error(message);
+            }
             const url = URL.createObjectURL(await response.blob());
             const anchor = document.createElement('a');
             anchor.href = url;
@@ -59,7 +100,7 @@ export function LessonPlanEditor({ plan, onChange }) {
             anchor.click();
             URL.revokeObjectURL(url);
         } catch (error) {
-            window.alert(error.message);
+            window.alert(error instanceof Error ? error.message : '내보내기 파일을 만들지 못했습니다.');
         } finally {
             setExporting(false);
         }
