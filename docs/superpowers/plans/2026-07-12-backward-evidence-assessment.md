@@ -61,15 +61,16 @@ npm install exceljs@4.4.0 pdfjs-dist@5.4.624
 
 Expected: `package.json` lists both packages under `dependencies` and npm exits 0.
 
-- [ ] **Step 2: Verify the production resolver**
+- [ ] **Step 2: Verify the Node and browser entry points**
 
 Run:
 
 ```bash
-node -e "Promise.all([import('exceljs'), import('pdfjs-dist')]).then(() => console.log('artifact-deps-ok'))"
+node -e "Promise.all([import('exceljs'), import('pdfjs-dist/legacy/build/pdf.mjs')]).then(([, pdfjs]) => { if (typeof pdfjs.getDocument !== 'function') throw new Error('pdfjs getDocument unavailable'); console.log('artifact-deps-ok'); })"
+node --input-type=module -e "const entry = import.meta.resolve('pdfjs-dist/build/pdf.mjs'); if (!entry.endsWith('/pdfjs-dist/build/pdf.mjs')) throw new Error('unexpected browser entry'); console.log(entry)"
 ```
 
-Expected: `artifact-deps-ok`.
+Expected: the Node-compatible legacy ESM entry exposes `getDocument` and prints `artifact-deps-ok`; the modern browser entry resolves without being executed in Node. Future browser viewer code must import `pdfjs-dist/build/pdf.mjs` only inside a client runtime boundary and pair it with `pdfjs-dist/build/pdf.worker.min.mjs` from the same pinned package version. The bare package entry targets the modern build and is not the Node import probe.
 
 - [ ] **Step 3: Commit dependency lock changes**
 
