@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
-import { chatJson, UpstageError } from '@/lib/upstage/client';
+import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { lessonPlanMessages, repairLessonPlanMessages } from '@/lib/upstage/prompts';
 
 const lessonPhases = ['도입', '전개', '정리'];
@@ -19,7 +19,8 @@ function validAgainstDraft(plan, draft) {
     const generatedStandards = new Map(plan.standards.map(item => [item.code, item.text]));
     const standardsMatch = plan.standards.length === draft.standards.length && generatedStandards.size === selectedStandards.size && draft.standards.every(item => generatedStandards.get(item.code) === item.text);
     const metadataMatches = Object.entries(draft.basics.metadata).every(([key, value]) => plan.metadata[key] === value);
-    const sessionsMatch = plan.sessions.length === draft.basics.sessions && plan.sessions.every(session => session.sessionMinutes === draft.basics.sessionMinutes && session.stages.length === lessonPhases.length && session.stages.every((stage, index) => stage.phase === lessonPhases[index]));
+    const sessionIds = new Set(plan.sessions.map(session => session.id));
+    const sessionsMatch = plan.sessions.length === draft.basics.sessions && sessionIds.size === plan.sessions.length && plan.sessions.every((session, sessionIndex) => session.order === sessionIndex + 1 && session.sessionMinutes === draft.basics.sessionMinutes && session.stages.length === lessonPhases.length && session.stages.every((stage, stageIndex) => stage.phase === lessonPhases[stageIndex]));
     return metadataMatches && standardsMatch && sessionsMatch;
 }
 
@@ -30,16 +31,31 @@ function parsePlan(value, draft) {
     return parsed.success && validAgainstDraft(parsed.data, draft) ? { success: true, data: parsed.data } : { success: false, issues: parsed.success ? [{ message: '행정 정보, 성취기준 또는 차시 구성이 요청과 다릅니다.' }] : parsed.error.issues };
 }
 
+function parseGeneratedContent(content, draft) {
+    try {
+        const value = JSON.parse(content);
+        return { ...parsePlan(value, draft), value };
+    } catch (error) {
+        return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] };
+    }
+}
+
 export async function POST(request) {
-    const parsed = draftSchema.safeParse(await request.json());
+    let body;
+    try {
+        body = await request.json();
+    } catch {
+        return Response.json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 });
+    }
+    const parsed = draftSchema.safeParse(body);
     if (!parsed.success) return Response.json({ code: 'invalid_request', issues: parsed.error.issues }, { status: 400 });
     const draft = parsed.data;
     try {
-        const first = await chatJson({ messages: lessonPlanMessages(draft), schema: z.unknown(), timeoutMs: 60000 });
-        let checked = parsePlan(first, draft);
+        const first = await chatContent({ messages: lessonPlanMessages(draft), timeoutMs: 60000 });
+        let checked = parseGeneratedContent(first, draft);
         if (!checked.success) {
-            const repaired = await chatJson({ messages: repairLessonPlanMessages(draft, first, checked.issues), schema: z.unknown(), timeoutMs: 60000 });
-            checked = parsePlan(repaired, draft);
+            const repaired = await chatContent({ messages: repairLessonPlanMessages(draft, checked.value, checked.issues), timeoutMs: 60000 });
+            checked = parseGeneratedContent(repaired, draft);
         }
         if (!checked.success) return Response.json({ code: 'invalid_generation', message: '생성 결과를 지도안 형식으로 복구하지 못했습니다.', issues: checked.issues }, { status: 422 });
         return Response.json({ plan: checked.data });

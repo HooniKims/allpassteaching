@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LessonBasicsStep } from '@/components/lesson-plan/LessonBasicsStep.jsx';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
@@ -16,6 +16,12 @@ const legacyBasics = { schoolLevel: '', grade: '', subject: '', mode: 'single', 
 function BasicsHarness({ initialValue = legacyBasics, onChange = () => {} }) {
     const [value, setValue] = useState(initialValue);
     return <LessonBasicsStep value={value} onChange={next => { setValue(next); onChange(next); }} onNext={() => {}}/>;
+}
+
+function deferred() {
+    let resolve;
+    const promise = new Promise(next => { resolve = next; });
+    return { promise, resolve };
 }
 
 test('switches to a three-session lesson', async () => {
@@ -80,4 +86,62 @@ test('adds empty metadata keys to a generation request loaded from a legacy draf
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     const requestBody = JSON.parse(fetch.mock.calls[0][1].body);
     expect(requestBody.basics.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
+});
+
+test('ignores a late generation response after navigating back', async () => {
+    const user = userEvent.setup();
+    const pending = deferred();
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending.promise));
+    render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await user.click(screen.getByRole('button', { name: '이전' }));
+    expect(screen.getByRole('heading', { name: '수업의 흐름을 선택해주세요' })).toBeInTheDocument();
+
+    await act(async () => { pending.resolve(Response.json({ plan: makeGeneratedPlan() })); await pending.promise; });
+
+    expect(screen.getByRole('heading', { name: '수업의 흐름을 선택해주세요' })).toBeInTheDocument();
+});
+
+test('aborts an active generation request when the workspace unmounts', async () => {
+    const user = userEvent.setup();
+    const pending = deferred();
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending.promise));
+    const { unmount } = render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const signal = fetch.mock.calls[0][1].signal;
+    unmount();
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(true);
+    pending.resolve(Response.json({ plan: makeGeneratedPlan() }));
+});
+
+test('shows a retryable error when the generation request is rejected', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+    render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('다시 시도');
+    expect(screen.getByRole('button', { name: '지도안 생성하기' })).toBeEnabled();
+});
+
+test('shows a retryable error when the generation response is not JSON', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>error</html>', { status: 500 })));
+    render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('다시 시도');
+    expect(screen.getByRole('button', { name: '지도안 생성하기' })).toBeEnabled();
 });
