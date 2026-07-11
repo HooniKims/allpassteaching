@@ -223,12 +223,21 @@ test('announces a clipboard failure without an unhandled rejection', async () =>
     expect(await screen.findByRole('status')).toHaveTextContent('클립보드에 복사하지 못했습니다.');
 });
 
-test('replaces editor value and restore baseline when a distinct plan prop arrives', async () => {
+test('distinguishes an emitted prop echo from a later parent undo using the same object', async () => {
     // Given
     const user = userEvent.setup();
     const firstPlan = makeGeneratedPlan({ title: '첫 번째 지도안' });
     const replacement = makeGeneratedPlan({ title: '외부 교체 지도안', learningGoals: ['외부 교체 목표'] });
-    const { rerender } = render(<LessonPlanEditor plan={firstPlan} onChange={() => {}} />);
+    const onChange = vi.fn();
+    const { rerender } = render(<LessonPlanEditor plan={firstPlan} onChange={onChange} />);
+
+    // When
+    fireEvent.change(screen.getByLabelText('1차시 지도안 제목'), { target: { value: '자체 편집 지도안' } });
+    const emittedPlan = onChange.mock.lastCall[0];
+    rerender(<LessonPlanEditor plan={emittedPlan} onChange={onChange} />);
+
+    // Then
+    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('자체 편집 지도안');
 
     // When
     rerender(<LessonPlanEditor plan={replacement} onChange={() => {}} />);
@@ -238,12 +247,18 @@ test('replaces editor value and restore baseline when a distinct plan prop arriv
     expect(screen.getByLabelText('1차시 학습 목표')).toHaveValue('외부 교체 목표');
 
     // When
-    fireEvent.change(screen.getByLabelText('1차시 지도안 제목'), { target: { value: '교체 후 수정' } });
+    rerender(<LessonPlanEditor plan={emittedPlan} onChange={onChange} />);
+
+    // Then
+    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('자체 편집 지도안');
+
+    // When
+    fireEvent.change(screen.getByLabelText('1차시 지도안 제목'), { target: { value: 'undo 후 수정' } });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     await user.click(screen.getByRole('button', { name: '생성 원본으로 되돌리기' }));
 
     // Then
-    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('외부 교체 지도안');
+    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('자체 편집 지도안');
 });
 
 test('describes repeated shared fields and warns that long print content may add pages', () => {
@@ -273,5 +288,5 @@ test('connects overview values and process totals to their semantic headers', ()
     expect(document.getElementById('session-1-overview-date')).toHaveTextContent('일시');
     const footerCells = screen.getByRole('table', { name: '1차시 교수·학습 과정' }).querySelectorAll('tfoot td');
     expect(footerCells[0]).toHaveAttribute('headers', expect.stringContaining('session-1-process-minutes'));
-    expect(footerCells[1]).toHaveAttribute('headers', expect.stringContaining('session-1-process-notes'));
+    expect(footerCells[1]).toHaveAttribute('headers', expect.stringContaining('session-1-process-minutes'));
 });

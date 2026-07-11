@@ -26,7 +26,11 @@ export function LessonPlanEditor({ plan, onChange }) {
     useEffect(() => {
         if (plan === lastReceivedPlan.current) return;
         lastReceivedPlan.current = plan;
-        if (plan === lastEmittedPlan.current) return;
+        if (plan === lastEmittedPlan.current) {
+            lastEmittedPlan.current = null;
+            return;
+        }
+        lastEmittedPlan.current = null;
         const replacement = structuredClone(plan);
         original.current = structuredClone(plan);
         setValue(replacement);

@@ -69,7 +69,7 @@ export function SessionEditor({ session, onChange }) {
                 <tr>
                     <th id={headerId('total')} scope="row" colSpan="4">단계 시간 합계</th>
                     <td data-label="합계" headers={`${headerId('total')} ${headerId('minutes')}`}><strong className={total === session.sessionMinutes ? '' : 'time-error'}>총 {total}분</strong></td>
-                    <td data-label="차시 시간" headers={`${headerId('total')} ${headerId('notes')}`}>기준 {session.sessionMinutes}분</td>
+                    <td data-label="차시 시간" headers={`${headerId('total')} ${headerId('minutes')}`}>기준 {session.sessionMinutes}분</td>
                 </tr>
             </tfoot>
         </table>
