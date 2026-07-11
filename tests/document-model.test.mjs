@@ -91,6 +91,8 @@ test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조
     ]);
     expect(process.columns).toEqual(PROCESS_COLUMNS);
     expect(process.rows[1]).toMatchObject({
+        phase: '전개',
+        learningElement: '식물 기관 관찰',
         teacherActivity: [
             { label: '교사 활동', items: ['관찰을 안내한다.'] },
             { label: '주요 발문', items: ['관찰한 구조에서 어떤 특징을 찾았나요?'] },
@@ -103,6 +105,7 @@ test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조
             { label: '자료·유의점', items: ['안전하게 다룬다.'] },
             { label: '지원', items: ['관찰 문장 틀을 제공한다.'] },
         ],
+        minutes: 30,
     });
 });
 
@@ -121,11 +124,36 @@ test('평가 표의 네 열과 세 수준별 피드백을 보존한다', () => {
         { key: 'levelFeedback', label: '수준별 피드백' },
     ]);
     expect(assessment.columns).toEqual(ASSESSMENT_COLUMNS);
-    expect(assessment.rows[0].levelFeedback).toEqual([
-        { key: 'needsSupport', label: '도움 필요', text: '관찰 문장 틀로 구조를 설명하도록 돕는다.' },
-        { key: 'meets', label: '기준 도달', text: '구조와 기능을 연결해 설명하도록 한다.' },
-        { key: 'exceeds', label: '기준 초과', text: '여러 기관을 비교해 설명하도록 한다.' },
-    ]);
+    expect(assessment.rows[0]).toEqual({
+        element: '관찰 결과 설명',
+        method: '관찰 및 산출물 확인',
+        evidence: '관찰 기록지',
+        levelFeedback: [
+            { key: 'needsSupport', label: '도움 필요', text: '관찰 문장 틀로 구조를 설명하도록 돕는다.' },
+            { key: 'meets', label: '기준 도달', text: '구조와 기능을 연결해 설명하도록 한다.' },
+            { key: 'exceeds', label: '기준 초과', text: '여러 기관을 비교해 설명하도록 한다.' },
+        ],
+    });
+});
+
+test('차시별 과정·평가 열 정의는 서로와 내보낸 상수의 참조를 공유하지 않는다', () => {
+    // Given
+    const document = buildDocumentModel(makeTwoSessionPlan());
+    const [firstSession, secondSession] = document.sessions;
+
+    // When
+    firstSession.process.columns[0].label = '변경된 단계';
+    firstSession.assessment.columns[0].label = '변경된 평가 요소';
+
+    // Then
+    expect(firstSession.process.columns).not.toBe(secondSession.process.columns);
+    expect(firstSession.process.columns[0]).not.toBe(secondSession.process.columns[0]);
+    expect(secondSession.process.columns[0].label).toBe('단계');
+    expect(PROCESS_COLUMNS[0].label).toBe('단계');
+    expect(firstSession.assessment.columns).not.toBe(secondSession.assessment.columns);
+    expect(firstSession.assessment.columns[0]).not.toBe(secondSession.assessment.columns[0]);
+    expect(secondSession.assessment.columns[0].label).toBe('평가 요소');
+    expect(ASSESSMENT_COLUMNS[0].label).toBe('평가 요소');
 });
 
 test('선택 행정 정보가 비어 있어도 개요 표에 빈 값으로 남긴다', () => {
