@@ -6,7 +6,8 @@ function asText(plan) {
 }
 
 export function LessonPlanEditor({ plan, onChange }) {
-    const original = useRef(structuredClone(plan));
+    const original = useRef(null);
+    if (original.current === null) original.current = structuredClone(plan);
     const [value, setValue] = useState(() => structuredClone(plan));
     const [format, setFormat] = useState('hwpx');
     const [exporting, setExporting] = useState(false);

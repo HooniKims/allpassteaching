@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "benchmark:upstage": "node scripts/benchmark-upstage-models.mjs",
     "curriculum:build": "node scripts/build-curriculum.mjs"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "1.61.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
