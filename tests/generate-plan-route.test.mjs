@@ -17,7 +17,7 @@ test('returns a consistent 400 response for malformed request JSON', async () =>
 });
 
 test('returns a validated lesson plan', async () => {
-    const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
+    const metadata = { date: '2026-07-11', period: '2', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
     const draft = { ...generationDraft, basics: { ...generationDraft.basics, metadata } };
     const generated = makeGeneratedPlan({ metadata });
     process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(generated)));
@@ -64,6 +64,20 @@ test('keeps the AI-generated instruction model reason without triggering repair'
     expect(fetch).toHaveBeenCalledOnce();
 });
 
+test('repairs a plan that names the selected model but omits its stage evidence', async () => {
+    const invalid = makeGeneratedPlan();
+    invalid.sessions[0].stages.forEach(stage => { stage.learningElement = stage.phase; });
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(invalid)).mockResolvedValueOnce(completion(makeGeneratedPlan())));
+
+    const response = await POST(request(generationDraft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairRequest = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(repairRequest.messages.at(-1).content).toContain('가설 설정');
+});
+
 test.each(generationInvariantCases)('returns 422 when generated %s still differs after repair', async (_field, changePlan) => {
     const invalid = makeGeneratedPlan();
     changePlan(invalid);
@@ -87,11 +101,11 @@ test('defaults omitted request metadata before generation', async () => {
     expect(response.status).toBe(200);
     const upstreamRequest = JSON.parse(fetch.mock.calls[0][1].body);
     const modelDraft = JSON.parse(upstreamRequest.messages[1].content);
-    expect(modelDraft.basics.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
+    expect(modelDraft.basics.metadata).toEqual({ date: '', period: '', place: '', className: '', teacherName: '' });
 });
 
 test('repairs generated metadata that differs from the request', async () => {
-    const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
+    const metadata = { date: '2026-07-11', period: '2', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
     const draft = { ...generationDraft, basics: { ...generationDraft.basics, metadata } };
     const changed = makeGeneratedPlan({ metadata: { ...metadata, place: '운동장' } });
     const repaired = makeGeneratedPlan({ metadata });

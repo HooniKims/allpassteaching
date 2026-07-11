@@ -43,7 +43,11 @@ test('does not advance without required lesson information', async () => {
 test('renders optional document metadata with empty defaults for a legacy draft', () => {
     render(<BasicsHarness/>);
 
-    expect(screen.getByLabelText('수업 일시')).toHaveValue('');
+    expect(screen.getByLabelText('수업 날짜')).toHaveAttribute('type', 'date');
+    expect(screen.getByLabelText('수업 날짜')).toHaveValue('');
+    expect(screen.getByLabelText('교시')).toHaveAttribute('type', 'number');
+    expect(screen.getByLabelText('교시')).toHaveValue(null);
+    expect(screen.queryByLabelText('수업 일시')).not.toBeInTheDocument();
     expect(screen.getByLabelText('수업 장소')).toHaveValue('');
     expect(screen.getByLabelText('대상 학급')).toHaveValue('');
     expect(screen.getByLabelText('수업자')).toHaveValue('');
@@ -59,9 +63,37 @@ test('updates the lesson place under basics metadata', async () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ place: '과학실' }) }));
 });
 
-test('keeps metadata in the generation request', async () => {
+test('maps a directly entered subject to confirmed official subjects', async () => {
     const user = userEvent.setup();
-    const basics = { ...generationDraft.basics, metadata: { date: '2026-07-11T09:00', place: '과학실', className: '5학년 1반', teacherName: '김교사' } };
+    const onChange = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ mappings: [
+        { subject: '과학', score: 95, reason: '환경 탐구와 연결됩니다.' },
+        { subject: '사회', score: 88, reason: '지역 환경과 연결됩니다.' },
+    ] })));
+    render(<BasicsHarness initialValue={{
+        ...generationDraft.basics,
+        subjectMode: 'official',
+        displaySubject: '과학',
+        mappedSubjects: ['과학'],
+    }} onChange={onChange}/>);
+
+    await user.click(screen.getByRole('radio', { name: '직접 입력' }));
+    await user.clear(screen.getByLabelText('직접 입력 과목'));
+    await user.type(screen.getByLabelText('직접 입력 과목'), '환경');
+    await user.click(screen.getByRole('button', { name: '관련 공식 과목 찾기' }));
+
+    expect(await screen.findByText('과학')).toBeInTheDocument();
+    expect(screen.getByText('사회')).toBeInTheDocument();
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        subject: '환경',
+        displaySubject: '환경',
+        mappedSubjects: ['과학', '사회'],
+    }));
+});
+
+test('keeps date and period metadata in the generation request', async () => {
+    const user = userEvent.setup();
+    const basics = { ...generationDraft.basics, metadata: { date: '2026-07-11', period: '3', place: '과학실', className: '5학년 1반', teacherName: '김교사' } };
     window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, basics, step: 4 } }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ plan: makeGeneratedPlan({ metadata: basics.metadata }) })));
     render(<LessonPlanWorkspace/>);
@@ -85,7 +117,7 @@ test('adds empty metadata keys to a generation request loaded from a legacy draf
 
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     const requestBody = JSON.parse(fetch.mock.calls[0][1].body);
-    expect(requestBody.basics.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
+    expect(requestBody.basics.metadata).toEqual({ date: '', period: '', place: '', className: '', teacherName: '' });
 });
 
 test('생성 성공 시 원본을 별도로 저장하고 이후 편집은 현재 지도안만 바꾼다', async () => {
@@ -165,4 +197,25 @@ test('shows a retryable error when the generation response is not JSON', async (
 
     expect(await screen.findByRole('alert')).toHaveTextContent('다시 시도');
     expect(screen.getByRole('button', { name: '지도안 생성하기' })).toBeEnabled();
+});
+
+test('keeps the edited generated plan when regeneration fails', async () => {
+    const user = userEvent.setup();
+    const plan = makeGeneratedPlan({ title: '보존할 편집 지도안' });
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: {
+        ...generationDraft,
+        basics: { ...generationDraft.basics, intent: '수정한 수업 의도' },
+        step: 4,
+        maxReached: 4,
+        plan,
+        originalPlan: makeGeneratedPlan({ title: '생성 원본' }),
+        generatedFrom: { ...generationDraft, basics: { ...generationDraft.basics } },
+    } }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ message: '재생성 실패' }, { status: 503 })));
+    render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '수정 내용으로 다시 생성' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('재생성 실패');
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('보존할 편집 지도안');
 });

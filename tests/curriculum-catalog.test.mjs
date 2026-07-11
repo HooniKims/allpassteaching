@@ -11,3 +11,10 @@ test('generated catalog contains unique, source-linked general-school standards'
     expect(catalog.every(item => ['elementary', 'middle', 'high'].includes(item.schoolLevel))).toBe(true);
     expect(catalog.some(item => item.subject.includes('전문'))).toBe(false);
 });
+
+test('build script reads the renamed curriculum source folder', async () => {
+    const source = await readFile('scripts/build-curriculum.mjs', 'utf8');
+
+    expect(source).toContain("const SOURCE_ROOT = '2022_Revised_National_Curriculum';");
+    expect(source).not.toContain('복사본');
+});

@@ -11,7 +11,7 @@ const standard = {
     reason: '식물의 구조와 기능 탐구에 직접 연결됩니다.',
     keyPhrase: '구조와 기능',
 };
-const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '6학년 1반', teacherName: '김교사' };
+const metadata = { date: '2026-07-11', period: '3', place: '과학실', className: '6학년 1반', teacherName: '김교사' };
 const editedValues = {
     lessonTitle: '식물 기관 탐구 수업 제목 센티널',
     place: '편집한 과학실 센티널',
@@ -57,14 +57,15 @@ async function checkLayout(page) {
     if (await page.evaluate(() => innerWidth <= 480) && result.actionColumns !== null) expect(result.actionColumns).toBe(1);
 }
 
-function planFromRequest(requestBody) {
+function planFromRequest(requestBody, generationCount = 1) {
     const source = requestBody.basics.sessions === 1 ? makeGeneratedPlan() : makeTwoSessionPlan();
     return {
         ...source,
         metadata: requestBody.basics.metadata,
         schoolLevel: requestBody.basics.schoolLevel,
         grade: requestBody.basics.grade,
-        subject: requestBody.basics.subject,
+        subject: requestBody.basics.displaySubject || requestBody.basics.subject,
+        title: generationCount > 1 ? `재생성된 지도안 ${generationCount}` : source.title,
         standards: requestBody.standards.map(({ code, text }) => ({ code, text })),
         instructionModel: {
             id: requestBody.instructionModel.id,
@@ -74,16 +75,20 @@ function planFromRequest(requestBody) {
     };
 }
 
-async function mockApis(page, { failFirstGeneration = false } = {}) {
+async function mockApis(page, { failGenerationAt = 0 } = {}) {
     let generationCount = 0;
+    await page.route('**/api/map-subject', route => route.fulfill({ json: { mappings: [
+        { subject: '과학', reason: '생태계와 환경 성취기준을 연결할 수 있습니다.' },
+        { subject: '사회', reason: '지속가능한 생활과 공동체 관점을 연결할 수 있습니다.' },
+    ], directCandidates: ['과학', '사회'] } }));
     await page.route('**/api/recommend-standards', route => route.fulfill({ json: { recommendations: [standard], directCandidates: [standard] } }));
     await page.route('**/api/generate-plan', async route => {
         generationCount += 1;
-        if (failFirstGeneration && generationCount === 1) {
+        if (generationCount === failGenerationAt) {
             await route.fulfill({ status: 503, json: { message: '잠시 후 다시 시도해주세요.' } });
             return;
         }
-        await route.fulfill({ json: { plan: planFromRequest(route.request().postDataJSON()) } });
+        await route.fulfill({ json: { plan: planFromRequest(route.request().postDataJSON(), generationCount) } });
     });
 }
 
@@ -91,12 +96,15 @@ async function completeBasics(page, { multi = false } = {}) {
     await page.goto('/');
     await checkAccessibility(page);
     await page.locator('body').press('Tab');
+    await expect(page.getByRole('button', { name: '수업 정보 단계로 이동' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(page.getByLabel('학교급')).toBeFocused();
     await page.getByLabel('학교급').selectOption('elementary');
     await page.getByLabel('학년').selectOption('6');
     await page.getByLabel('과목').selectOption('과학');
     if (multi) await page.getByLabel('연속 차시 수업').check();
-    await page.getByLabel('수업 일시').fill(metadata.date);
+    await page.getByLabel('수업 날짜').fill(metadata.date);
+    await page.getByLabel('교시').fill(metadata.period);
     await page.getByLabel('수업 장소').fill(metadata.place);
     await page.getByLabel('대상 학급').fill(metadata.className);
     await page.getByLabel('수업자').fill(metadata.teacherName);
@@ -139,12 +147,12 @@ async function editFormalPlan(page) {
     await page.getByLabel('1차시 후속 학습 및 정리').fill(editedValues.nextSessionConnection);
 }
 
-async function captureResponsiveResult(page, testInfo) {
+async function captureResponsiveState(page, testInfo, prefix) {
     for (const [width, height] of [[375, 812], [768, 1024], [1280, 900]]) {
         await page.setViewportSize({ width, height });
         await page.evaluate(() => window.scrollTo(0, 0));
         await checkLayout(page);
-        await page.screenshot({ path: testInfo.outputPath(`result-${testInfo.project.name}-${width}.png`), fullPage: true });
+        await page.screenshot({ path: testInfo.outputPath(`${prefix}-${testInfo.project.name}-${width}.png`), fullPage: true });
     }
 }
 
@@ -178,8 +186,7 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
     await editFormalPlan(page);
     await checkAccessibility(page);
-    await page.evaluate(() => document.activeElement?.blur());
-    await page.keyboard.press('Tab');
+    await page.getByLabel('내보내기 형식').focus();
     await expect(page.getByLabel('내보내기 형식')).toBeFocused();
     await exportAllFormats(page, metadata, editedValues);
     await page.getByLabel('1차시 수업 장소').fill(editedValues.place);
@@ -219,7 +226,7 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await expect(page.getByLabel('1차시 수업 제목')).toHaveValue('식물의 구조와 기능');
     await expect(page.getByLabel('1차시 도입 주요 발문')).toHaveValue('식물의 기관은 어떤 일을 할까요?');
     await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
-    await captureResponsiveResult(page, testInfo);
+    await captureResponsiveState(page, testInfo, 'result');
     if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 2, 'browser-print-single.pdf');
 });
 
@@ -240,7 +247,7 @@ test('연속 2차시는 두 세트의 공식 문서를 만들고 데스크톱에
 
 test('생성 오류 후에도 작성 상태를 보존하고 재시도한다', async ({ page }, testInfo) => {
     // Given 첫 생성 요청만 실패하는 일시적 오류
-    await mockApis(page, { failFirstGeneration: true });
+    await mockApis(page, { failGenerationAt: 1 });
     await completeBasics(page);
     await selectStandardAndModel(page, testInfo, { expectResult: false });
 
@@ -260,6 +267,64 @@ test('생성 오류 후에도 작성 상태를 보존하고 재시도한다', as
     // Then 재시도 성공 후에도 행정 정보와 선택이 유지된다
     await expect(page.getByRole('table', { name: '1차시 수업 개요' })).toBeVisible();
     await expect(page.getByLabel('1차시 수업자')).toHaveValue(metadata.teacherName);
+});
+
+test('직접 입력 과목을 공식 과목에 연결해 생성한다', async ({ page }, testInfo) => {
+    await mockApis(page);
+    await page.goto('/');
+    await page.getByLabel('학교급').selectOption('elementary');
+    await page.getByLabel('학년').selectOption('6');
+    await page.getByLabel('직접 입력', { exact: true }).check();
+    await page.getByLabel('직접 입력 과목').fill('생태전환');
+    await page.getByLabel('수업할 개념 및 내용').fill('학교 주변 생태계를 관찰하고 지속가능한 실천을 제안한다.');
+    await page.getByRole('button', { name: '관련 공식 과목 찾기' }).click();
+    await expect(page.getByText('생태계와 환경 성취기준을 연결할 수 있습니다.')).toBeVisible();
+    await expect(page.getByLabel(/과학.*생태계와 환경/)).toBeChecked();
+    await captureResponsiveState(page, testInfo, 'custom-subject');
+    await page.getByRole('button', { name: /성취기준 찾기/ }).click();
+    await selectStandardAndModel(page, testInfo);
+
+    await expect(page.getByLabel('1차시 과목')).toHaveValue('생태전환');
+    await expect(page.getByRole('region', { name: '선택한 수업 정보' })).toContainText('생태전환');
+});
+
+test('완성 후 이전 입력을 수정하고 기존 결과를 보존한 채 다시 생성한다', async ({ page }, testInfo) => {
+    await mockApis(page);
+    await completeBasics(page);
+    await selectStandardAndModel(page, testInfo);
+
+    const summary = page.getByRole('region', { name: '선택한 수업 정보' });
+    await expect(summary).toContainText('2026. 7. 11. / 3교시');
+    await expect(summary).toContainText(standard.code);
+    await expect(summary).toContainText('탐구·발견 학습');
+    await page.getByRole('button', { name: '입력 수정' }).click();
+    await page.getByLabel('수업할 개념 및 내용').fill('수정한 식물 구조와 기능 수업');
+    await page.getByRole('button', { name: '지도안 완성 단계로 이동' }).click();
+    await expect(page.getByText('현재 지도안은 변경 전 입력으로 생성되었습니다.')).toBeVisible();
+    await expect(page.getByLabel('1차시 수업 제목')).toHaveValue('식물의 구조와 기능');
+    await captureResponsiveState(page, testInfo, 'changed-warning');
+    await page.getByRole('button', { name: '수정 내용으로 다시 생성' }).click();
+
+    await expect(page.getByLabel('1차시 수업 제목')).toHaveValue('재생성된 지도안 2');
+    await expect(page.getByText('현재 지도안은 변경 전 입력으로 생성되었습니다.')).toHaveCount(0);
+});
+
+test('재생성 실패 후 기존 편집 지도안을 보존한다', async ({ page }, testInfo) => {
+    await mockApis(page, { failGenerationAt: 2 });
+    await completeBasics(page);
+    await selectStandardAndModel(page, testInfo);
+    await page.getByLabel('1차시 수업 제목').fill(editedValues.lessonTitle);
+    await page.getByRole('button', { name: '입력 수정' }).click();
+    await page.getByLabel('수업할 개념 및 내용').fill('실패 확인용으로 수정한 수업 내용');
+    await page.getByRole('button', { name: '지도안 완성 단계로 이동' }).click();
+    await page.getByRole('button', { name: '수정 내용으로 다시 생성' }).click();
+
+    await expect(page.getByText('잠시 후 다시 시도해주세요.')).toBeVisible();
+    await expect(page.getByLabel('1차시 수업 제목')).toHaveValue(editedValues.lessonTitle);
+    await expect.poll(() => page.evaluate(() => {
+        const saved = JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data;
+        return { edited: saved?.plan?.title, original: saved?.originalPlan?.title };
+    })).toEqual({ edited: editedValues.lessonTitle, original: '식물의 구조와 기능' });
 });
 
 test('성취기준 AI 추천 네트워크 오류 뒤 직접 검색과 재시도가 유지된다', async ({ page }) => {

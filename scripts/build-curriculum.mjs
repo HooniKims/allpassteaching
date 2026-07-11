@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { extractStandards } from '../lib/curriculum/extract.js';
 
-const SOURCE_ROOT = '2022_Revised_National_Curriculum 복사본';
+const SOURCE_ROOT = '2022_Revised_National_Curriculum';
 const ALLOWED_CATEGORIES = new Set(['common_subject', 'elementary_integrated_subject', 'middle_school_elective', 'high_school_liberal_arts']);
 
 function versionRank(record) {

@@ -21,7 +21,7 @@ test('표준 과정안 필드를 포함한 완전한 지도안을 검증한다',
 test('행정 정보의 빈 문자열을 허용하고 누락된 하위 필드는 빈 문자열로 채운다', () => {
     const parsed = lessonPlanSchema.parse(makeGeneratedPlan({ metadata: {} }));
 
-    expect(parsed.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
+    expect(parsed.metadata).toEqual({ date: '', period: '', place: '', className: '', teacherName: '' });
 });
 
 test.each([

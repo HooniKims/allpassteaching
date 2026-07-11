@@ -29,7 +29,7 @@ test('이전 지도안을 표준 과정안 계약으로 정규화한다', () => 
 
     expect(lessonPlanSchema.safeParse(normalized).success).toBe(true);
     expect(normalized).toMatchObject({
-        metadata: { date: '', place: '', className: '', teacherName: '' },
+        metadata: { date: '', period: '', place: '', className: '', teacherName: '' },
         unitTitle: normalized.title,
         essentialQuestion: normalized.learningGoals[0],
     });
@@ -62,7 +62,7 @@ test('부분 행정 정보와 기존 표준 필드 값을 보존한다', () => {
 
     const normalized = normalizeLessonPlan(plan);
 
-    expect(normalized.metadata).toEqual({ date: '', place: '과학실', className: '', teacherName: '' });
+    expect(normalized.metadata).toEqual({ date: '', period: '', place: '과학실', className: '', teacherName: '' });
     expect(normalized.essentialQuestion).toBe(plan.essentialQuestion);
     expect(normalized.sessions[0].stages[0].teacherQuestions).toEqual(plan.sessions[0].stages[0].teacherQuestions);
     expect(normalized.assessment[0].levelFeedback).toEqual(plan.assessment[0].levelFeedback);

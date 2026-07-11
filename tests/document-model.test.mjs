@@ -124,7 +124,7 @@ test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조
     expect(process.rows[1].notes.map(block => block.key)).toEqual(['materialsAndNotes', 'supportNotes']);
     expect(process.rows[1]).toMatchObject({
         phase: '전개',
-        learningElement: '식물 기관 관찰',
+        learningElement: '탐구 수행 · 식물 기관 관찰',
         teacherActivity: [
             { key: 'teacherActivities', label: '교사 활동', items: ['관찰을 안내한다.'] },
             { key: 'teacherQuestions', label: '주요 발문', items: ['관찰한 구조에서 어떤 특징을 찾았나요?'] },
@@ -198,6 +198,17 @@ test('선택 행정 정보가 비어 있어도 개요 표에 빈 값으로 남�
 
     // Then
     expect(rows.slice(0, 4).map(row => row.value)).toEqual(['', '', '', '']);
+});
+
+test('일시 행은 날짜와 교시만 사람이 읽는 형식으로 결합한다', () => {
+    const plan = makeGeneratedPlan({
+        metadata: { date: '2026-07-11', period: '3', place: '', className: '', teacherName: '' },
+    });
+
+    const date = buildDocumentModel(plan).sessions[0].overview.rows.find(row => row.key === 'date');
+
+    expect(date.value).toBe('2026. 7. 11. / 3교시');
+    expect(date.value).not.toContain('T');
 });
 
 test('입력과 차시별 문서 모델의 주요 중첩 참조를 서로 분리한다', () => {

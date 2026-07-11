@@ -42,7 +42,8 @@ Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, butto
 
 - Desktop: 220px persistent step sidebar and a flexible reading column capped near 920px.
 - Mobile: sidebar becomes a top progress summary with previous/next actions.
-- Primitives: Button, Field, ChoiceTile, StatusMessage, StepNavigation, Dialog, LessonTable.
+- Primitives: Button, Field, ChoiceTile, StatusMessage, StepNavigation, GenerationSummary, Dialog, LessonTable.
+- GenerationSummary uses a border-only surface, definition-list facts, an explicit warning sentence, and separate edit/regenerate actions. It never hides or replaces the generated document.
 - ChoiceTile is a card only because the full container is selectable; informational sections have no card chrome.
 - Minimum touch target is 44px. All fields have visible labels and linked error/helper text.
 

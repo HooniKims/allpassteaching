@@ -43,6 +43,7 @@ const children = (element, tagName) => [...element.children].filter(child => chi
 const rows = table => children(table, 'hp:tr');
 const cells = row => children(row, 'hp:tc');
 const width = cell => Number(children(cell, 'hp:cellSz')[0].getAttribute('width'));
+const height = cell => Number(children(cell, 'hp:cellSz')[0].getAttribute('height'));
 const span = cell => children(cell, 'hp:cellSpan')[0];
 const address = cell => children(cell, 'hp:cellAddr')[0];
 
@@ -260,7 +261,7 @@ test('maps every used formal text role to the exact planned HWPUNIT height', asy
         body: usedStyle('학생이 증거를 바탕으로 설명했는가?'),
         section: usedStyle('수업 개요'),
         tableHeader: usedStyle('단계'),
-        compactTableBody: usedStyle('관찰 문제 확인'),
+        compactTableBody: usedStyle('문제 인식 · 가설 설정'),
     }).toEqual({ title: '8', body: '7', section: '9', tableHeader: '10', compactTableBody: '11' });
 });
 
@@ -299,6 +300,31 @@ test('preserves long structured fields without truncating any process or assessm
 
     // Then every exact sentinel reaches the XML unchanged
     for (const value of Object.values(values)) expect(sectionXml).toContain(value);
+});
+
+test('expands HWPX rows from their paragraph content and sizes each table to the row-height sum', async () => {
+    const { section } = await unpackHwpx(makeGeneratedPlan());
+    const processTable = elements(section, 'hp:tbl')[1];
+    const processRows = rows(processTable);
+    const rowHeights = processRows.map(row => height(cells(row)[0]));
+    const tableHeight = Number(children(processTable, 'hp:sz')[0].getAttribute('height'));
+
+    expect(new Set(rowHeights).size).toBeGreaterThan(1);
+    expect(rowHeights.slice(1).every(value => value > 2000)).toBe(true);
+    for (const row of processRows) expect(new Set(cells(row).map(height)).size).toBe(1);
+    expect(tableHeight).toBe(rowHeights.reduce((sum, value) => sum + value, 0));
+});
+
+test('centers short overview values through the instruction model and keeps standards left aligned', async () => {
+    const { section } = await unpackHwpx(makeGeneratedPlan({ metadata: { date: '2026-07-11', period: '3', place: '과학실', className: '5학년 1반', teacherName: '김교사' } }));
+    const paragraphFor = text => {
+        let element = elements(section, 'hp:t').find(node => node.textContent === text);
+        while (element && element.tagName !== 'hp:p') element = element.parentElement;
+        return element;
+    };
+
+    expect(paragraphFor('탐구·발견 학습').getAttribute('paraPrIDRef')).toBe('23');
+    expect(paragraphFor('[6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.').getAttribute('paraPrIDRef')).toBe('24');
 });
 
 test('escapes XML and visibly replaces forbidden controls, lone surrogates, and noncharacters', async () => {

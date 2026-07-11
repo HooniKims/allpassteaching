@@ -69,6 +69,23 @@ test('renders derived overview values and standards as read-only fields', () => 
     expect(screen.getByLabelText('1차시 성취기준')).toHaveAttribute('readonly');
 });
 
+test('centers overview rows from the date through the instruction model', () => {
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    expect(screen.getByLabelText('1차시 수업 일자').closest('tr')).toHaveClass('overview-table__centered');
+    expect(screen.getByLabelText('1차시 수업 모형').closest('tr')).toHaveClass('overview-table__centered');
+    expect(screen.getByLabelText('1차시 성취기준').closest('tr')).not.toHaveClass('overview-table__centered');
+});
+
+test('keeps the timing table cell intact and lays out date and period inside it', () => {
+    render(<LessonPlanEditor plan={makeGeneratedPlan({ metadata: { date: '2026-07-11', period: '3' } })} onChange={() => {}} />);
+
+    const dateInput = screen.getByLabelText('1차시 수업 일자');
+    expect(dateInput.closest('td')).not.toHaveClass('overview-timing');
+    expect(dateInput.parentElement).toHaveClass('overview-timing');
+    expect(dateInput.parentElement).toContainElement(screen.getByLabelText('1차시 교시'));
+});
+
 test.each([
     ['1차시 평가 1 평가 방법', 'method', '관찰 기록과 구두 설명'],
     ['1차시 평가 1 공통 피드백', 'feedback', '근거를 한 가지 더 찾도록 안내한다.'],
