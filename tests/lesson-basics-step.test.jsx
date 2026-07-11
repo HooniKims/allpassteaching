@@ -88,6 +88,27 @@ test('adds empty metadata keys to a generation request loaded from a legacy draf
     expect(requestBody.basics.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
 });
 
+test('생성 성공 시 원본을 별도로 저장하고 이후 편집은 현재 지도안만 바꾼다', async () => {
+    const user = userEvent.setup();
+    const generatedPlan = makeGeneratedPlan({ title: 'AI 생성 원본' });
+    generatedPlan.sessions[0].stages[0].teacherQuestions[0] = 'AI 생성 원본 발문';
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, step: 4 } }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ plan: generatedPlan })));
+    render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
+    const title = await screen.findByLabelText('1차시 수업 제목');
+    await user.clear(title);
+    await user.type(title, '교사 편집 제목');
+
+    await waitFor(() => {
+        const saved = JSON.parse(window.localStorage.getItem('allpass.lesson-plan')).data;
+        expect(saved.plan.title).toBe('교사 편집 제목');
+        expect(saved.originalPlan.title).toBe('AI 생성 원본');
+        expect(saved.originalPlan.sessions[0].stages[0].teacherQuestions[0]).toBe('AI 생성 원본 발문');
+    });
+});
+
 test('ignores a late generation response after navigating back', async () => {
     const user = userEvent.setup();
     const pending = deferred();

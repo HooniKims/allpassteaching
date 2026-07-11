@@ -177,6 +177,26 @@ test('edits a learning goal and restores the generated original', async () => {
     expect(goal).toHaveValue(plan.learningGoals[0]);
 });
 
+test('복원 시 현재 편집본이 아닌 별도 생성 원본의 복제본을 전달한다', async () => {
+    const user = userEvent.setup();
+    const plan = makeGeneratedPlan({ title: '저장된 편집본' });
+    const originalPlan = makeGeneratedPlan({ title: '진짜 생성 원본' });
+    const onChange = vi.fn();
+    render(<LessonPlanEditor plan={plan} originalPlan={originalPlan} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText('1차시 수업 제목'), { target: { value: '추가 편집' } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: '생성 원본으로 되돌리기' }));
+
+    const restored = onChange.mock.lastCall[0];
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('진짜 생성 원본');
+    expect(restored).toEqual(originalPlan);
+    expect(restored).not.toBe(originalPlan);
+    expect(restored.sessions[0]).not.toBe(originalPlan.sessions[0]);
+    restored.sessions[0].title = '복원본 수정';
+    expect(originalPlan.sessions[0].title).toBe('식물 기관 관찰');
+});
+
 test('keeps all export, copy, and restore controls available', () => {
     // Given / When
     render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
@@ -351,6 +371,53 @@ test('distinguishes an emitted prop echo from a later parent undo using the same
 
     // Then
     expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('자체 편집 지도안');
+});
+
+test('originalPlan을 생략한 기존 호출도 자체 echo에서 커서와 최초 복원 기준을 유지한다', async () => {
+    const user = userEvent.setup();
+    const firstPlan = makeGeneratedPlan({ title: '최초 생성 원본' });
+    const onChange = vi.fn();
+    const { rerender } = render(<LessonPlanEditor plan={firstPlan} onChange={onChange} />);
+    const title = screen.getByLabelText('1차시 수업 제목');
+
+    fireEvent.change(title, { target: { value: '자체 편집 지도안' } });
+    title.focus();
+    title.setSelectionRange(2, 2);
+    const emittedPlan = onChange.mock.lastCall[0];
+    rerender(<LessonPlanEditor plan={emittedPlan} onChange={onChange} />);
+
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveFocus();
+    expect(screen.getByLabelText('1차시 수업 제목').selectionStart).toBe(2);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: '생성 원본으로 되돌리기' }));
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('최초 생성 원본');
+});
+
+test('외부 plan/originalPlan 쌍 교체는 값과 복원 기준을 갱신하고 자체 echo는 기준을 유지한다', async () => {
+    const user = userEvent.setup();
+    const firstPlan = makeGeneratedPlan({ title: '첫 편집본' });
+    const firstOriginal = makeGeneratedPlan({ title: '첫 생성 원본' });
+    const replacement = makeGeneratedPlan({ title: '외부 편집본' });
+    const replacementOriginal = makeGeneratedPlan({ title: '외부 생성 원본' });
+    const onChange = vi.fn();
+    const { rerender } = render(<LessonPlanEditor plan={firstPlan} originalPlan={firstOriginal} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText('1차시 수업 제목'), { target: { value: '자체 편집' } });
+    const emittedPlan = onChange.mock.lastCall[0];
+    rerender(<LessonPlanEditor plan={emittedPlan} originalPlan={firstOriginal} onChange={onChange} />);
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('자체 편집');
+
+    rerender(<LessonPlanEditor plan={replacement} originalPlan={replacementOriginal} onChange={onChange} />);
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('외부 편집본');
+
+    fireEvent.change(screen.getByLabelText('1차시 수업 제목'), { target: { value: '외부 편집본 추가 수정' } });
+    const replacementEcho = onChange.mock.lastCall[0];
+    rerender(<LessonPlanEditor plan={replacementEcho} originalPlan={replacementOriginal} onChange={onChange} />);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: '생성 원본으로 되돌리기' }));
+
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('외부 생성 원본');
+    expect(replacementOriginal.title).toBe('외부 생성 원본');
 });
 
 test('describes repeated shared fields and warns that long print content may add pages', () => {

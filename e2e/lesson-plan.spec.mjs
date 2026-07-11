@@ -14,6 +14,7 @@ const standard = {
 const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '6학년 1반', teacherName: '김교사' };
 const editedValues = {
     lessonTitle: '식물 기관 탐구 수업 제목 센티널',
+    place: '편집한 과학실 센티널',
     teacherQuestion: '구조를 보고 알 수 있는 점은?\n기능과는 어떤 관계일까요?',
     expectedStudentResponse: '관찰한 구조가 기능을 돕는다.',
     assessmentMethod: '관찰 기록지와 구두 설명',
@@ -181,12 +182,28 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('내보내기 형식')).toBeFocused();
     await exportAllFormats(page, metadata, editedValues);
+    await page.getByLabel('1차시 수업 장소').fill(editedValues.place);
 
     // Then 편집값·접근성·반응형·인쇄 계약이 모두 유지된다
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data?.plan?.assessment?.[0]?.method)).toBe(editedValues.assessmentMethod);
+    await expect.poll(() => page.evaluate(() => {
+        const saved = JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data;
+        return {
+            assessmentMethod: saved?.plan?.assessment?.[0]?.method,
+            editedPlace: saved?.plan?.metadata?.place,
+            originalTitle: saved?.originalPlan?.title,
+            originalQuestion: saved?.originalPlan?.sessions?.[0]?.stages?.[0]?.teacherQuestions?.[0],
+            originalPlace: saved?.originalPlan?.metadata?.place,
+        };
+    })).toEqual({
+        assessmentMethod: editedValues.assessmentMethod,
+        editedPlace: editedValues.place,
+        originalTitle: '식물의 구조와 기능',
+        originalQuestion: '식물의 기관은 어떤 일을 할까요?',
+        originalPlace: metadata.place,
+    });
     await page.reload();
     await expect(page.getByLabel('1차시 수업 일자')).toHaveValue(metadata.date);
-    await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
+    await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(editedValues.place);
     await expect(page.getByLabel('1차시 대상 학급')).toHaveValue(metadata.className);
     await expect(page.getByLabel('1차시 수업자')).toHaveValue(metadata.teacherName);
     await expect(page.getByLabel('1차시 수업 제목')).toHaveValue(editedValues.lessonTitle);
@@ -197,6 +214,11 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await expect(page.getByLabel('1차시 평가 1 기대 수준 학생 피드백')).toHaveValue(editedValues.meetsFeedback);
     await expect(page.getByLabel('1차시 평가 1 심화 수준 학생 피드백')).toHaveValue(editedValues.exceedsFeedback);
     await expect(page.getByLabel('1차시 후속 학습 및 정리')).toHaveValue(editedValues.nextSessionConnection);
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: '생성 원본으로 되돌리기' }).click();
+    await expect(page.getByLabel('1차시 수업 제목')).toHaveValue('식물의 구조와 기능');
+    await expect(page.getByLabel('1차시 도입 주요 발문')).toHaveValue('식물의 기관은 어떤 일을 할까요?');
+    await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
     await captureResponsiveResult(page, testInfo);
     if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 2, 'browser-print-single.pdf');
 });

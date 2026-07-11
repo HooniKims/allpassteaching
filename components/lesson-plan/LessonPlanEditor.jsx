@@ -30,14 +30,15 @@ function firstIssueMessage(issue) {
     return `${label}: 형식이 올바른지 확인해주세요.`;
 }
 
-export function LessonPlanEditor({ plan, onChange }) {
+export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
     const original = useRef(null);
-    if (original.current === null) original.current = structuredClone(plan);
+    if (original.current === null) original.current = structuredClone(originalPlan);
     const [value, setValue] = useState(() => structuredClone(plan));
     const [format, setFormat] = useState('hwpx');
     const [exporting, setExporting] = useState(false);
     const [copyStatus, setCopyStatus] = useState('');
     const lastReceivedPlan = useRef(plan);
+    const lastReceivedOriginalPlan = useRef(originalPlan);
     const lastEmittedPlan = useRef(null);
     const documentModel = buildDocumentModel(value);
     const update = next => {
@@ -46,17 +47,22 @@ export function LessonPlanEditor({ plan, onChange }) {
         onChange(next);
     };
     useEffect(() => {
-        if (plan === lastReceivedPlan.current) return;
+        const planChanged = plan !== lastReceivedPlan.current;
+        const originalPlanChanged = originalPlan !== lastReceivedOriginalPlan.current;
+        if (!planChanged && !originalPlanChanged) return;
         lastReceivedPlan.current = plan;
-        if (plan === lastEmittedPlan.current) {
+        lastReceivedOriginalPlan.current = originalPlan;
+        const emittedPlanEcho = plan === lastEmittedPlan.current
+            && (!originalPlanChanged || originalPlan === plan);
+        if (emittedPlanEcho) {
             lastEmittedPlan.current = null;
             return;
         }
         lastEmittedPlan.current = null;
         const replacement = structuredClone(plan);
-        original.current = structuredClone(plan);
+        original.current = structuredClone(originalPlan);
         setValue(replacement);
-    }, [plan]);
+    }, [plan, originalPlan]);
     const updateSession = (index, session) => update({
         ...value,
         sessions: value.sessions.map((item, itemIndex) => itemIndex === index ? session : item),

@@ -33,7 +33,9 @@ export function LessonPlanWorkspace() {
             const body = await response.json();
             if (activeGeneration.current !== controller) return;
             if (!response.ok) return setGeneration({ status: 'error', message: body?.message || '다시 시도해주세요.' });
-            setDraft(current => current.step === 4 ? { ...current, plan: body.plan } : current);
+            setDraft(current => current.step === 4
+                ? { ...current, plan: body.plan, originalPlan: structuredClone(body.plan) }
+                : current);
             setGeneration({ status: 'done', message: '' });
         } catch {
             if (activeGeneration.current !== controller) return;
@@ -51,6 +53,6 @@ export function LessonPlanWorkspace() {
         {draft.step === 1 && <LessonBasicsStep value={draft.basics} onChange={basics => setDraft({ ...draft, basics })} onNext={() => setDraft({ ...draft, step: 2 })}/>}
         {draft.step === 2 && <StandardsStep basics={draft.basics} selected={draft.standards || []} onChange={standards => setDraft({ ...draft, standards })} onBack={() => setDraft({ ...draft, step: 1 })} onNext={() => setDraft({ ...draft, step: 3 })}/>}
         {draft.step === 3 && <InstructionModelStep lessonIntent={draft.basics.intent} selected={draft.instructionModel} onChange={instructionModel => setDraft({ ...draft, instructionModel })} onBack={() => setDraft({ ...draft, step: 2 })} onNext={() => setDraft({ ...draft, step: 4 })}/>}
-        {draft.step === 4 && <div>{!draft.plan && <><p className="eyebrow">4단계 · 지도안 완성</p><h1>지도안을 생성할 준비가 됐어요</h1><p>선택한 성취기준과 수업 모형을 바탕으로 초안을 만듭니다.</p><GenerationStatus {...generation}/><div className="step-actions"><button className="secondary-button" onClick={returnToModelStep}>이전</button><button disabled={generation.status === 'loading'} onClick={generatePlan}>지도안 생성하기</button></div></>}{draft.plan && <LessonPlanEditor plan={draft.plan} onChange={plan => setDraft({ ...draft, plan })}/>}</div>}
+        {draft.step === 4 && <div>{!draft.plan && <><p className="eyebrow">4단계 · 지도안 완성</p><h1>지도안을 생성할 준비가 됐어요</h1><p>선택한 성취기준과 수업 모형을 바탕으로 초안을 만듭니다.</p><GenerationStatus {...generation}/><div className="step-actions"><button className="secondary-button" onClick={returnToModelStep}>이전</button><button disabled={generation.status === 'loading'} onClick={generatePlan}>지도안 생성하기</button></div></>}{draft.plan && <LessonPlanEditor plan={draft.plan} originalPlan={draft.originalPlan} onChange={plan => setDraft(current => ({ ...current, plan }))}/>}</div>}
     </section></main>;
 }
