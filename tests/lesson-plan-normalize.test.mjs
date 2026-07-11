@@ -68,6 +68,21 @@ test('부분 행정 정보와 기존 표준 필드 값을 보존한다', () => {
     expect(normalized.assessment[0].levelFeedback).toEqual(plan.assessment[0].levelFeedback);
 });
 
+test('현재 형식에 존재하는 빈 편집값을 레거시 기본값으로 덮어쓰지 않는다', () => {
+    const plan = makeGeneratedPlan({ unitTitle: '', essentialQuestion: '' });
+    plan.sessions[0].nextSessionConnection = '';
+    plan.sessions[0].stages[0].learningElement = '';
+    plan.assessment[0].method = '';
+
+    const normalized = normalizeLessonPlan(plan);
+
+    expect(normalized.unitTitle).toBe('');
+    expect(normalized.essentialQuestion).toBe('');
+    expect(normalized.sessions[0].nextSessionConnection).toBe('');
+    expect(normalized.sessions[0].stages[0].learningElement).toBe('');
+    expect(normalized.assessment[0].method).toBe('');
+});
+
 test('정규화할 때 입력 객체를 변경하지 않는다', () => {
     const legacy = makeLegacyPlan();
     const original = structuredClone(legacy);
@@ -75,4 +90,19 @@ test('정규화할 때 입력 객체를 변경하지 않는다', () => {
     normalizeLessonPlan(legacy);
 
     expect(legacy).toEqual(original);
+});
+
+test('정규화 결과의 중첩 값을 변경해도 입력 객체와 참조를 공유하지 않는다', () => {
+    const plan = makeGeneratedPlan();
+    const original = structuredClone(plan);
+    const normalized = normalizeLessonPlan(plan);
+
+    normalized.standards[0].text = '변경된 성취기준';
+    normalized.learningGoals.push('추가 목표');
+    normalized.instructionModel.name = '변경된 수업 모형';
+    normalized.sessions[0].stages[0].teacherQuestions.push('추가 발문');
+    normalized.assessment[0].levelFeedback.meets = '변경된 피드백';
+    normalized.supportStrategies.push('추가 지원');
+
+    expect(plan).toEqual(original);
 });

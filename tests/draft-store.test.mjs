@@ -17,6 +17,21 @@ test('불러온 이전 형식의 지도안을 표준 계약으로 정규화한�
     expect(lessonPlanSchema.safeParse(loaded.plan).success).toBe(true);
     expect(loaded.plan.essentialQuestion).toBe(legacyPlan.learningGoals[0]);
 });
+test('현재 형식 지도안의 빈 편집값을 저장하고 그대로 불러온다', () => {
+    const plan = makeGeneratedPlan({ unitTitle: '', essentialQuestion: '' });
+    plan.metadata.place = '';
+    plan.sessions[0].nextSessionConnection = '';
+    plan.sessions[0].stages[0].learningElement = '';
+    plan.assessment[0].method = '';
+    saveDraft({ step: 4, plan });
+
+    const loaded = loadDraft();
+
+    expect(loaded.plan).toMatchObject({ unitTitle: '', essentialQuestion: '', metadata: { place: '' } });
+    expect(loaded.plan.sessions[0].nextSessionConnection).toBe('');
+    expect(loaded.plan.sessions[0].stages[0].learningElement).toBe('');
+    expect(loaded.plan.assessment[0].method).toBe('');
+});
 test('drops an incompatible persisted draft version', () => {
     window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 0, data: { unsafe: true } }));
     expect(loadDraft()).toBeNull();
