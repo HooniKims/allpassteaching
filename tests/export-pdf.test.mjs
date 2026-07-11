@@ -5,6 +5,9 @@ import { sanitizePdfText, wrapText } from '@/lib/export/pdf-table';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
 const monospaceFont = { widthOfTextAtSize: text => [...text].length };
+const PAGE_HEIGHT = 841.89;
+const CONTENT_TOP_LIMIT = PAGE_HEIGHT - 42;
+const CONTENT_BOTTOM_LIMIT = 42;
 
 async function renderPlan(plan) {
     const trace = [];
@@ -44,6 +47,17 @@ test.each([
     for (const page of document.getPages()) {
         expect(page.getWidth()).toBeCloseTo(595.28, 1);
         expect(page.getHeight()).toBeCloseTo(841.89, 1);
+    }
+});
+
+test('keeps true text and cell bounds inside the usable page margins', async () => {
+    const { document, trace } = await renderPlan(makeGeneratedPlan());
+    expect(document.getPageCount()).toBe(2);
+    const drawnBounds = trace.filter(event => ['text', 'cell', 'table-header'].includes(event.type));
+    expect(drawnBounds.length).toBeGreaterThan(0);
+    for (const event of drawnBounds) {
+        expect(event.top).toBeLessThanOrEqual(CONTENT_TOP_LIMIT);
+        expect(event.bottom).toBeGreaterThanOrEqual(CONTENT_BOTTOM_LIMIT);
     }
 });
 
@@ -151,5 +165,29 @@ test('continues oversized rows without clipping, dropping text, or crossing the 
         expect(source).toBeDefined();
         const rendered = trace.filter(event => event.type === 'text' && event.sourceText === source).map(event => event.text).join('');
         expect(rendered).toContain(value);
+    }
+});
+
+test('keeps an oversized first row with its section heading and repeated table headers', async () => {
+    const marker = `평가첫행-${'매우긴평가내용'.repeat(900)}-끝`;
+    const base = makeGeneratedPlan();
+    const plan = makeGeneratedPlan({ assessment: [{
+        ...base.assessment[0],
+        feedback: marker,
+    }] });
+    const { trace } = await renderPlan(plan);
+    const pageOf = sourceText => trace.find(event => event.type === 'text' && event.sourceText === sourceText)?.pageIndex;
+    expect(pageOf('과정중심평가')).toBe(pageOf('평가 요소'));
+    expect(pageOf('평가 요소')).toBe(pageOf('관찰 결과 설명'));
+
+    const headers = trace.filter(event => event.type === 'table-header');
+    expect(headers.length).toBeGreaterThan(1);
+    for (const header of headers) {
+        const headerIndex = trace.indexOf(header);
+        const nextHeaderIndex = trace.findIndex((event, index) => index > headerIndex && event.type === 'table-header');
+        const followingEvents = trace.slice(headerIndex + 1, nextHeaderIndex < 0 ? undefined : nextHeaderIndex);
+        expect(followingEvents.some(event => (
+            event.type === 'table-row' && event.tableId === header.tableId && event.pageIndex === header.pageIndex
+        ))).toBe(true);
     }
 });
