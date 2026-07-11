@@ -8,9 +8,20 @@ function asText(plan) {
 export function LessonPlanEditor({ plan, onChange }) {
     const original = useRef(structuredClone(plan));
     const [value, setValue] = useState(() => structuredClone(plan));
+    const [format, setFormat] = useState('hwpx');
+    const [exporting, setExporting] = useState(false);
     const update = next => { setValue(next); onChange(next); };
     const restore = () => { if (!window.confirm('수정 내용을 지우고 생성 원본으로 되돌릴까요?')) return; update(structuredClone(original.current)); };
-    return <article className="plan-editor"><header className="plan-editor__header"><div><p className="eyebrow">AI 초안 · 교사 확인 필요</p><input className="plan-title" aria-label="지도안 제목" value={value.title} onChange={event => update({ ...value, title: event.target.value })}/><p>{value.grade}학년 {value.subject} · {value.instructionModel.name}</p></div><div className="editor-actions"><button className="secondary-button" onClick={() => navigator.clipboard.writeText(asText(value))}>텍스트 복사</button><button className="secondary-button" onClick={restore}>생성 원본으로 되돌리기</button></div></header>
+    const download = async () => {
+        setExporting(true);
+        try {
+            const response = await fetch(`/api/export/${format}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+            if (!response.ok) throw new Error('내보내기 파일을 만들지 못했습니다.');
+            const url = URL.createObjectURL(await response.blob());
+            const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${value.title}.${format}`; anchor.click(); URL.revokeObjectURL(url);
+        } catch (error) { window.alert(error.message); } finally { setExporting(false); }
+    };
+    return <article className="plan-editor"><header className="plan-editor__header"><div><p className="eyebrow">AI 초안 · 교사 확인 필요</p><input className="plan-title" aria-label="지도안 제목" value={value.title} onChange={event => update({ ...value, title: event.target.value })}/><p>{value.grade}학년 {value.subject} · {value.instructionModel.name}</p></div><div className="editor-actions"><label className="export-format"><span className="sr-only">내보내기 형식</span><select aria-label="내보내기 형식" value={format} onChange={event => setFormat(event.target.value)}><option value="hwpx">한글 HWPX</option><option value="docx">Word DOCX</option><option value="pdf">PDF</option></select></label><button className="primary-button" onClick={download} disabled={exporting}>{exporting ? '파일 만드는 중…' : '파일로 저장'}</button><button className="secondary-button" onClick={() => navigator.clipboard.writeText(asText(value))}>텍스트 복사</button><button className="secondary-button" onClick={restore}>생성 원본으로 되돌리기</button></div></header>
         <section className="document-section"><h2>성취기준</h2>{value.standards.map(item => <p key={item.code}><strong>[{item.code}]</strong> {item.text}</p>)}</section>
         <section className="document-section"><h2>학습 목표</h2>{value.learningGoals.map((goal, index) => <textarea key={index} aria-label={`학습 목표 ${index + 1}`} value={goal} onChange={event => update({ ...value, learningGoals: value.learningGoals.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })}/>)}</section>
         <section className="document-section"><h2>준비물</h2><textarea aria-label="준비물" value={value.materials.join(', ')} onChange={event => update({ ...value, materials: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })}/></section>
