@@ -4,14 +4,14 @@ const feedbackLabels = {
     exceeds: '심화 수준 학생 피드백',
 };
 
-export function AssessmentEditor({ sessionOrder, items, onChange }) {
+export function AssessmentEditor({ sessionOrder, items, descriptionId, onChange }) {
     const updateItem = (index, key, nextValue) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: nextValue } : item));
     const updateFeedback = (index, key, nextValue) => onChange(items.map((item, itemIndex) => itemIndex === index ? {
         ...item,
         levelFeedback: { ...item.levelFeedback, [key]: nextValue },
     } : item));
 
-    return <table className="formal-table assessment-table" aria-label={`${sessionOrder}차시 과정중심평가`}>
+    return <table className="formal-table assessment-table" aria-label={`${sessionOrder}차시 과정중심평가`} aria-describedby={descriptionId}>
         <caption>과정중심평가</caption>
         <thead>
             <tr>

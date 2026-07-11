@@ -1,9 +1,12 @@
-import { useRef, useState } from 'react';
-import { buildDocumentModel, lessonPlanLines } from '@/lib/export/document-model.js';
+import { useEffect, useRef, useState } from 'react';
+import { buildDocumentModel } from '@/lib/export/document-model.js';
 import { AssessmentEditor } from './AssessmentEditor.jsx';
 import { OverviewTable } from './OverviewTable.jsx';
 import { SessionEditor } from './SessionEditor.jsx';
 import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
+import { lessonPlanClipboardText } from './lesson-plan-clipboard.js';
+
+const sharedFieldsNoteId = 'shared-plan-fields-note';
 
 export function LessonPlanEditor({ plan, onChange }) {
     const original = useRef(null);
@@ -11,11 +14,23 @@ export function LessonPlanEditor({ plan, onChange }) {
     const [value, setValue] = useState(() => structuredClone(plan));
     const [format, setFormat] = useState('hwpx');
     const [exporting, setExporting] = useState(false);
+    const [copyStatus, setCopyStatus] = useState('');
+    const lastReceivedPlan = useRef(plan);
+    const lastEmittedPlan = useRef(null);
     const documentModel = buildDocumentModel(value);
     const update = next => {
+        lastEmittedPlan.current = next;
         setValue(next);
         onChange(next);
     };
+    useEffect(() => {
+        if (plan === lastReceivedPlan.current) return;
+        lastReceivedPlan.current = plan;
+        if (plan === lastEmittedPlan.current) return;
+        const replacement = structuredClone(plan);
+        original.current = structuredClone(plan);
+        setValue(replacement);
+    }, [plan]);
     const updateSession = (index, session) => update({
         ...value,
         sessions: value.sessions.map((item, itemIndex) => itemIndex === index ? session : item),
@@ -45,6 +60,14 @@ export function LessonPlanEditor({ plan, onChange }) {
             setExporting(false);
         }
     };
+    const copyText = async () => {
+        try {
+            await navigator.clipboard.writeText(lessonPlanClipboardText(value));
+            setCopyStatus('지도안 전체 내용을 복사했습니다.');
+        } catch {
+            setCopyStatus('클립보드에 복사하지 못했습니다. 브라우저 권한을 확인해 주세요.');
+        }
+    };
 
     return <article className="plan-editor">
         <header className="plan-editor__header">
@@ -62,10 +85,16 @@ export function LessonPlanEditor({ plan, onChange }) {
                     </select>
                 </label>
                 <button type="button" className="primary-button" onClick={download} disabled={exporting}>{exporting ? '파일 만드는 중…' : '파일로 저장'}</button>
-                <button type="button" className="secondary-button" onClick={() => navigator.clipboard.writeText(lessonPlanLines(value).join('\n'))}>텍스트 복사</button>
+                <button type="button" className="secondary-button" onClick={copyText}>텍스트 복사</button>
                 <button type="button" className="secondary-button" onClick={restore}>생성 원본으로 되돌리기</button>
+                {copyStatus && <p className="copy-status" role="status">{copyStatus}</p>}
             </div>
         </header>
+
+        <aside className="plan-editor__guidance" aria-label="편집 및 인쇄 안내">
+            <p id={sharedFieldsNoteId}>학습 목표·준비물·평가·지원 전략·성찰은 전체 차시에 공통 적용되며 어느 차시에서 수정해도 함께 바뀝니다.</p>
+            <p>내용이 매우 길면 인쇄 페이지가 늘어날 수 있습니다. 필요하면 문장을 간결하게 다듬어 주세요.</p>
+        </aside>
 
         <div className="lesson-document-stack">
             {value.sessions.map((session, index) => {
@@ -81,6 +110,7 @@ export function LessonPlanEditor({ plan, onChange }) {
                             plan={value}
                             session={session}
                             overview={model.overview}
+                            descriptionId={sharedFieldsNoteId}
                             onPlanChange={update}
                             onSessionChange={next => updateSession(index, next)}
                         />
@@ -93,6 +123,7 @@ export function LessonPlanEditor({ plan, onChange }) {
                         <AssessmentEditor
                             sessionOrder={session.order}
                             items={value.assessment ?? []}
+                            descriptionId={sharedFieldsNoteId}
                             onChange={assessment => update({ ...value, assessment })}
                         />
                         <div className="document-followup-grid">
@@ -100,6 +131,7 @@ export function LessonPlanEditor({ plan, onChange }) {
                                 <span>개별화·지원 전략</span>
                                 <textarea
                                     aria-label={`${session.order}차시 개별화·지원 전략`}
+                                    aria-describedby={sharedFieldsNoteId}
                                     value={(value.supportStrategies ?? []).join('\n')}
                                     onChange={event => update({ ...value, supportStrategies: splitEditorLines(event.target.value) })}
                                     onBlur={event => update({ ...value, supportStrategies: normalizeEditorLines(event.target.value) })}
@@ -109,6 +141,7 @@ export function LessonPlanEditor({ plan, onChange }) {
                                 <span>수업 후 성찰</span>
                                 <textarea
                                     aria-label={`${session.order}차시 수업 후 성찰`}
+                                    aria-describedby={sharedFieldsNoteId}
                                     value={value.reflectionPrompt ?? ''}
                                     onChange={event => update({ ...value, reflectionPrompt: event.target.value })}
                                 />

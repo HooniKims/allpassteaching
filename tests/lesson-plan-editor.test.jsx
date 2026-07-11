@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { test, expect, vi } from 'vitest';
 import { LessonPlanEditor } from '@/components/lesson-plan/LessonPlanEditor.jsx';
@@ -167,4 +167,111 @@ test('keeps all export, copy, and restore controls available', () => {
     expect(screen.getByRole('button', { name: '파일로 저장' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '텍스트 복사' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '생성 원본으로 되돌리기' })).toBeInTheDocument();
+});
+
+test('copies every editable lesson-plan field and announces success', async () => {
+    // Given
+    const user = userEvent.setup();
+    const sentinels = {
+        metadata: { date: '복사-일시', place: '복사-장소', className: '복사-학급', teacherName: '복사-수업자' },
+        title: '복사-제목', unitTitle: '복사-단원', essentialQuestion: '복사-핵심질문',
+        learningGoals: ['복사-학습목표'], materials: ['복사-준비물'],
+        assessment: [{ element: '복사-평가요소', method: '복사-평가방법', evidence: '복사-관찰증거', feedback: '복사-공통피드백', levelFeedback: { needsSupport: '복사-도움필요', meets: '복사-기대수준', exceeds: '복사-심화수준' } }],
+        supportStrategies: ['복사-지원전략'], reflectionPrompt: '복사-성찰',
+    };
+    const plan = makeGeneratedPlan(sentinels);
+    plan.sessions[0] = {
+        ...plan.sessions[0],
+        nextSessionConnection: '복사-후속연결',
+        stages: [{
+            ...plan.sessions[0].stages[0],
+            learningElement: '복사-학습요소', teacherActivities: ['복사-교사활동'], teacherQuestions: ['복사-주요발문'],
+            studentActivities: ['복사-학생활동'], expectedStudentResponses: ['복사-예상반응'], materialsAndNotes: ['복사-자료유의'], supportNotes: ['복사-지원사항'],
+        }, ...plan.sessions[0].stages.slice(1)],
+    };
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(<LessonPlanEditor plan={plan} onChange={() => {}} />);
+
+    // When
+    await user.click(screen.getByRole('button', { name: '텍스트 복사' }));
+
+    // Then
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    const copied = writeText.mock.calls[0][0];
+    for (const sentinel of [
+        ...Object.values(sentinels.metadata), sentinels.title, sentinels.unitTitle, sentinels.essentialQuestion,
+        ...sentinels.learningGoals, ...sentinels.materials, '복사-학습요소', '복사-교사활동', '복사-주요발문',
+        '복사-학생활동', '복사-예상반응', '복사-자료유의', '복사-지원사항',
+        ...Object.values(sentinels.assessment[0]).filter(value => typeof value === 'string'),
+        ...Object.values(sentinels.assessment[0].levelFeedback), ...sentinels.supportStrategies,
+        sentinels.reflectionPrompt, '복사-후속연결',
+    ]) expect(copied).toContain(sentinel);
+    expect(screen.getByRole('status')).toHaveTextContent('지도안 전체 내용을 복사했습니다.');
+});
+
+test('announces a clipboard failure without an unhandled rejection', async () => {
+    // Given
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    // When
+    await user.click(screen.getByRole('button', { name: '텍스트 복사' }));
+
+    // Then
+    expect(await screen.findByRole('status')).toHaveTextContent('클립보드에 복사하지 못했습니다.');
+});
+
+test('replaces editor value and restore baseline when a distinct plan prop arrives', async () => {
+    // Given
+    const user = userEvent.setup();
+    const firstPlan = makeGeneratedPlan({ title: '첫 번째 지도안' });
+    const replacement = makeGeneratedPlan({ title: '외부 교체 지도안', learningGoals: ['외부 교체 목표'] });
+    const { rerender } = render(<LessonPlanEditor plan={firstPlan} onChange={() => {}} />);
+
+    // When
+    rerender(<LessonPlanEditor plan={replacement} onChange={() => {}} />);
+
+    // Then
+    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('외부 교체 지도안');
+    expect(screen.getByLabelText('1차시 학습 목표')).toHaveValue('외부 교체 목표');
+
+    // When
+    fireEvent.change(screen.getByLabelText('1차시 지도안 제목'), { target: { value: '교체 후 수정' } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: '생성 원본으로 되돌리기' }));
+
+    // Then
+    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('외부 교체 지도안');
+});
+
+test('describes repeated shared fields and warns that long print content may add pages', () => {
+    // Given / When
+    render(<LessonPlanEditor plan={makeTwoSessionPlan()} onChange={() => {}} />);
+
+    // Then
+    const note = screen.getByText('학습 목표·준비물·평가·지원 전략·성찰은 전체 차시에 공통 적용되며 어느 차시에서 수정해도 함께 바뀝니다.');
+    expect(note).toHaveAttribute('id', 'shared-plan-fields-note');
+    expect(screen.getByText(/내용이 매우 길면 인쇄 페이지가 늘어날 수 있습니다/)).toBeVisible();
+    for (const control of [
+        ...screen.getAllByLabelText(/차시 학습 목표$/),
+        ...screen.getAllByLabelText(/차시 준비물$/),
+        ...screen.getAllByRole('table', { name: /차시 과정중심평가$/ }),
+        ...screen.getAllByLabelText(/차시 개별화·지원 전략$/),
+        ...screen.getAllByLabelText(/차시 수업 후 성찰$/),
+    ]) expect(control).toHaveAttribute('aria-describedby', 'shared-plan-fields-note');
+});
+
+test('connects overview values and process totals to their semantic headers', () => {
+    // Given / When
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}} />);
+
+    // Then
+    const dateCell = screen.getByLabelText('1차시 수업 일자').closest('td');
+    expect(dateCell).toHaveAttribute('headers', 'session-1-overview-date');
+    expect(document.getElementById('session-1-overview-date')).toHaveTextContent('일시');
+    const footerCells = screen.getByRole('table', { name: '1차시 교수·학습 과정' }).querySelectorAll('tfoot td');
+    expect(footerCells[0]).toHaveAttribute('headers', expect.stringContaining('session-1-process-minutes'));
+    expect(footerCells[1]).toHaveAttribute('headers', expect.stringContaining('session-1-process-notes'));
 });

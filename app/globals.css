@@ -79,6 +79,10 @@ button:hover { background: var(--color-action-hover); }.form-alert { padding: 12
 .plan-editor__header .eyebrow { color: var(--color-action); }
 .plan-editor__summary { font-size: 13px; word-break: keep-all; }
 .editor-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.copy-status { flex-basis: 100%; color: var(--color-action-hover); font-size: 13px; text-align: right; }
+.plan-editor__guidance { margin: 0 0 24px; padding: 12px 16px; background: var(--color-action-tint); border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-action-hover); font-size: 13px; }
+.plan-editor__guidance p { margin: 0; }
+.plan-editor__guidance p + p { margin-top: 4px; color: var(--color-muted); }
 .export-format select { min-height: 44px; padding: 0 32px 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
@@ -114,6 +118,7 @@ button:hover { background: var(--color-action-hover); }.form-alert { padding: 12
 .process-table td { padding: 5px; }
 .process-table input[type="number"] { padding-inline: 4px; text-align: center; }
 .process-table tfoot th { text-align: right; }
+.process-table tfoot td { text-align: center; vertical-align: middle; }
 .document-field { display: block; }
 .document-field + .document-field { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-border); }
 .document-field > span { display: block; margin: 0 0 4px; color: var(--color-muted); font-size: 12px; font-weight: 600; }
@@ -144,6 +149,7 @@ button:hover { background: var(--color-action-hover); }.form-alert { padding: 12
     .plan-editor { width: 100%; }
     .editor-actions { display: grid; grid-template-columns: 1fr 1fr; }
     .editor-actions > *, .editor-actions button, .export-format select { width: 100%; }
+    .copy-status { grid-column: 1 / -1; text-align: left; }
     .lesson-document-stack, .lesson-document-session { gap: 16px; }
     .lesson-document-session + .lesson-document-session { margin-top: 16px; }
     .lesson-document-page { max-width: 100%; min-height: 0; padding: 24px 16px; }
@@ -171,7 +177,7 @@ button:hover { background: var(--color-action-hover); }.form-alert { padding: 12
 @media print {
     @page { size: A4; margin: 0; }
     html, body { background: var(--color-surface); }
-    .step-nav, .plan-editor__header { display: none !important; }
+    .step-nav, .plan-editor__header, .plan-editor__guidance { display: none !important; }
     .workspace, .workspace__main { display: block; width: 100%; padding: 0; }
     .plan-editor, .lesson-document-stack, .lesson-document-session { display: block; width: 100%; padding: 0; }
     .lesson-document-page { min-height: 297mm; margin: 0; padding: 10mm 12mm; border: 0; break-after: page; box-shadow: none; }
