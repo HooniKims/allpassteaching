@@ -224,6 +224,25 @@ test('declares Paperlogy, distinct formal styles, green-neutral fills, and valid
     }
 });
 
+test('maps every used formal text role to the exact planned HWPUNIT height', async () => {
+    // Given the generated header styles and representative rendered paragraphs
+    const { header, section } = await unpackHwpx(makeGeneratedPlan());
+    const charHeights = Object.fromEntries(elements(header, 'hh:charPr').map(property => [property.getAttribute('id'), property.getAttribute('height')]));
+    const usedStyle = text => elements(section, 'hp:p').find(paragraph => paragraph.textContent === text)
+        .getElementsByTagName('hp:run')[0].getAttribute('charPrIDRef');
+
+    // When each formal role is resolved through the style ID actually used by section XML
+    // Then title/body/table body use 18/10/9pt while section and table headers retain their planned sizes
+    expect(charHeights).toMatchObject({ 7: '1000', 8: '1800', 9: '1200', 10: '900', 11: '900' });
+    expect({
+        title: usedStyle('교수·학습 과정안'),
+        body: usedStyle('학생이 증거를 바탕으로 설명했는가?'),
+        section: usedStyle('수업 개요'),
+        tableHeader: usedStyle('단계'),
+        compactTableBody: usedStyle('관찰 문제 확인'),
+    }).toEqual({ title: '8', body: '7', section: '9', tableHeader: '10', compactTableBody: '11' });
+});
+
 test('uses deterministic unique IDs for paragraphs, tables, and cell sublists', async () => {
     // Given the same two-session plan rendered twice
     // When relevant structural IDs are collected
