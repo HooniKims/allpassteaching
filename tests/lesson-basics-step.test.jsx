@@ -66,3 +66,18 @@ test('keeps metadata in the generation request', async () => {
     const requestBody = JSON.parse(fetch.mock.calls[0][1].body);
     expect(requestBody.basics.metadata).toEqual(basics.metadata);
 });
+
+test('adds empty metadata keys to a generation request loaded from a legacy draft', async () => {
+    const user = userEvent.setup();
+    const basics = structuredClone(generationDraft.basics);
+    delete basics.metadata;
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 1, data: { ...generationDraft, basics, step: 4 } }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ plan: makeGeneratedPlan() })));
+    render(<LessonPlanWorkspace/>);
+
+    await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const requestBody = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(requestBody.basics.metadata).toEqual({ date: '', place: '', className: '', teacherName: '' });
+});

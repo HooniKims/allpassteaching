@@ -9,12 +9,13 @@ import { GenerationStatus } from './GenerationStatus.jsx';
 import { LessonPlanEditor } from './LessonPlanEditor.jsx';
 
 const emptyBasics = { schoolLevel: '', grade: '', subject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: { date: '', place: '', className: '', teacherName: '' }, error: '' };
+const emptyDraft = { step: 1, basics: emptyBasics, standards: [] };
 
 export function LessonPlanWorkspace() {
     const [ready, setReady] = useState(false);
-    const [draft, setDraft] = useState({ step: 1, basics: emptyBasics, standards: [] });
+    const [draft, setDraft] = useState(emptyDraft);
     const [generation, setGeneration] = useState({ status: 'idle', message: '' });
-    useEffect(() => { setDraft(loadDraft() ?? { step: 1, basics: emptyBasics, standards: [] }); setReady(true); }, []);
+    useEffect(() => { const loaded = loadDraft(); setDraft(loaded ? { ...emptyDraft, ...loaded, basics: { ...emptyBasics, ...loaded.basics, metadata: { ...emptyBasics.metadata, ...loaded.basics?.metadata } } } : emptyDraft); setReady(true); }, []);
     useEffect(() => { if (!ready) return; const timer = setTimeout(() => saveDraft(draft), 300); return () => clearTimeout(timer); }, [draft, ready]);
     return <main className="workspace"><StepNavigation current={draft.step}/><section className="workspace__main">
         {draft.step === 1 && <LessonBasicsStep value={draft.basics} onChange={basics => setDraft({ ...draft, basics })} onNext={() => setDraft({ ...draft, step: 2 })}/>}

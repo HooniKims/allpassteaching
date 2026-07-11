@@ -4,6 +4,10 @@ import { chatJson, UpstageError } from '@/lib/upstage/client';
 import { lessonPlanMessages, repairLessonPlanMessages } from '@/lib/upstage/prompts';
 
 const lessonPhases = ['도입', '전개', '정리'];
+const generationRequiredFieldsSchema = z.object({
+    metadata: z.object({ date: z.string(), place: z.string(), className: z.string(), teacherName: z.string() }),
+    sessions: z.array(z.object({ stages: z.array(z.object({ materialsAndNotes: z.array(z.string()) }).passthrough()) }).passthrough()),
+}).passthrough();
 const draftSchema = z.object({
     basics: z.object({ schoolLevel: z.enum(['elementary','middle','high']), grade: z.string(), subject: z.string(), mode: z.enum(['single','multi']), sessions: z.number().int().min(1).max(10), sessionMinutes: z.number().int().positive().default(40), intent: z.string().min(2), studentNeeds: z.string().default(''), metadata: z.object({ date: z.string().default(''), place: z.string().default(''), className: z.string().default(''), teacherName: z.string().default('') }).default({ date: '', place: '', className: '', teacherName: '' }) }),
     standards: z.array(z.object({ code: z.string(), text: z.string() })).min(1),
@@ -20,6 +24,8 @@ function validAgainstDraft(plan, draft) {
 }
 
 function parsePlan(value, draft) {
+    const requiredFields = generationRequiredFieldsSchema.safeParse(value);
+    if (!requiredFields.success) return { success: false, issues: requiredFields.error.issues };
     const parsed = lessonPlanSchema.safeParse(value);
     return parsed.success && validAgainstDraft(parsed.data, draft) ? { success: true, data: parsed.data } : { success: false, issues: parsed.success ? [{ message: '행정 정보, 성취기준 또는 차시 구성이 요청과 다릅니다.' }] : parsed.error.issues };
 }

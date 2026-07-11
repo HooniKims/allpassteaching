@@ -48,6 +48,30 @@ test('repairs generated metadata that differs from the request', async () => {
     expect((await response.json()).plan.metadata).toEqual(metadata);
 });
 
+test('returns 422 when generated metadata keys remain missing after repair', async () => {
+    const invalid = makeGeneratedPlan({ metadata: {} });
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(invalid)));
+
+    const response = await POST(request(generationDraft));
+
+    expect(response.status).toBe(422);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('repairs a fresh response that omits a defaulted stage field', async () => {
+    const invalid = structuredClone(makeGeneratedPlan());
+    delete invalid.sessions[0].stages[0].materialsAndNotes;
+    const repaired = makeGeneratedPlan();
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(invalid)).mockResolvedValueOnce(completion(repaired)));
+
+    const response = await POST(request(generationDraft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 test('repairs a fresh response that is missing required detail fields', async () => {
     const legacy = structuredClone(makeGeneratedPlan());
     delete legacy.essentialQuestion;
