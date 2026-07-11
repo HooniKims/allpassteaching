@@ -90,20 +90,23 @@ test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조
         '자료·유의점',
     ]);
     expect(process.columns).toEqual(PROCESS_COLUMNS);
+    expect(process.rows[1].teacherActivity.map(block => block.key)).toEqual(['teacherActivities', 'teacherQuestions']);
+    expect(process.rows[1].studentActivity.map(block => block.key)).toEqual(['studentActivities', 'expectedStudentResponses']);
+    expect(process.rows[1].notes.map(block => block.key)).toEqual(['materialsAndNotes', 'supportNotes']);
     expect(process.rows[1]).toMatchObject({
         phase: '전개',
         learningElement: '식물 기관 관찰',
         teacherActivity: [
-            { label: '교사 활동', items: ['관찰을 안내한다.'] },
-            { label: '주요 발문', items: ['관찰한 구조에서 어떤 특징을 찾았나요?'] },
+            { key: 'teacherActivities', label: '교사 활동', items: ['관찰을 안내한다.'] },
+            { key: 'teacherQuestions', label: '주요 발문', items: ['관찰한 구조에서 어떤 특징을 찾았나요?'] },
         ],
         studentActivity: [
-            { label: '학생 활동', items: ['관찰하고 기록한다.'] },
-            { label: '예상 학생 반응', items: ['뿌리에는 가는 털이 있습니다.'] },
+            { key: 'studentActivities', label: '학생 활동', items: ['관찰하고 기록한다.'] },
+            { key: 'expectedStudentResponses', label: '예상 학생 반응', items: ['뿌리에는 가는 털이 있습니다.'] },
         ],
         notes: [
-            { label: '자료·유의점', items: ['안전하게 다룬다.'] },
-            { label: '지원', items: ['관찰 문장 틀을 제공한다.'] },
+            { key: 'materialsAndNotes', label: '자료·유의점', items: ['안전하게 다룬다.'] },
+            { key: 'supportNotes', label: '지원', items: ['관찰 문장 틀을 제공한다.'] },
         ],
         minutes: 30,
     });
@@ -128,6 +131,7 @@ test('평가 표의 네 열과 세 수준별 피드백을 보존한다', () => {
         element: '관찰 결과 설명',
         method: '관찰 및 산출물 확인',
         evidence: '관찰 기록지',
+        feedback: '근거를 구체화하도록 피드백한다.',
         levelFeedback: [
             { key: 'needsSupport', label: '도움 필요', text: '관찰 문장 틀로 구조를 설명하도록 돕는다.' },
             { key: 'meets', label: '기준 도달', text: '구조와 기능을 연결해 설명하도록 한다.' },
@@ -167,21 +171,50 @@ test('선택 행정 정보가 비어 있어도 개요 표에 빈 값으로 남�
     expect(rows.slice(0, 4).map(row => row.value)).toEqual(['', '', '', '']);
 });
 
-test('입력을 변경하지 않고 결과의 중첩 참조를 입력과 분리한다', () => {
+test('입력과 차시별 문서 모델의 주요 중첩 참조를 서로 분리한다', () => {
     // Given
-    const plan = makeGeneratedPlan();
+    const plan = makeTwoSessionPlan();
     const original = structuredClone(plan);
 
     // When
     const document = buildDocumentModel(plan);
-    const standards = document.sessions[0].overview.rows.find(row => row.key === 'standards').value;
-    standards[0].text = '문서 모델에서 변경';
-    document.sessions[0].metadata.place = '문서 모델 장소';
-    document.sessions[0].process.rows[0].teacherActivity[0].items.push('문서 모델 활동');
-    document.sessions[0].assessment.rows[0].levelFeedback[0].text = '문서 모델 피드백';
-    document.sessions[0].supportStrategies.push('문서 모델 지원');
+    const [firstSession, secondSession] = document.sessions;
+    const firstStandards = firstSession.overview.rows.find(row => row.key === 'standards').value;
+    firstStandards[0].text = '문서 모델에서 변경';
+    firstSession.metadata.place = '문서 모델 장소';
+    firstSession.process.rows[0].teacherActivity[0].items.push('문서 모델 활동');
+    firstSession.assessment.rows[0].feedback = '문서 모델 공통 피드백';
+    firstSession.assessment.rows[0].levelFeedback[0].text = '문서 모델 수준별 피드백';
+    firstSession.supportStrategies.push('문서 모델 지원');
 
     // Then
     expect(plan).toEqual(original);
-    expect(document.sessions[0].metadata).not.toBe(plan.metadata);
+    expect(firstSession.metadata).not.toBe(secondSession.metadata);
+    expect(firstSession.metadata).not.toBe(plan.metadata);
+    expect(firstSession.overview.rows).not.toBe(secondSession.overview.rows);
+    expect(firstSession.process.rows[0]).not.toBe(secondSession.process.rows[0]);
+    expect(firstSession.assessment.rows[0]).not.toBe(secondSession.assessment.rows[0]);
+    expect(firstSession.supportStrategies).not.toBe(secondSession.supportStrategies);
+    expect(secondSession.metadata.place).toBe('');
+    expect(secondSession.overview.rows.find(row => row.key === 'standards').value[0].text).toBe(original.standards[0].text);
+    expect(secondSession.process.rows[0].teacherActivity[0].items).toEqual(original.sessions[1].stages[0].teacherActivities);
+    expect(secondSession.assessment.rows[0].feedback).toBe(original.assessment[0].feedback);
+    expect(secondSession.assessment.rows[0].levelFeedback[0].text).toBe(original.assessment[0].levelFeedback.needsSupport);
+    expect(secondSession.supportStrategies).toEqual(original.supportStrategies);
+});
+
+test('내보낸 열 정의 객체를 변경할 수 없고 새 문서 모델을 오염시키지 않는다', () => {
+    // Given
+    const mutations = [
+        () => { PROCESS_COLUMNS[0].label = '변경된 단계'; },
+        () => { ASSESSMENT_COLUMNS[0].label = '변경된 평가 요소'; },
+    ];
+
+    // When / Then
+    for (const mutate of mutations) expect(mutate).toThrow(TypeError);
+    expect(Object.isFrozen(PROCESS_COLUMNS[0])).toBe(true);
+    expect(Object.isFrozen(ASSESSMENT_COLUMNS[0])).toBe(true);
+    const session = buildDocumentModel(makeGeneratedPlan()).sessions[0];
+    expect(session.process.columns[0].label).toBe('단계');
+    expect(session.assessment.columns[0].label).toBe('평가 요소');
 });
