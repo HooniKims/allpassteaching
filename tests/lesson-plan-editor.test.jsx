@@ -219,7 +219,7 @@ test('does not request an export for an invalid edited plan and explains the fir
     await user.click(screen.getByRole('button', { name: '파일로 저장' }));
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(alert).toHaveBeenCalledWith('입력 내용을 확인해주세요. 수업 제목: 내용을 입력해주세요.');
+    expect(alert).toHaveBeenCalledWith('입력 내용을 확인해주세요. 1차시 수업 제목: 내용을 입력해주세요.');
     expect(screen.getByRole('button', { name: '파일로 저장' })).not.toBeDisabled();
 });
 

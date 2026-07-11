@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { buildDocumentModel } from '@/lib/export/document-model.js';
+import { formatLessonPlanIssue } from '@/lib/lesson-plan-issues.js';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema.js';
 import { AssessmentEditor } from './AssessmentEditor.jsx';
 import { OverviewTable } from './OverviewTable.jsx';
@@ -8,27 +9,6 @@ import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
 import { lessonPlanClipboardText } from './lesson-plan-clipboard.js';
 
 const sharedFieldsNoteId = 'shared-plan-fields-note';
-const issueFieldLabels = {
-    title: '수업 제목',
-    standards: '성취기준',
-    learningGoals: '학습 목표',
-    materials: '준비물',
-    sessions: '차시 구성',
-    assessment: '평가 계획',
-    supportStrategies: '개별화·지원 전략',
-    reflectionPrompt: '수업 후 성찰',
-};
-
-function firstIssueMessage(issue) {
-    const label = issueFieldLabels[issue.path[0]] ?? '입력 내용';
-    if (issue.code === 'custom') return `${label}: ${issue.message}`;
-    if (issue.code === 'too_small') return `${label}: 내용을 입력해주세요.`;
-    if (issue.code === 'too_big') {
-        const unit = issue.origin === 'array' ? '개' : '자';
-        return `${label}: ${issue.maximum}${unit} 이하로 줄여주세요.`;
-    }
-    return `${label}: 형식이 올바른지 확인해주세요.`;
-}
 
 export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
     const original = useRef(null);
@@ -74,7 +54,11 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
     const download = async () => {
         const checked = lessonPlanSchema.safeParse(value);
         if (!checked.success) {
-            window.alert(`입력 내용을 확인해주세요. ${firstIssueMessage(checked.error.issues[0])}`);
+            const formattedIssue = formatLessonPlanIssue(checked.error.issues[0], value);
+            const issueControl = [...document.querySelectorAll('[aria-label]')]
+                .find(element => element.getAttribute('aria-label') === formattedIssue.label);
+            issueControl?.focus();
+            window.alert(`입력 내용을 확인해주세요. ${formattedIssue.message}`);
             return;
         }
         setExporting(true);
