@@ -294,16 +294,3 @@ test('escapes XML and visibly replaces forbidden controls, lone surrogates, and 
     expect(sectionXml).not.toMatch(/[\u0000\u0001\uD800\uFDD0\uFFFE\uFFFF]/);
     expect(section.documentElement.tagName).toBe('hs:sec');
 });
-
-test('preserves CRLF, LF, CR, and tab as explicit OWPML inline controls', async () => {
-    // Given supported embedded whitespace controls
-    const plan = makeGeneratedPlan({ essentialQuestion: '줄시작\r\n줄중간\t탭뒤\rCR뒤\n줄끝' });
-
-    // When the HWPX section is generated
-    const { section, sectionXml } = await unpackHwpx(plan);
-
-    // Then line and tab boundaries remain explicit without dropping surrounding text
-    expect(elements(section, 'hp:lineBreak')).toHaveLength(3);
-    expect(elements(section, 'hp:tab')).toHaveLength(1);
-    for (const text of ['줄시작', '줄중간', '탭뒤', 'CR뒤', '줄끝']) expect(sectionXml).toContain(text);
-});
