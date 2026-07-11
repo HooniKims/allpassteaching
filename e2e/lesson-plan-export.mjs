@@ -14,6 +14,7 @@ export async function exportAllFormats(page, metadata, editedValues) {
         const firstStage = requestBody.sessions[0].stages[0];
         const firstAssessment = requestBody.assessment[0];
         expect(requestBody.metadata).toEqual(metadata);
+        expect(requestBody.title).toBe(editedValues.lessonTitle);
         expect(firstStage.teacherQuestions).toEqual(editedValues.teacherQuestion.split('\n'));
         expect(firstStage.expectedStudentResponses).toEqual([editedValues.expectedStudentResponse]);
         expect(firstAssessment.method).toBe(editedValues.assessmentMethod);
@@ -26,7 +27,7 @@ export async function exportAllFormats(page, metadata, editedValues) {
         expect(response.status()).toBe(200);
         expect(response.headers()['content-type']).toContain(contentType);
         expect(response.headers()['content-disposition']).toContain(`.${format}`);
-        expect(download.suggestedFilename()).toBe(`식물의 구조와 기능.${format}`);
+        expect(download.suggestedFilename()).toBe(`${editedValues.lessonTitle}.${format}`);
         const bytes = await readFile(await download.path());
         expect(bytes.subarray(0, 4).toString('hex')).toBe(signature);
         if (format !== 'pdf') {
@@ -36,6 +37,12 @@ export async function exportAllFormats(page, metadata, editedValues) {
             const documentText = xml.replace(/<[^>]*>/g, '');
             for (const questionLine of editedValues.teacherQuestion.split('\n')) expect(documentText).toContain(questionLine);
             expect(documentText).toContain(editedValues.assessmentMethod);
+            expect(documentText).toContain('수업 제목');
+            expect(documentText).toContain(editedValues.lessonTitle);
+            expect(documentText).toContain('후속 학습 및 정리');
+            expect(documentText).toContain(editedValues.nextSessionConnection);
+            expect(documentText).not.toContain('수업 후 연계');
+            expect(documentText).not.toContain('다음 학습 연결');
         }
     }
 }

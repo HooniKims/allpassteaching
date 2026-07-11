@@ -20,6 +20,20 @@ test('renders every session as two formal document pages with semantic tables', 
     expect(screen.getByRole('table', { name: '2차시 수업 개요' })).toBeInTheDocument();
 });
 
+test('edits plan.title through the single formal 수업 제목 field', () => {
+    // Given
+    const plan = makeGeneratedPlan({ title: '편집 전 수업 제목' });
+    const onChange = vi.fn();
+    render(<LessonPlanEditor plan={plan} onChange={onChange} />);
+
+    // When
+    fireEvent.change(screen.getByLabelText('1차시 수업 제목'), { target: { value: '편집 후 수업 제목' } });
+
+    // Then
+    expect(onChange.mock.lastCall[0].title).toBe('편집 후 수업 제목');
+    expect(screen.queryByLabelText('1차시 지도안 제목')).not.toBeInTheDocument();
+});
+
 test('keeps blank optional metadata blank and publishes an immutable metadata edit', () => {
     // Given
     const plan = makeGeneratedPlan();
@@ -207,6 +221,10 @@ test('copies every editable lesson-plan field and announces success', async () =
         ...Object.values(sentinels.assessment[0].levelFeedback), ...sentinels.supportStrategies,
         sentinels.reflectionPrompt, '복사-후속연결',
     ]) expect(copied).toContain(sentinel);
+    expect(copied.match(/수업 제목: 복사-제목/g)).toHaveLength(1);
+    expect(copied).toContain('후속 학습 및 정리\n복사-후속연결');
+    expect(copied).not.toContain('지도안 제목:');
+    expect(copied).not.toContain('다음 학습 연결');
     expect(screen.getByRole('status')).toHaveTextContent('지도안 전체 내용을 복사했습니다.');
 });
 
@@ -232,33 +250,33 @@ test('distinguishes an emitted prop echo from a later parent undo using the same
     const { rerender } = render(<LessonPlanEditor plan={firstPlan} onChange={onChange} />);
 
     // When
-    fireEvent.change(screen.getByLabelText('1차시 지도안 제목'), { target: { value: '자체 편집 지도안' } });
+    fireEvent.change(screen.getByLabelText('1차시 수업 제목'), { target: { value: '자체 편집 지도안' } });
     const emittedPlan = onChange.mock.lastCall[0];
     rerender(<LessonPlanEditor plan={emittedPlan} onChange={onChange} />);
 
     // Then
-    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('자체 편집 지도안');
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('자체 편집 지도안');
 
     // When
     rerender(<LessonPlanEditor plan={replacement} onChange={() => {}} />);
 
     // Then
-    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('외부 교체 지도안');
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('외부 교체 지도안');
     expect(screen.getByLabelText('1차시 학습 목표')).toHaveValue('외부 교체 목표');
 
     // When
     rerender(<LessonPlanEditor plan={emittedPlan} onChange={onChange} />);
 
     // Then
-    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('자체 편집 지도안');
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('자체 편집 지도안');
 
     // When
-    fireEvent.change(screen.getByLabelText('1차시 지도안 제목'), { target: { value: 'undo 후 수정' } });
+    fireEvent.change(screen.getByLabelText('1차시 수업 제목'), { target: { value: 'undo 후 수정' } });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     await user.click(screen.getByRole('button', { name: '생성 원본으로 되돌리기' }));
 
     // Then
-    expect(screen.getByLabelText('1차시 지도안 제목')).toHaveValue('자체 편집 지도안');
+    expect(screen.getByLabelText('1차시 수업 제목')).toHaveValue('자체 편집 지도안');
 });
 
 test('describes repeated shared fields and warns that long print content may add pages', () => {

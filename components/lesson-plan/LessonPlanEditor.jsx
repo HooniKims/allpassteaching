@@ -103,7 +103,7 @@ export function LessonPlanEditor({ plan, onChange }) {
         <div className="lesson-document-stack">
             {value.sessions.map((session, index) => {
                 const model = documentModel.sessions[index];
-                const connectionLabel = index === value.sessions.length - 1 ? '후속 학습 및 정리' : '다음 차시 연결';
+                const connectionLabel = model.connectionLabel;
                 return <div className="lesson-document-session" key={session.id ?? `session-${index + 1}`}>
                     <section className="lesson-document-page lesson-document-page--process" aria-labelledby={`session-${index + 1}-process-title`}>
                         {index === 0

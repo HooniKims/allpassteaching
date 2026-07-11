@@ -13,6 +13,7 @@ const standard = {
 };
 const metadata = { date: '2026-07-11T09:00', place: '과학실', className: '6학년 1반', teacherName: '김교사' };
 const editedValues = {
+    lessonTitle: '식물 기관 탐구 수업 제목 센티널',
     teacherQuestion: '구조를 보고 알 수 있는 점은?\n기능과는 어떤 관계일까요?',
     expectedStudentResponse: '관찰한 구조가 기능을 돕는다.',
     assessmentMethod: '관찰 기록지와 구두 설명',
@@ -121,6 +122,7 @@ async function selectStandardAndModel(page, testInfo, { expectResult = true } = 
 }
 
 async function editFormalPlan(page) {
+    await page.getByLabel('1차시 수업 제목').fill(editedValues.lessonTitle);
     const [firstQuestion, secondQuestion] = editedValues.teacherQuestion.split('\n');
     const question = page.getByLabel('1차시 도입 주요 발문');
     await question.fill(firstQuestion);
@@ -187,6 +189,7 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
     await expect(page.getByLabel('1차시 대상 학급')).toHaveValue(metadata.className);
     await expect(page.getByLabel('1차시 수업자')).toHaveValue(metadata.teacherName);
+    await expect(page.getByLabel('1차시 수업 제목')).toHaveValue(editedValues.lessonTitle);
     await expect(page.getByLabel('1차시 도입 주요 발문')).toHaveValue(editedValues.teacherQuestion);
     await expect(page.getByLabel('1차시 도입 예상 학생 반응')).toHaveValue(editedValues.expectedStudentResponse);
     await expect(page.getByLabel('1차시 평가 1 평가 방법')).toHaveValue(editedValues.assessmentMethod);

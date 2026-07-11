@@ -49,12 +49,12 @@ export function OverviewTable({ plan, session, overview, descriptionId, onPlanCh
             <tr>
                 <th id={headerId('unitTitle')} scope="row">단원명</th>
                 <EditableCell label={`${prefix} 단원명`} headerId={headerId('unitTitle')} value={plan.unitTitle ?? ''} onChange={event => onPlanChange({ ...plan, unitTitle: event.target.value })} />
-                <th id={headerId('instructionModel')} scope="row">수업 모형</th>
-                <EditableCell label={`${prefix} 수업 모형`} headerId={headerId('instructionModel')} value={rowValue(overview, 'instructionModel')} readOnly />
+                <th id={headerId('lessonTitle')} scope="row">수업 제목</th>
+                <EditableCell label={`${prefix} 수업 제목`} headerId={headerId('lessonTitle')} value={rowValue(overview, 'lessonTitle')} onChange={event => onPlanChange({ ...plan, title: event.target.value })} />
             </tr>
             <tr>
-                <th id={headerId('title')} scope="row">지도안 제목</th>
-                <EditableCell label={`${prefix} 지도안 제목`} headerId={headerId('title')} value={plan.title ?? ''} onChange={event => onPlanChange({ ...plan, title: event.target.value })} />
+                <th id={headerId('instructionModel')} scope="row">수업 모형</th>
+                <EditableCell label={`${prefix} 수업 모형`} headerId={headerId('instructionModel')} value={rowValue(overview, 'instructionModel')} readOnly />
                 <th id={headerId('sessionTitle')} scope="row">차시명</th>
                 <EditableCell label={`${prefix} 제목`} headerId={headerId('sessionTitle')} value={session.title ?? ''} onChange={event => onSessionChange({ ...session, title: event.target.value })} />
             </tr>

@@ -1,9 +1,16 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { test, expect } from 'vitest';
 import { buildPdf } from '@/lib/export/pdf';
 import { selectVisibleFallback, sanitizePdfText, wrapText } from '@/lib/export/pdf-table';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
+
+const execFileAsync = promisify(execFile);
 
 const monospaceFont = { widthOfTextAtSize: text => [...text].length };
 const limitedFont = characters => ({
@@ -108,20 +115,51 @@ test('embeds Paperlogy regular and bold font resources once for reuse', async ()
 });
 
 test('renders the structured document model with formal table labels and every section', async () => {
-    const plan = makeGeneratedPlan({ title: '이 제목은 레거시 문단 렌더러 전용' });
+    const plan = makeGeneratedPlan({ title: 'PDF-편집수업제목-센티널' });
     const { trace } = await renderPlan(plan);
     const text = drawnText(trace);
     for (const label of [
         '교수·학습 과정안', '수업 개요', '학습 요소', '주요 발문', '예상 학생 반응',
         '수준별 피드백', '공통 피드백', '보충', '도달', '심화',
-        '개별화·지원 전략', '수업 후 성찰', '수업 후 연계',
+        '개별화·지원 전략', '수업 후 성찰', '후속 학습 및 정리',
     ]) expect(text).toContain(label);
-    expect(text).not.toContain('이 제목은 레거시 문단 렌더러 전용');
+    expect(text).toContain('수업 제목');
+    expect(text).toContain('PDF-편집수업제목-센티널');
+    expect(text).not.toContain('수업 후 연계');
+    expect(text).not.toContain('다음 학습 연결');
+});
+
+test('keeps the edited lesson title and connection label in extractable PDF text when pdftotext is available', async () => {
+    // Given
+    const plan = makeGeneratedPlan({ title: 'PDFTEXT-편집수업제목-센티널' });
+    plan.sessions[0].nextSessionConnection = 'PDFTEXT-후속정리-센티널';
+    const directory = await mkdtemp(path.join(tmpdir(), 'allpass-pdftotext-'));
+
+    // When
+    try {
+        const pdfPath = path.join(directory, 'lesson-plan.pdf');
+        await writeFile(pdfPath, await buildPdf(plan));
+        let extracted;
+        try {
+            ({ stdout: extracted } = await execFileAsync('pdftotext', [pdfPath, '-']));
+        } catch (error) {
+            if (error.code === 'ENOENT') return;
+            throw error;
+        }
+
+        // Then
+        expect(extracted).toContain('수업 제목');
+        expect(extracted).toContain('PDFTEXT-편집수업제목-센티널');
+        expect(extracted).toContain('후속 학습 및 정리');
+        expect(extracted).toContain('PDFTEXT-후속정리-센티널');
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
 });
 
 test('keeps section headings visibly separated from the preceding table border', async () => {
     const { trace } = await renderPlan(makeGeneratedPlan());
-    for (const heading of ['교수·학습 과정', '개별화·지원 전략', '수업 후 성찰', '수업 후 연계']) {
+    for (const heading of ['교수·학습 과정', '개별화·지원 전략', '수업 후 성찰', '후속 학습 및 정리']) {
         const headingIndex = trace.findIndex(event => event.type === 'text' && event.sourceText === heading);
         const headingEvent = trace[headingIndex];
         const precedingCell = trace.slice(0, headingIndex).findLast(event => (
@@ -137,6 +175,7 @@ test('preserves ordered overview values and intentionally blank metadata', async
         metadata: { date: '', place: '', className: '', teacherName: '' },
         subject: '순서과목',
         unitTitle: '순서단원',
+        title: '순서수업제목',
         standards: [{ code: '순서-기준', text: '순서 성취기준 문장' }],
         learningGoals: ['순서 학습목표 하나', '순서 학습목표 둘'],
         essentialQuestion: '순서 핵심 질문?',
@@ -144,7 +183,7 @@ test('preserves ordered overview values and intentionally blank metadata', async
         instructionModel: { ...base.instructionModel, name: '순서 수업모형' },
     });
     const text = drawnText((await renderPlan(plan)).trace);
-    const orderedValues = ['초등학교 5학년', '순서과목', '순서단원', '1/1', '순서 수업모형', '[순서-기준] 순서 성취기준 문장', '1. 순서 학습목표 하나', '2. 순서 학습목표 둘', '순서 핵심 질문?', '순서 준비물 하나, 순서 준비물 둘'];
+    const orderedValues = ['초등학교 5학년', '순서과목', '순서단원', '순서수업제목', '1/1', '순서 수업모형', '[순서-기준] 순서 성취기준 문장', '1. 순서 학습목표 하나', '2. 순서 학습목표 둘', '순서 핵심 질문?', '순서 준비물 하나, 순서 준비물 둘'];
     let previousIndex = -1;
     for (const value of orderedValues) {
         const valueIndex = text.indexOf(value);

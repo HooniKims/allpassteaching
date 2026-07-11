@@ -156,11 +156,31 @@ test('renders every formal section, column, block label, and exact achievement s
 
     // Then the common model vocabulary and exact user content are all present
     for (const text of [
-        '교수·학습 과정안', '수업 개요', '교수·학습 과정', '과정중심평가', '개별화·지원 전략', '수업 후 성찰', '수업 후 연계',
+        '교수·학습 과정안', '수업 개요', '교수·학습 과정', '과정중심평가', '개별화·지원 전략', '수업 후 성찰', '후속 학습 및 정리',
         '단계', '학습 요소', '교사 활동', '학생 활동', '시간', '자료·유의점', '주요 발문', '예상 학생 반응', '지원',
         '평가 요소', '평가 방법', '관찰 증거', '수준별 피드백', '[6과11-02] 식물 기관 &amp; 기능의 관계를 정확히 설명한다.',
         '다음 차시에는 뿌리와 잎의 기능을 비교한다.',
     ]) expect(sectionXml).toContain(text);
+});
+
+test('preserves the edited lesson title and common connection labels in section XML', async () => {
+    // Given
+    const plan = makeTwoSessionPlan();
+    plan.title = 'HWPX-편집수업제목-센티널';
+    plan.sessions[0].nextSessionConnection = 'HWPX-다음차시-센티널';
+    plan.sessions[1].nextSessionConnection = 'HWPX-후속정리-센티널';
+
+    // When
+    const { sectionXml } = await unpackHwpx(plan);
+
+    // Then
+    for (const text of [
+        '수업 제목', 'HWPX-편집수업제목-센티널',
+        '다음 차시 연결', 'HWPX-다음차시-센티널',
+        '후속 학습 및 정리', 'HWPX-후속정리-센티널',
+    ]) expect(sectionXml).toContain(text);
+    expect(sectionXml).not.toContain('수업 후 연계');
+    expect(sectionXml).not.toContain('다음 학습 연결');
 });
 
 test('renders the ordered four-column overview with practical merged long rows and blank metadata', async () => {
@@ -170,6 +190,7 @@ test('renders the ordered four-column overview with practical merged long rows a
         metadata: { date: '', place: '', className: '', teacherName: '' },
         subject: '순서과목',
         unitTitle: '순서단원',
+        title: '순서수업제목',
         standards: [{ code: '순서-기준', text: '순서 성취기준 문장' }],
         learningGoals: ['순서 학습목표'],
         essentialQuestion: '순서 핵심 질문?',
@@ -184,15 +205,15 @@ test('renders the ordered four-column overview with practical merged long rows a
 
     // Then paired rows have four cells and long rows merge the value across three columns
     expect(overview.getAttribute('colCnt')).toBe('4');
-    expect(overviewRows).toHaveLength(9);
-    expect(overviewRows.map(row => cells(row).length)).toEqual([4, 4, 4, 2, 4, 2, 2, 2, 2]);
-    for (const rowIndex of [3, 5, 6, 7, 8]) {
+    expect(overviewRows).toHaveLength(10);
+    expect(overviewRows.map(row => cells(row).length)).toEqual([4, 4, 4, 2, 2, 4, 2, 2, 2, 2]);
+    for (const rowIndex of [3, 4, 6, 7, 8, 9]) {
         expect([...cells(overviewRows[rowIndex])].map(cell => Number(span(cell).getAttribute('colSpan')))).toEqual([1, 3]);
         expect(cells(overviewRows[rowIndex]).reduce((sum, cell) => sum + width(cell), 0)).toBe(42520);
     }
     const orderedText = overview.textContent;
     let previousIndex = -1;
-    for (const value of ['일시', '장소', '대상 학급', '수업자', '초등학교 5학년', '순서과목', '순서단원', '1/1', '순서 수업모형', '순서-기준', '순서 학습목표', '순서 핵심 질문?', '순서 준비물']) {
+    for (const value of ['일시', '장소', '대상 학급', '수업자', '초등학교 5학년', '순서과목', '순서단원', '순서수업제목', '1/1', '순서 수업모형', '순서-기준', '순서 학습목표', '순서 핵심 질문?', '순서 준비물']) {
         const valueIndex = orderedText.indexOf(value);
         expect(valueIndex, value).toBeGreaterThan(previousIndex);
         previousIndex = valueIndex;

@@ -71,6 +71,26 @@ test('renders the formal table labels and exact model content', async () => {
     }
 });
 
+test('preserves the edited lesson title and common connection labels in document.xml', async () => {
+    // Given
+    const plan = makeTwoSessionPlan();
+    plan.title = 'DOCX-편집수업제목-센티널';
+    plan.sessions[0].nextSessionConnection = 'DOCX-다음차시-센티널';
+    plan.sessions[1].nextSessionConnection = 'DOCX-후속정리-센티널';
+
+    // When
+    const { documentXml } = await unpackDocx(plan);
+
+    // Then
+    for (const text of [
+        '수업 제목', 'DOCX-편집수업제목-센티널',
+        '다음 차시 연결', 'DOCX-다음차시-센티널',
+        '후속 학습 및 정리', 'DOCX-후속정리-센티널',
+    ]) expect(documentXml).toContain(text);
+    expect(documentXml).not.toContain('수업 후 연계');
+    expect(documentXml).not.toContain('다음 학습 연결');
+});
+
 test('applies Paperlogy defaults and calm green table styling', async () => {
     // Given a standard lesson plan
     // When the DOCX style and document parts are unpacked

@@ -14,6 +14,7 @@ const overviewLabels = [
     '학교급·학년',
     '과목',
     '단원/주제',
+    '수업 제목',
     '차시',
     '수업 모형',
     '성취기준',
@@ -31,6 +32,8 @@ test('두 차시 계획을 차시별 독립 문서와 페이지 나눔으로 만
 
     // Then
     expect(document.title).toBe('교수·학습 과정안');
+    expect(document.documentTitle).toBe('교수·학습 과정안');
+    expect(document.lessonTitle).toBe(plan.title);
     expect(document.sessions).toHaveLength(2);
     expect(document.sessions[0]).toMatchObject({
         pageBreakBefore: false,
@@ -45,6 +48,32 @@ test('두 차시 계획을 차시별 독립 문서와 페이지 나눔으로 만
         title: '식물 기관의 기능 설명',
         sessionMinutes: 40,
     });
+});
+
+test('수업 제목과 차시 위치에 따른 연결 레이블을 공통 문서 계약으로 보존한다', () => {
+    // Given
+    const plan = makeTwoSessionPlan();
+    plan.title = '문서모델-편집수업제목-센티널';
+
+    // When
+    const document = buildDocumentModel(plan);
+
+    // Then
+    expect(document.lessonTitle).toBe('문서모델-편집수업제목-센티널');
+    expect(document.sessions[0].overview.rows.find(row => row.key === 'lessonTitle')).toEqual({
+        key: 'lessonTitle',
+        label: '수업 제목',
+        value: '문서모델-편집수업제목-센티널',
+    });
+    expect(document.sessions[0].overview.rows.map(row => row.key).slice(6, 9)).toEqual([
+        'unitTitle',
+        'lessonTitle',
+        'session',
+    ]);
+    expect(document.sessions.map(session => session.connectionLabel)).toEqual([
+        '다음 차시 연결',
+        '후속 학습 및 정리',
+    ]);
 });
 
 test('개요 표의 항목 순서와 성취기준 코드·원문을 보존한다', () => {

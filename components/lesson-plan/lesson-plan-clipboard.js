@@ -7,7 +7,7 @@ function overviewText(value) {
 
 export function lessonPlanClipboardText(plan) {
     const document = buildDocumentModel(plan);
-    const lines = [document.title, `지도안 제목: ${plan.title ?? ''}`];
+    const lines = [document.documentTitle];
 
     for (const session of document.sessions) {
         lines.push('', `${session.order}차시: ${session.title}`, '수업 개요');
@@ -27,7 +27,7 @@ export function lessonPlanClipboardText(plan) {
             for (const feedback of row.levelFeedback) lines.push(`${feedback.label} 피드백: ${feedback.text}`);
         }
 
-        lines.push('', '개별화·지원 전략', ...session.supportStrategies, '', '수업 후 성찰', session.reflectionPrompt, '', '다음 학습 연결', session.nextSessionConnection);
+        lines.push('', '개별화·지원 전략', ...session.supportStrategies, '', '수업 후 성찰', session.reflectionPrompt, '', session.connectionLabel, session.nextSessionConnection);
     }
 
     return lines.join('\n');
