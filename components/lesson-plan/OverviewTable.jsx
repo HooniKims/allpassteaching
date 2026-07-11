@@ -1,10 +1,11 @@
-const splitLines = value => value.split(/\r?\n/).filter(item => item.trim().length > 0);
+import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
+
 const rowValue = (overview, key) => overview.rows.find(row => row.key === key)?.value ?? '';
 
-function EditableCell({ label, value, onChange, multiline = false, readOnly = false }) {
+function EditableCell({ label, value, onChange, onBlur, multiline = false, readOnly = false }) {
     const Control = multiline ? 'textarea' : 'input';
     return <td data-label={label}>
-        <Control aria-label={label} value={value} onChange={onChange} readOnly={readOnly} />
+        <Control aria-label={label} value={value} onChange={onChange} onBlur={onBlur} readOnly={readOnly} />
     </td>;
 }
 
@@ -64,9 +65,9 @@ export function OverviewTable({ plan, session, overview, onPlanChange, onSession
             </tr>
             <tr>
                 <th scope="row">학습 목표</th>
-                <EditableCell label={`${prefix} 학습 목표`} value={(plan.learningGoals ?? []).join('\n')} multiline onChange={event => onPlanChange({ ...plan, learningGoals: splitLines(event.target.value) })} />
+                <EditableCell label={`${prefix} 학습 목표`} value={(plan.learningGoals ?? []).join('\n')} multiline onChange={event => onPlanChange({ ...plan, learningGoals: splitEditorLines(event.target.value) })} onBlur={event => onPlanChange({ ...plan, learningGoals: normalizeEditorLines(event.target.value) })} />
                 <th scope="row">준비물</th>
-                <EditableCell label={`${prefix} 준비물`} value={(plan.materials ?? []).join('\n')} multiline onChange={event => onPlanChange({ ...plan, materials: splitLines(event.target.value) })} />
+                <EditableCell label={`${prefix} 준비물`} value={(plan.materials ?? []).join('\n')} multiline onChange={event => onPlanChange({ ...plan, materials: splitEditorLines(event.target.value) })} onBlur={event => onPlanChange({ ...plan, materials: normalizeEditorLines(event.target.value) })} />
             </tr>
         </tbody>
     </table>;

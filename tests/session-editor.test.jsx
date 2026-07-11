@@ -1,7 +1,18 @@
+import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { test, expect, vi } from 'vitest';
 import { SessionEditor } from '@/components/lesson-plan/SessionEditor.jsx';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
+
+function SessionHarness({ initial, onChange }) {
+    const [session, setSession] = useState(initial);
+    const update = next => {
+        setSession(next);
+        onChange(next);
+    };
+    return <SessionEditor session={session} onChange={update} />;
+}
 
 test.each([
     ['1차시 도입 주요 발문', 'teacherQuestions', '기관의 생김새를 먼저 살펴볼까요?'],
@@ -40,4 +51,24 @@ test('shows the complete nested field label inside the process table', () => {
 
     // Then
     expect(screen.getByLabelText('1차시 도입 자료 및 유의점').closest('label')).toHaveTextContent('자료 및 유의점');
+});
+
+test('keeps a trailing newline while adding a second teacher question', async () => {
+    // Given
+    const user = userEvent.setup();
+    const session = makeGeneratedPlan().sessions[0];
+    const onChange = vi.fn();
+    render(<SessionHarness initial={session} onChange={onChange} />);
+    const questions = screen.getByLabelText('1차시 도입 주요 발문');
+
+    // When
+    await user.click(questions);
+    await user.keyboard('{End}{Enter}둘째 발문');
+
+    // Then
+    expect(questions).toHaveValue(`${session.stages[0].teacherQuestions[0]}\n둘째 발문`);
+    expect(onChange.mock.lastCall[0].stages[0].teacherQuestions).toEqual([
+        session.stages[0].teacherQuestions[0],
+        '둘째 발문',
+    ]);
 });

@@ -1,9 +1,9 @@
-const splitLines = value => value.split(/\r?\n/).filter(item => item.trim().length > 0);
+import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
 
-function ActivityField({ label, value, onChange }) {
+function ActivityField({ label, value, onChange, onBlur }) {
     return <label className="document-field">
         <span>{label.replace(/^\d+차시\s+\S+\s+/, '')}</span>
-        <textarea aria-label={label} value={value.join('\n')} onChange={onChange} />
+        <textarea aria-label={label} value={value.join('\n')} onChange={onChange} onBlur={onBlur} />
     </label>;
 }
 
@@ -45,19 +45,19 @@ export function SessionEditor({ session, onChange }) {
                             <textarea aria-label={`${prefix} 학습 요소`} value={stage.learningElement ?? ''} onChange={event => updateStage(index, 'learningElement', event.target.value)} />
                         </td>
                         <td data-label="교사 활동">
-                            <ActivityField label={`${prefix} 교사 활동`} value={stage.teacherActivities ?? []} onChange={event => updateStage(index, 'teacherActivities', splitLines(event.target.value))} />
-                            <ActivityField label={`${prefix} 주요 발문`} value={stage.teacherQuestions ?? []} onChange={event => updateStage(index, 'teacherQuestions', splitLines(event.target.value))} />
+                            <ActivityField label={`${prefix} 교사 활동`} value={stage.teacherActivities ?? []} onChange={event => updateStage(index, 'teacherActivities', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'teacherActivities', normalizeEditorLines(event.target.value))} />
+                            <ActivityField label={`${prefix} 주요 발문`} value={stage.teacherQuestions ?? []} onChange={event => updateStage(index, 'teacherQuestions', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'teacherQuestions', normalizeEditorLines(event.target.value))} />
                         </td>
                         <td data-label="학생 활동">
-                            <ActivityField label={`${prefix} 학생 활동`} value={stage.studentActivities ?? []} onChange={event => updateStage(index, 'studentActivities', splitLines(event.target.value))} />
-                            <ActivityField label={`${prefix} 예상 학생 반응`} value={stage.expectedStudentResponses ?? []} onChange={event => updateStage(index, 'expectedStudentResponses', splitLines(event.target.value))} />
+                            <ActivityField label={`${prefix} 학생 활동`} value={stage.studentActivities ?? []} onChange={event => updateStage(index, 'studentActivities', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'studentActivities', normalizeEditorLines(event.target.value))} />
+                            <ActivityField label={`${prefix} 예상 학생 반응`} value={stage.expectedStudentResponses ?? []} onChange={event => updateStage(index, 'expectedStudentResponses', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'expectedStudentResponses', normalizeEditorLines(event.target.value))} />
                         </td>
                         <td data-label="시간">
                             <input aria-label={`${prefix} 시간`} type="number" min="0" value={stage.minutes ?? 0} onChange={event => updateStage(index, 'minutes', Number(event.target.value))} />
                         </td>
                         <td data-label="자료·유의점">
-                            <ActivityField label={`${prefix} 자료 및 유의점`} value={stage.materialsAndNotes ?? []} onChange={event => updateStage(index, 'materialsAndNotes', splitLines(event.target.value))} />
-                            <ActivityField label={`${prefix} 지원 사항`} value={stage.supportNotes ?? []} onChange={event => updateStage(index, 'supportNotes', splitLines(event.target.value))} />
+                            <ActivityField label={`${prefix} 자료 및 유의점`} value={stage.materialsAndNotes ?? []} onChange={event => updateStage(index, 'materialsAndNotes', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'materialsAndNotes', normalizeEditorLines(event.target.value))} />
+                            <ActivityField label={`${prefix} 지원 사항`} value={stage.supportNotes ?? []} onChange={event => updateStage(index, 'supportNotes', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'supportNotes', normalizeEditorLines(event.target.value))} />
                         </td>
                     </tr>;
                 })}

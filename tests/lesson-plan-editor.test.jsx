@@ -88,6 +88,37 @@ test('keeps focus while typing a complete assessment element edit', async () => 
     expect(onChange.mock.lastCall[0].assessment[0].element).toBe('탐구 결과 설명');
 });
 
+test('keeps a trailing newline while adding a second learning goal', async () => {
+    // Given
+    const user = userEvent.setup();
+    const plan = makeGeneratedPlan();
+    const onChange = vi.fn();
+    render(<LessonPlanEditor plan={plan} onChange={onChange} />);
+    const goals = screen.getByLabelText('1차시 학습 목표');
+
+    // When
+    await user.click(goals);
+    await user.keyboard('{End}{Enter}둘째 목표');
+
+    // Then
+    expect(goals).toHaveValue(`${plan.learningGoals[0]}\n둘째 목표`);
+    expect(onChange.mock.lastCall[0].learningGoals).toEqual([plan.learningGoals[0], '둘째 목표']);
+});
+
+test('removes blank-only learning goal lines on blur', () => {
+    // Given
+    const onChange = vi.fn();
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={onChange} />);
+    const goals = screen.getByLabelText('1차시 학습 목표');
+
+    // When
+    fireEvent.change(goals, { target: { value: '첫째 목표\n\n둘째 목표\n' } });
+    fireEvent.blur(goals);
+
+    // Then
+    expect(onChange.mock.lastCall[0].learningGoals).toEqual(['첫째 목표', '둘째 목표']);
+});
+
 test.each([
     ['1차시 개별화·지원 전략', plan => plan.supportStrategies[0], '관찰 도구 선택지를 제공한다.'],
     ['1차시 수업 후 성찰', plan => plan.reflectionPrompt, '모든 학생이 근거를 말했는가?'],

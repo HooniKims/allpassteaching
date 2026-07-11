@@ -3,8 +3,7 @@ import { buildDocumentModel, lessonPlanLines } from '@/lib/export/document-model
 import { AssessmentEditor } from './AssessmentEditor.jsx';
 import { OverviewTable } from './OverviewTable.jsx';
 import { SessionEditor } from './SessionEditor.jsx';
-
-const splitLines = value => value.split(/\r?\n/).filter(item => item.trim().length > 0);
+import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
 
 export function LessonPlanEditor({ plan, onChange }) {
     const original = useRef(null);
@@ -102,7 +101,8 @@ export function LessonPlanEditor({ plan, onChange }) {
                                 <textarea
                                     aria-label={`${session.order}차시 개별화·지원 전략`}
                                     value={(value.supportStrategies ?? []).join('\n')}
-                                    onChange={event => update({ ...value, supportStrategies: splitLines(event.target.value) })}
+                                    onChange={event => update({ ...value, supportStrategies: splitEditorLines(event.target.value) })}
+                                    onBlur={event => update({ ...value, supportStrategies: normalizeEditorLines(event.target.value) })}
                                 />
                             </label>
                             <label>
