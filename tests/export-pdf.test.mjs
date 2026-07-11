@@ -35,6 +35,13 @@ test('wraps Korean text at word boundaries and preserves explicit whitespace', (
     expect(wrapText('가나다라마바사', monospaceFont, 1, 3)).toEqual(['가나다', '라마바', '사']);
 });
 
+test('keeps a final Korean auxiliary expression together instead of orphaning one word', () => {
+    expect(wrapText('기관마다 하는 일이 다를 것 같습니다.', monospaceFont, 1, 15)).toEqual([
+        '기관마다 하는 일이 다를',
+        '것 같습니다.',
+    ]);
+});
+
 test('uses one visible fallback for unsupported glyphs while preserving supported Korean and whitespace', () => {
     const regular = limitedFont('앞중뒤넷다섯끝줄탭한글□?\n\t');
     const bold = limitedFont('앞중뒤넷다섯끝줄탭한글□?\n\t');

@@ -18,10 +18,15 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
     const toggle = item => onChange(selected.some(value => value.code === item.code) ? selected.filter(value => value.code !== item.code) : [...selected, item]);
     const recommend = async () => {
         setStatus('loading'); setMessage('');
-        const response = await fetch('/api/recommend-standards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scope) });
-        const body = await response.json();
-        if (!response.ok) { setStatus('error'); setMessage(body.message || 'AI 추천을 불러오지 못했습니다. 직접 검색은 계속 사용할 수 있어요.'); return; }
-        setRecommendations(body.recommendations); setStatus('done');
+        try {
+            const response = await fetch('/api/recommend-standards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scope) });
+            const body = await response.json();
+            if (!response.ok) { setStatus('error'); setMessage(body.message || 'AI 추천을 불러오지 못했습니다. 직접 검색은 계속 사용할 수 있어요.'); return; }
+            setRecommendations(body.recommendations); setStatus('done');
+        } catch {
+            setStatus('error');
+            setMessage('AI 추천을 불러오지 못했습니다. 직접 검색은 계속 사용할 수 있어요.');
+        }
     };
     return <div className="standards-step">
         <header><p className="eyebrow">2단계 · 성취기준</p><h1>성취기준을 선택해주세요</h1><p>{basics.subject} · {gradeBand(basics)}학년군에 맞는 기준만 보여드립니다.</p></header>
