@@ -9,5 +9,5 @@ export default defineConfig({
         { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
         { name: 'mobile', use: { ...devices['Pixel 7'] } },
     ],
-    webServer: { command: 'npm run dev -- --hostname 127.0.0.1 --port 3210', url: 'http://127.0.0.1:3210', reuseExistingServer: true, timeout: 120000 },
+    webServer: { command: 'npm run dev -- --hostname 127.0.0.1 --port 3210', url: 'http://127.0.0.1:3210', reuseExistingServer: !process.env.CI, timeout: 120000 },
 });

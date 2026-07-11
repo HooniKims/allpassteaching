@@ -1,9 +1,8 @@
-import { mkdir, readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { PDFDocument } from 'pdf-lib';
 import { makeGeneratedPlan, makeTwoSessionPlan } from '../tests/fixtures/lesson-plan.mjs';
+import { exportAllFormats } from './lesson-plan-export.mjs';
 
 const standard = {
     code: '6과11-02',
@@ -22,8 +21,6 @@ const editedValues = {
     exceedsFeedback: '여러 기관의 공통점과 차이점을 비교한다.',
     nextSessionConnection: '다음 학습에서 식물 기관의 기능을 비교한다.',
 };
-const evidenceDirectory = path.resolve('.omo/evidence/task8-lesson-plan');
-
 async function checkAccessibility(page) {
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(result.violations.map(({ id, impact, nodes }) => ({ id, impact, nodes: nodes.length }))).toEqual([]);
@@ -109,7 +106,7 @@ async function selectStandardAndModel(page, testInfo, { expectResult = true } = 
     await page.getByRole('button', { name: 'AI로 추천받기' }).click();
     await expect(page.getByText(standard.reason)).toBeVisible();
     await checkAccessibility(page);
-    await page.screenshot({ path: path.join(evidenceDirectory, `standards-${testInfo.project.name}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`standards-${testInfo.project.name}.png`), fullPage: true });
     await page.getByLabel(`${standard.code} ${standard.text}`).check();
     await page.getByRole('button', { name: /수업 모형 선택/ }).click();
     const modelChoice = page.getByLabel('탐구·발견 학습 선택');
@@ -117,7 +114,7 @@ async function selectStandardAndModel(page, testInfo, { expectResult = true } = 
     await expect(modelChoice.locator('..')).toHaveCSS('outline-style', 'solid');
     await modelChoice.check();
     await checkAccessibility(page);
-    await page.screenshot({ path: path.join(evidenceDirectory, `model-${testInfo.project.name}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`model-${testInfo.project.name}.png`), fullPage: true });
     await page.getByRole('button', { name: /지도안 생성/ }).click();
     await page.getByRole('button', { name: '지도안 생성하기' }).click();
     if (expectResult) await expect(page.getByRole('table', { name: '1차시 수업 개요' })).toBeVisible();
@@ -139,47 +136,29 @@ async function editFormalPlan(page) {
     await page.getByLabel('1차시 후속 학습 및 정리').fill(editedValues.nextSessionConnection);
 }
 
-async function exportAllFormats(page) {
-    const expected = { hwpx: ['application/hwp+zip', '504b0304'], docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', '504b0304'], pdf: ['application/pdf', '25504446'] };
-    for (const [format, [contentType, signature]] of Object.entries(expected)) {
-        await page.getByLabel('내보내기 형식').selectOption(format);
-        const responsePromise = page.waitForResponse(response => response.url().endsWith(`/api/export/${format}`) && response.request().method() === 'POST');
-        const downloadPromise = page.waitForEvent('download');
-        await page.getByRole('button', { name: '파일로 저장' }).click();
-        const [response, download] = await Promise.all([responsePromise, downloadPromise]);
-        expect(response.status()).toBe(200);
-        expect(response.headers()['content-type']).toContain(contentType);
-        expect(response.headers()['content-disposition']).toContain(`.${format}`);
-        expect(download.suggestedFilename()).toBe(`식물의 구조와 기능.${format}`);
-        const bytes = await readFile(await download.path());
-        expect(bytes.subarray(0, 4).toString('hex')).toBe(signature);
-    }
-}
-
 async function captureResponsiveResult(page, testInfo) {
     for (const [width, height] of [[375, 812], [768, 1024], [1280, 900]]) {
         await page.setViewportSize({ width, height });
         await page.evaluate(() => window.scrollTo(0, 0));
         await checkLayout(page);
-        await page.screenshot({ path: path.join(evidenceDirectory, `result-${testInfo.project.name}-${width}.png`), fullPage: true });
+        await page.screenshot({ path: testInfo.outputPath(`result-${testInfo.project.name}-${width}.png`), fullPage: true });
     }
 }
 
-async function expectPrintPages(page, expectedCount, filename) {
+async function expectPrintPages(page, testInfo, expectedCount, filename) {
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('.step-nav')).toBeHidden();
     await expect(page.locator('.plan-editor__header')).toBeHidden();
     await expect(page.locator('.plan-editor__guidance')).toBeHidden();
-    const bytes = await page.pdf({ path: path.join(evidenceDirectory, filename), preferCSSPageSize: true, printBackground: true });
+    const bytes = await page.pdf({ path: testInfo.outputPath(`${testInfo.project.name}-${filename}`), preferCSSPageSize: true, printBackground: true });
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(expectedCount);
     await page.emulateMedia({ media: 'screen' });
 }
 
 test.beforeEach(async ({ page }, testInfo) => {
-    await mkdir(evidenceDirectory, { recursive: true });
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
-    await page.screenshot({ path: path.join(evidenceDirectory, `step1-${testInfo.project.name}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`step1-${testInfo.project.name}.png`), fullPage: true });
 });
 
 test('교사가 설정·편집·세 형식 다운로드까지 완주한다', async ({ page }, testInfo) => {
@@ -199,7 +178,7 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('내보내기 형식')).toBeFocused();
-    await exportAllFormats(page);
+    await exportAllFormats(page, metadata, editedValues);
 
     // Then 편집값·접근성·반응형·인쇄 계약이 모두 유지된다
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data?.plan?.assessment?.[0]?.method)).toBe(editedValues.assessmentMethod);
@@ -216,11 +195,10 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await expect(page.getByLabel('1차시 평가 1 심화 수준 학생 피드백')).toHaveValue(editedValues.exceedsFeedback);
     await expect(page.getByLabel('1차시 후속 학습 및 정리')).toHaveValue(editedValues.nextSessionConnection);
     await captureResponsiveResult(page, testInfo);
-    if (testInfo.project.name === 'desktop') await expectPrintPages(page, 2, 'browser-print-single.pdf');
+    if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 2, 'browser-print-single.pdf');
 });
 
-test('연속 2차시는 두 세트의 공식 문서와 4쪽 인쇄물을 만든다', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', '인쇄 쪽수는 Chromium 데스크톱 프로젝트에서 한 번 검증한다.');
+test('연속 2차시는 두 세트의 공식 문서를 만들고 데스크톱에서 4쪽으로 인쇄된다', async ({ page }, testInfo) => {
     // Given 2차시 연속 수업을 선택한 교사
     await mockApis(page);
     await completeBasics(page, { multi: true });
@@ -232,7 +210,7 @@ test('연속 2차시는 두 세트의 공식 문서와 4쪽 인쇄물을 만든�
     await expect(page.getByRole('table', { name: '2차시 수업 개요' })).toBeVisible();
     await expect(page.getByRole('table', { name: '2차시 교수·학습 과정' })).toBeVisible();
     await expect(page.getByRole('table', { name: '2차시 과정중심평가' })).toBeVisible();
-    await expectPrintPages(page, 4, 'browser-print-two-sessions.pdf');
+    if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 4, 'browser-print-two-sessions.pdf');
 });
 
 test('생성 오류 후에도 작성 상태를 보존하고 재시도한다', async ({ page }, testInfo) => {
