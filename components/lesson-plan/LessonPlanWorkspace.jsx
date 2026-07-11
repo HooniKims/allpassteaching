@@ -8,7 +8,7 @@ import { InstructionModelStep } from './InstructionModelStep.jsx';
 import { GenerationStatus } from './GenerationStatus.jsx';
 import { LessonPlanEditor } from './LessonPlanEditor.jsx';
 
-const emptyBasics = { schoolLevel: '', grade: '', subject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', error: '' };
+const emptyBasics = { schoolLevel: '', grade: '', subject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: { date: '', place: '', className: '', teacherName: '' }, error: '' };
 
 export function LessonPlanWorkspace() {
     const [ready, setReady] = useState(false);

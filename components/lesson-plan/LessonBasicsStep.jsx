@@ -1,8 +1,11 @@
 const gradeOptions = { elementary: ['1','2','3','4','5','6'], middle: ['1','2','3'], high: ['1','2','3'] };
 const subjectOptions = { elementary: ['국어','수학','사회','과학','도덕','체육','음악','미술','영어','통합교과','실과·기술가정·정보'], middle: ['국어','수학','사회','과학','도덕','체육','음악','미술','영어','실과·기술가정·정보','중학교 선택'], high: ['국어','수학','사회','과학','도덕','체육','음악','미술','영어','한문','교양'] };
+const emptyMetadata = { date: '', place: '', className: '', teacherName: '' };
 
 export function LessonBasicsStep({ value, onChange, onNext }) {
     const update = (key, next) => onChange({ ...value, [key]: next });
+    const metadata = { ...emptyMetadata, ...value.metadata };
+    const updateMetadata = (key, next) => onChange({ ...value, metadata: { ...metadata, [key]: next } });
     const submit = event => {
         event.preventDefault();
         if (!value.schoolLevel || !value.grade || !value.subject || !value.intent.trim()) return update('error', '필수 정보를 확인해주세요');
@@ -21,6 +24,12 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
             <label className={value.mode === 'multi' ? 'choice-tile is-selected' : 'choice-tile'}><input aria-label="연속 차시 수업" type="radio" name="mode" checked={value.mode === 'multi'} onChange={() => onChange({ ...value, mode: 'multi', sessions: 2 })}/><strong>연속 차시 수업</strong><span>전체 흐름과 차시별 지도안을 함께 생성</span></label>
         </div></fieldset>
         {value.mode === 'multi' && <label>차시 수<input aria-label="차시 수" type="number" min="2" max="10" value={value.sessions} onChange={event => update('sessions', Number(event.target.value))}/></label>}
+        <div className="field-grid">
+            <label>수업 일시 <span className="optional">선택</span><input aria-label="수업 일시" type="datetime-local" value={metadata.date} onChange={event => updateMetadata('date', event.target.value)}/></label>
+            <label>수업 장소 <span className="optional">선택</span><input aria-label="수업 장소" value={metadata.place} onChange={event => updateMetadata('place', event.target.value)}/></label>
+            <label>대상 학급 <span className="optional">선택</span><input aria-label="대상 학급" value={metadata.className} onChange={event => updateMetadata('className', event.target.value)}/></label>
+            <label>수업자 <span className="optional">선택</span><input aria-label="수업자" value={metadata.teacherName} onChange={event => updateMetadata('teacherName', event.target.value)}/></label>
+        </div>
         <label>수업할 개념 및 내용<textarea aria-label="수업할 개념 및 내용" rows="5" value={value.intent} onChange={event => update('intent', event.target.value)} placeholder="예: 식물이 자라는 데 필요한 조건을 예상하고 실험으로 확인한다."/></label>
         <label>학생 특성 또는 지원 필요 사항 <span className="optional">선택</span><textarea rows="3" value={value.studentNeeds} onChange={event => update('studentNeeds', event.target.value)} placeholder="예: 관찰 기록에 어려움이 있는 학생에게 문장 틀을 제공해요."/></label>
         <footer><span>입력 내용은 이 기기에 임시 저장됩니다.</span><button type="submit">성취기준 찾기 <span aria-hidden="true">→</span></button></footer>

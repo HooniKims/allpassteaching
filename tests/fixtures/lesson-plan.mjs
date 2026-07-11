@@ -3,7 +3,7 @@ export function makeGeneratedPlan(overrides = {}) {
         metadata: { date: '', place: '', className: '', teacherName: '' },
         title: '식물의 구조와 기능', schoolLevel: 'elementary', grade: '5', subject: '과학',
         unitTitle: '식물의 구조와 기능', essentialQuestion: '식물의 각 기관은 생존에 어떤 도움을 줄까?',
-        standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조와 기능을 설명할 수 있다.' }],
+        standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.' }],
         learningGoals: ['식물 기관의 구조와 기능을 관찰 결과로 설명할 수 있다.'], materials: ['식물 표본', '관찰 기록지'],
         instructionModel: { id: 'inquiry', name: '탐구·발견 학습', reason: '관찰과 증거 중심 수업' },
         sessions: [{ id: 'session-1', order: 1, title: '식물 기관 관찰', sessionMinutes: 40, nextSessionConnection: '관찰 결과를 식물 기관의 기능과 연결한다.', stages: [
@@ -26,7 +26,7 @@ export function makeTwoSessionPlan() {
 }
 
 export const generationDraft = {
-    basics: { schoolLevel: 'elementary', grade: '5', subject: '과학', mode: 'single', sessions: 1, sessionMinutes: 40, intent: '식물 기관을 관찰하고 구조와 기능을 설명한다.', studentNeeds: '' },
+    basics: { schoolLevel: 'elementary', grade: '5', subject: '과학', mode: 'single', sessions: 1, sessionMinutes: 40, intent: '식물 기관을 관찰하고 구조와 기능을 설명한다.', studentNeeds: '', metadata: { date: '', place: '', className: '', teacherName: '' } },
     standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.' }],
     instructionModel: { id: 'inquiry', name: '탐구·발견 학습', stages: ['문제 인식', '탐구 수행', '결론'] },
 };
