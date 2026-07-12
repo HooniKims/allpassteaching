@@ -91,6 +91,7 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [busyMessage, setBusyMessage] = useState('');
+    const pickerDisabled = !students.length || busy;
 
     const combinedPreview = useMemo(() => {
         if (!combinedFile || !actualPages || !students.length) return { map: [], error: '' };
@@ -140,12 +141,14 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
             event.target.value = '';
         }
     };
-    const applyPackets = (packets, fileName) => {
+    const applyPackets = (packets, fileName, generationToken) => {
         const { next, runtime } = mergePackets(submissions, packets, students, fileName);
-        files.setMany(runtime);
+        if (!files.setMany(runtime, generationToken)) return false;
         onChange(next);
+        return true;
     };
     const attachIndividuals = async () => {
+        const generationToken = files.beginGeneration();
         const startedAt = Date.now();
         showProcessing(setBusy, setBusyMessage, '학생별 PDF 연결 준비 중…');
         onBusyChange(true);
@@ -153,8 +156,8 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         await yieldToStatusPaint();
         try {
             const packets = await attachIndividualFiles(individualDrafts, { students, hasCoverPerStudent });
-            applyPackets(packets, packet => individualDrafts.find(item => item.studentId === packet.studentId).file.name);
-            setIndividualDrafts([]);
+            const accepted = applyPackets(packets, packet => individualDrafts.find(item => item.studentId === packet.studentId).file.name, generationToken);
+            if (accepted) setIndividualDrafts([]);
         } catch (error) {
             setMessage(error.message);
         } finally {
@@ -165,6 +168,7 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         }
     };
     const splitCombined = async () => {
+        const generationToken = files.beginGeneration();
         const startedAt = Date.now();
         showProcessing(setBusy, setBusyMessage, '학생별 PDF 묶음 생성 중…');
         onBusyChange(true);
@@ -172,9 +176,11 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         await yieldToStatusPaint();
         try {
             const packets = await splitCombinedPdf(combinedFile, { students, answerPagesPerStudent, hasCoverPerStudent });
-            applyPackets(packets, () => combinedFile.name);
-            setCombinedFile(null);
-            setActualPages(null);
+            const accepted = applyPackets(packets, () => combinedFile.name, generationToken);
+            if (accepted) {
+                setCombinedFile(null);
+                setActualPages(null);
+            }
         } catch (error) {
             setMessage(error.message);
         } finally {
@@ -187,7 +193,7 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
 
     return <section className="student-pdf-upload" aria-labelledby="student-pdf-upload-title" aria-busy={busy}>
         <div className="student-pdf-upload__heading">
-            <div><h2 id="student-pdf-upload-title">학생 제출 PDF 연결</h2><p>원본은 이 화면이 열린 동안에만 보관하며, OCR에는 표지를 뺀 답안 PDF만 전송합니다.</p></div>
+            <div><h2 id="student-pdf-upload-title">학생 제출 PDF 연결</h2><p>원본은 이 화면이 열린 동안에만 보관하며, OCR에는 <span className="nowrap">표지를 뺀 답안 PDF만</span> 전송합니다.</p></div>
             <strong>{students.length} / {MAX_SUBMISSION_FILES}명</strong>
         </div>
         {!students.length && <p className="form-alert" role="alert">먼저 공용 학생 명단을 등록해주세요.</p>}
@@ -198,9 +204,9 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         </fieldset>
 
         {mode === MODES.individual && <div className="pdf-upload-panel">
-            <label className="inline-check"><input type="checkbox" checked={hasCoverPerStudent} onChange={event => setHasCoverPerStudent(event.target.checked)}/>각 개별 PDF의 첫 페이지가 이 학생의 수행평가 안내 표지</label>
+            <label className="inline-check"><input type="checkbox" checked={hasCoverPerStudent} onChange={event => setHasCoverPerStudent(event.target.checked)}/>각 개별 PDF의 첫 페이지가 <span className="nowrap">이 학생의 수행평가 안내 표지</span></label>
             <p className="field-help">개별 PDF의 표지도 원본 확인에는 포함하지만 OCR에서는 제외합니다.</p>
-            <label className="file-picker"><span>학생별 PDF <span className="optional">최대 50개 · 각 10MB</span></span><span className="file-picker__button">개별 PDF 선택</span><span className="file-picker__summary">{individualDrafts.length ? `${individualDrafts.length}개 선택됨` : '선택된 파일 없음'}</span><input aria-label="학생별 개별 PDF 파일" type="file" accept="application/pdf,.pdf" multiple disabled={!students.length || busy} onChange={chooseIndividual}/></label>
+            <label className={`file-picker${pickerDisabled ? ' file-picker--disabled' : ''}`}><span>학생별 PDF <span className="optional">최대 50개 · 각 10MB</span></span><span className="file-picker__button">개별 PDF 선택</span><span className="file-picker__summary">{individualDrafts.length ? `${individualDrafts.length}개 선택됨` : '선택된 파일 없음'}</span><input aria-label="학생별 개별 PDF 파일" type="file" accept="application/pdf,.pdf" multiple disabled={pickerDisabled} onChange={chooseIndividual}/></label>
             {individualDrafts.length > 0 && <div className="individual-pdf-links">{individualDrafts.map((draft, index) => <label key={draft.key}><span>{index + 1}. {draft.file.name}</span><select aria-label={`${draft.file.name} 학생 연결`} value={draft.studentId} onChange={event => setIndividualDrafts(current => current.map(item => item.key === draft.key ? { ...item, studentId: event.target.value } : item))}><option value="">학생 선택</option>{students.map(student => <option key={student.id} value={student.id}>{student.grade}학년 {student.className}반 {student.number}번 {student.name}</option>)}</select></label>)}</div>}
             {individualDrafts.length > 0 && <button type="button" disabled={busy || individualDrafts.some(item => !item.studentId)} onClick={attachIndividuals}>학생별 PDF 연결하기</button>}
         </div>}
@@ -208,7 +214,7 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         {mode === MODES.combined && <div className="pdf-upload-panel">
             <div className="combined-pdf-settings"><label>학생 1명당 답안 페이지 수<input aria-label="학생 1명당 답안 페이지 수" type="number" min="1" max="300" value={answerPagesPerStudent} onChange={event => setAnswerPagesPerStudent(event.target.value)}/><span className="field-help">안내 표지를 제외한 실제 답안 쪽수입니다.</span></label><label className="inline-check"><input type="checkbox" checked={hasCoverPerStudent} onChange={event => setHasCoverPerStudent(event.target.checked)}/>각 학생 묶음 첫 페이지가 수행평가 안내 표지</label></div>
             <p className="field-help">표지는 웹 원본 확인에 포함하고 OCR·자동 채점에서는 제외합니다.</p>
-            <label className="file-picker"><span>명단 순서 합본 PDF <span className="optional">최대 100MB · 300쪽</span></span><span className="file-picker__button">합본 PDF 선택</span><span className="file-picker__summary">{combinedFile?.name ?? '선택된 파일 없음'}</span><input aria-label="명단 순서 합본 PDF 파일" type="file" accept="application/pdf,.pdf" disabled={!students.length || busy} onChange={chooseCombined}/></label>
+            <label className={`file-picker${pickerDisabled ? ' file-picker--disabled' : ''}`}><span>명단 순서 합본 PDF <span className="optional">최대 100MB · 300쪽</span></span><span className="file-picker__button">합본 PDF 선택</span><span className="file-picker__summary">{combinedFile?.name ?? '선택된 파일 없음'}</span><input aria-label="명단 순서 합본 PDF 파일" type="file" accept="application/pdf,.pdf" disabled={pickerDisabled} onChange={chooseCombined}/></label>
             {actualPages != null && <p className={combinedPreview.error ? 'form-alert' : 'packet-page-count'} role={combinedPreview.error ? 'alert' : 'status'}>예상 {students.length * (Number(answerPagesPerStudent) + (hasCoverPerStudent ? 1 : 0))}쪽 · 실제 {actualPages}쪽{combinedPreview.error ? ` — ${combinedPreview.error}` : ''}</p>}
             {combinedPreview.map.length > 0 && <ol className="packet-preview">{combinedPreview.map.map((packet, index) => <li key={packet.studentId}>{students[index].name} · 묶음 {packet.packetPages[0]}–{packet.packetPages.at(-1)}쪽 · {packet.coverPages.length ? `표지 ${packet.coverPages[0]}쪽 · ` : '표지 없음 · '}답안 {packet.answerPages[0]}–{packet.answerPages.at(-1)}쪽</li>)}</ol>}
             {combinedPreview.map.length > 0 && <button type="button" disabled={busy} onClick={splitCombined}>학생별 PDF 묶음 만들기</button>}

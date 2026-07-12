@@ -68,8 +68,8 @@ test('keeps successful OCR when another student fails', async () => {
         .mockResolvedValueOnce(Response.json({ extractedText: '첫 학생 관찰 결과는 충분히 구체적으로 기록되었습니다.', ocrModel: 'document-parse', pageCount: 1 }))
         .mockResolvedValueOnce(Response.json({ message: '읽을 수 없는 PDF' }, { status: 422 })));
     const initial = [
-        { id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), status: 'pending', extractedText: '' },
-        { id: 'b', studentName: '이학생', fileName: '이학생.pdf', file: new File(['%PDF'], '이학생.pdf', { type: 'application/pdf' }), status: 'pending', extractedText: '' },
+        { id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' },
+        { id: 'b', studentName: '이학생', fileName: '이학생.pdf', file: new File(['%PDF'], '이학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' },
     ];
     render(<Harness initial={initial}/>);
     await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
@@ -82,7 +82,7 @@ test('keeps successful OCR when another student fails', async () => {
 test('keeps both grading results when two student requests finish in reverse order', async () => {
     const user = userEvent.setup();
     const assessment = makeAssessment();
-    const base = studentName => ({ id: studentName, studentName, fileName: `${studentName}.pdf`, status: 'extracted', extractedText: `${studentName}의 관찰 기록은 뿌리에 가는 털과 물 흡수 기능을 구체적으로 설명한다.`, grading: null, approved: false });
+    const base = studentName => ({ id: studentName, studentName, fileName: `${studentName}.pdf`, file: new File(['%PDF-attached'], `${studentName}.pdf`, { type: 'application/pdf' }), originalAttached: true, status: 'extracted', extractedText: `${studentName}의 관찰 기록은 뿌리에 가는 털과 물 흡수 기능을 구체적으로 설명한다.`, grading: null, approved: false });
     const grading = { criteria: [
         { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털', feedback: '구체적입니다.' },
         { criterionId: 'criterion-2', score: 35, evidence: '물 흡수 기능', feedback: '연결했습니다.' },
@@ -108,7 +108,7 @@ test('does not restore a deleted student when an in-flight OCR request finishes'
     const user = userEvent.setup();
     let resolveOcr;
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveOcr = resolve; })));
-    const initial = [{ id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), status: 'pending', extractedText: '' }];
+    const initial = [{ id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' }];
     render(<Harness initial={initial}/>);
     await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
     await user.click(screen.getByRole('button', { name: '김학생 삭제' }));
@@ -129,4 +129,36 @@ test('disables approval when a teacher score exceeds the criterion maximum', () 
     render(<Harness initial={[submission]}/>);
     expect(screen.getByRole('button', { name: '김학생 채점 승인' })).toBeDisabled();
     expect(screen.getByText(/모든 점수는 평가 요소별 배점 범위/)).toBeInTheDocument();
+});
+
+test.each([
+    ['missing', {}],
+    ['undefined', { originalAttached: undefined }],
+    ['null', { originalAttached: null }],
+    ['false', { originalAttached: false }],
+])('Given %s original attachment state When OCR and approval controls render Then both are blocked and reconnection is required', (_label, attachment) => {
+    const assessment = makeAssessment();
+    const grading = { criteria: [
+        { criterionId: 'criterion-1', score: 35, evidence: '관찰 근거', feedback: '구체적입니다.' },
+        { criterionId: 'criterion-2', score: 35, evidence: '기능 설명', feedback: '연결했습니다.' },
+        { criterionId: 'criterion-3', score: 15, evidence: '수정 과정', feedback: '과정을 확인했습니다.' },
+    ], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
+    const submission = {
+        id: `attachment-${_label}`,
+        studentName: '김학생',
+        fileName: '김학생.pdf',
+        file: new File(['%PDF-legacy'], '김학생.pdf', { type: 'application/pdf' }),
+        status: 'graded',
+        extractedText: '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.',
+        grading,
+        approved: false,
+        ...attachment,
+    };
+    submission.sourceHash = gradingSourceHash(assessment, submission.extractedText);
+
+    render(<Harness initial={[submission]}/>);
+
+    expect(screen.queryByRole('button', { name: '연결한 답안 PDF OCR 시작' })).not.toBeInTheDocument();
+    expect(screen.getByText('원본 PDF 다시 연결')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '김학생 채점 승인' })).toBeDisabled();
 });

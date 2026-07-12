@@ -88,5 +88,7 @@ test('Given a valid combined PDF When splitting starts Then the teacher and scre
     expect(screen.getByText('학생별 PDF 묶음 생성 중…')).toHaveAttribute('role', 'status');
     expect(screen.getByRole('region', { name: '학생 제출 PDF 연결' })).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByTestId('downstream-action')).toBeDisabled();
+    expect(screen.getByLabelText('명단 순서 합본 PDF 파일')).toBeDisabled();
+    expect(screen.getByLabelText('명단 순서 합본 PDF 파일').closest('label')).toHaveClass('file-picker--disabled');
     await waitFor(() => expect(screen.getByTestId('files')).toHaveTextContent('2'));
 });

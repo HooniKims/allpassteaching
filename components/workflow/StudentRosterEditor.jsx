@@ -118,7 +118,7 @@ export function StudentRosterEditor({ students, submissions = EMPTY_COLLECTION, 
             <label className="secondary-button student-roster__upload">Excel 명단 불러오기<input aria-label="학생 명단 Excel 업로드" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={busy} onChange={importWorkbook}/></label>
             <button type="button" disabled={busy || draftStudents.length >= MAX_STUDENTS} onClick={addStudent}>학생 직접 추가</button>
         </div>
-        <p className="field-help">Excel은 이 브라우저 안에서만 읽으며 <span className="nowrap">파일 자체를 서버로 보내지 않습니다.</span> 열 순서는 학년 · 반 · 번호 · 이름입니다.</p>
+        <p className="field-help">Excel은 이 브라우저 안에서만 읽으며 <span className="nowrap">파일 자체를 서버로 보내지 않습니다.</span> 열 순서는 <span className="nowrap">학년 · 반 · 번호 · 이름</span>입니다.</p>
         {status && <p className="status-line" role="status">{status}</p>}
         {importIssues.length > 0 && <div className="roster-issues" role="alert"><strong>명단을 바꾸지 않았습니다. 아래 셀을 확인해주세요.</strong><ul>{importIssues.map(item => <li key={`${item.code}-${item.row}-${item.column}`}>{item.row}행 · {item.column}: {item.message}</li>)}</ul></div>}
         {editIssues.length > 0 && draftStudents.length > 0 && <div className="roster-issues roster-issues--editing" role="status"><strong>명단에 적용하지 않았습니다. 입력 중인 셀을 확인해주세요.</strong><ul>{editIssues.map(item => <li key={`${item.code}-${item.row}-${item.column}`}>{item.row}번 학생 · {item.column}: {item.message}</li>)}</ul></div>}

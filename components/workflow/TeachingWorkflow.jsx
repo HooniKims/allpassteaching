@@ -32,13 +32,13 @@ function StagePlaceholder({ process }) {
 function detachRestoredSubmissionFiles(project) {
     return {
         ...project,
-        submissions: project.submissions.map(submission => submission.originalAttached === true ? {
+        submissions: project.submissions.map(submission => ({
             ...submission,
             originalAttached: false,
             originalReviewedAt: null,
             approved: false,
             approvalRevoked: Boolean(submission.approved || submission.grading),
-        } : submission),
+        })),
     };
 }
 

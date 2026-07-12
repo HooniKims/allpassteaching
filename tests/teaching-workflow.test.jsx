@@ -67,3 +67,28 @@ test('Given persisted PDF metadata When the page refreshes Then files are detach
         approvalRevoked: true,
     }));
 });
+
+test('Given migrated legacy submission metadata without an attachment flag When restored Then it is detached and approval is revoked', async () => {
+    const project = {
+        ...createEmptyWorkflow(),
+        submissions: [{
+            id: 'legacy-submission',
+            studentId: 'student-a',
+            studentName: '김학생',
+            fileName: 'legacy.pdf',
+            status: 'graded',
+            approved: true,
+            grading: { totalScore: 90 },
+        }],
+    };
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
+
+    render(<TeachingWorkflow/>);
+
+    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data.submissions[0]).toMatchObject({
+        originalAttached: false,
+        originalReviewedAt: null,
+        approved: false,
+        approvalRevoked: true,
+    }));
+});

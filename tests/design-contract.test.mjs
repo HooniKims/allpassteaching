@@ -24,6 +24,26 @@ test('tablet layouts preserve lesson dates and switch cover rubrics to complete 
     expect(css).toMatch(/@media \(max-width: 900px\)[\s\S]*?\.cover-rubric-cards \{ display: grid;/);
 });
 
+test('disabled PDF pickers use muted tokens instead of the active green affordance', async () => {
+    const css = await readFile('app/globals.css', 'utf8');
+
+    expect(css).toMatch(/\.file-picker--disabled \.file-picker__button \{[^}]*color: var\(--color-muted\);[^}]*background: var\(--color-subdued\);[^}]*border-color: var\(--color-border\);[^}]*cursor: not-allowed;/);
+});
+
+test('mobile PDF workflow keeps Korean semantic phrases together', async () => {
+    const [roster, upload, grading] = await Promise.all([
+        readFile('components/workflow/StudentRosterEditor.jsx', 'utf8'),
+        readFile('components/workflow/StudentPdfUpload.jsx', 'utf8'),
+        readFile('components/workflow/OcrGradingStage.jsx', 'utf8'),
+    ]);
+
+    expect(roster).toContain('<span className="nowrap">학년 · 반 · 번호 · 이름</span>');
+    expect(upload).toContain('<span className="nowrap">표지를 뺀 답안 PDF만</span>');
+    expect(upload).toContain('<span className="nowrap">이 학생의 수행평가 안내 표지</span>');
+    expect(grading).toContain('<span className="nowrap">원본을 다시 연결하기 전에는</span>');
+    expect(grading).toContain('<span className="nowrap">모든 근거를 확인한 뒤</span>');
+});
+
 test('change log records KST time and categorized requests', async () => {
     const log = await readFile('docs/change-log/2026/07/2026-07-11.md', 'utf8');
     expect(log).toMatch(/## \d{2}:\d{2} KST · 화면·사용성/);
