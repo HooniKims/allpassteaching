@@ -13,6 +13,7 @@ const processes = ['lesson', 'worksheet', 'assessment', 'grading', 'records'];
 await mkdir(outputDirectory, { recursive: true });
 
 const lessonPlan = makeGeneratedPlan();
+lessonPlan.metadata = { ...lessonPlan.metadata, date: '2026-07-12', period: '3' };
 const lessonSourceHash = sourceHash(lessonPlan);
 const worksheet = { ...makeWorksheet(), sourceHash: lessonSourceHash };
 const assessment = { ...makeAssessment(), sourceHash: lessonSourceHash, approved: true };
@@ -111,6 +112,17 @@ for (const viewport of viewports) {
                 bodyFont: getComputedStyle(document.body).fontFamily,
                 documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                 processRailOverflow: document.querySelector('.process-rail')?.scrollWidth - document.querySelector('.process-rail')?.clientWidth,
+                lessonDateGeometry: document.querySelector('input[aria-label$="수업 일자"]') ? (() => {
+                    const input = document.querySelector('input[aria-label$="수업 일자"]');
+                    const rect = input.getBoundingClientRect();
+                    return { clientWidth: input.clientWidth, scrollWidth: input.scrollWidth, rect: rect.toJSON(), value: input.value };
+                })() : null,
+                coverRubricLayout: document.querySelector('.cover-rubric-table') ? {
+                    tableDisplay: getComputedStyle(document.querySelector('.cover-rubric-table')).display,
+                    cardsDisplay: getComputedStyle(document.querySelector('.cover-rubric-cards')).display,
+                    criterionCards: document.querySelectorAll('.cover-rubric-cards article').length,
+                    levelRows: document.querySelectorAll('.cover-rubric-cards article dl > div').length,
+                } : null,
                 rubricGeometry: document.querySelector('.rubric-table-wrap') ? {
                     wrapper: { clientWidth: document.querySelector('.rubric-table-wrap').clientWidth, scrollWidth: document.querySelector('.rubric-table-wrap').scrollWidth, overflowX: getComputedStyle(document.querySelector('.rubric-table-wrap')).overflowX, rect: document.querySelector('.rubric-table-wrap').getBoundingClientRect().toJSON() },
                     table: { clientWidth: document.querySelector('.rubric-editor-table').clientWidth, rect: document.querySelector('.rubric-editor-table').getBoundingClientRect().toJSON() },
@@ -149,4 +161,10 @@ for (const viewport of viewports) {
 }
 await browser.close();
 await writeFile(path.join(outputDirectory, 'evidence.json'), JSON.stringify({ capturedAt: new Date().toISOString(), baseURL, pageCount: evidence.length, evidence }, null, 2));
-console.log(JSON.stringify({ pageCount: evidence.length, outputDirectory, failures: evidence.filter(item => item.metrics.documentOverflow > 1 || item.metrics.clippedControls.length || item.axeViolations.length || item.consoleErrors.length).map(item => ({ viewport: item.viewport.name, process: item.process, metrics: item.metrics, axeViolations: item.axeViolations, consoleErrors: item.consoleErrors })) }, null, 2));
+const failures = evidence.filter(item => item.metrics.documentOverflow > 1
+    || item.metrics.clippedControls.length
+    || item.axeViolations.length
+    || item.consoleErrors.length
+    || (item.metrics.lessonDateGeometry && item.metrics.lessonDateGeometry.scrollWidth > item.metrics.lessonDateGeometry.clientWidth)
+    || (item.process === 'assessment' && item.viewport.width <= 900 && (item.metrics.coverRubricLayout?.tableDisplay !== 'none' || item.metrics.coverRubricLayout?.cardsDisplay === 'none')));
+console.log(JSON.stringify({ pageCount: evidence.length, outputDirectory, failures: failures.map(item => ({ viewport: item.viewport.name, process: item.process, metrics: item.metrics, axeViolations: item.axeViolations, consoleErrors: item.consoleErrors })) }, null, 2));

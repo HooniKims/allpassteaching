@@ -35,13 +35,39 @@ test('학생 표지만 내보내도 현재 루브릭 점수와 표지 섹션을 
 
     expect(pdf.getPageCount()).toBe(1);
     expect(text).toContain('과목');
-    expect(text).toContain('관찰 근거 · 40점');
+    expect(text).toContain('관찰 근거');
+    expect(text).toContain('총 40점');
     expect(text).toContain('탁월 · 39점');
     expect(text).not.toContain('교사용');
     expect(text).toContain('과목 · 과학');
     expect(text).toContain('상황 · 학교 화단 식물의 건강 상태를 설명해야 한다.');
     expect(text).toContain('□ 관찰 근거를 구체적으로 썼는가?');
     expect(text).not.toContain('• □');
+});
+
+test('학생 표지 루브릭은 평가영역 행과 성취수준 열을 가진 실제 표로 그린다', async () => {
+    const assessment = makeAssessment();
+    const events = [];
+
+    const bytes = await buildWorkflowPdf('assessment-cover', assessment, { onDraw: event => events.push(event) });
+    const pdf = await PDFDocument.load(bytes);
+    const table = events.find(event => event.kind === 'cover-rubric-table');
+    const cells = events.filter(event => event.kind === 'cover-rubric-cell');
+
+    expect(pdf.getPageCount()).toBe(1);
+    expect(table).toMatchObject({ rowCount: assessment.rubric.criteria.length + 1, columnCount: assessment.rubric.levels.length + 1 });
+    expect(cells).toHaveLength(table.rowCount * table.columnCount);
+    for (const [criterionIndex, criterion] of assessment.rubric.criteria.entries()) {
+        for (const [levelIndex, level] of assessment.rubric.levels.entries()) {
+            expect(cells).toContainEqual(expect.objectContaining({
+                rowIndex: criterionIndex + 1,
+                columnIndex: levelIndex + 1,
+                criterionId: criterion.id,
+                levelId: level.id,
+                text: `${level.label} · ${criterion.levels[levelIndex].score}점\n${criterion.levels[levelIndex].description}`,
+            }));
+        }
+    }
 });
 
 test('표지에서 루브릭을 숨겨도 전체 수행평가 PDF에는 채점 루브릭을 포함한다', async () => {
