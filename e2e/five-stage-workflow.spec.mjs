@@ -68,7 +68,7 @@ test.beforeEach(async ({ page }) => {
     }, { lessonPlan: plan, storedAssessmentRequest: assessmentRequest, storedStudents: studentRoster });
 });
 
-test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }) => {
+test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }, testInfo) => {
     let ocrCalls = 0;
     const uploadedPageCounts = [];
     const uploadedVisualModes = [];
@@ -111,8 +111,13 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
 
     for (const studentName of ['김학생', '이학생']) {
         await page.getByRole('button', { name: `${studentName} 채점하기` }).click();
-        await expect(page.getByRole('button', { name: `${studentName} 채점 승인` })).toBeVisible();
-        await page.getByRole('button', { name: `${studentName} 채점 승인` }).click();
+        const submission = page.locator('.submission-item').filter({ has: page.getByRole('button', { name: `${studentName} 삭제` }) });
+        await expect(submission.getByRole('spinbutton', { name: 'PDF 페이지' })).toHaveValue('2');
+        if (testInfo.project.name === 'mobile') await submission.getByRole('tab', { name: '채점 결과' }).click();
+        await expect(submission.getByRole('button', { name: `${studentName} 채점 승인` })).toBeDisabled();
+        await submission.getByLabel(`${studentName} 원본 답안 확인 완료`).check();
+        await expect(submission.getByRole('button', { name: `${studentName} 채점 승인` })).toBeEnabled();
+        await submission.getByRole('button', { name: `${studentName} 채점 승인` }).click();
     }
 
     await page.getByRole('tab', { name: /세특/ }).click();

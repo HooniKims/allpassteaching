@@ -24,6 +24,16 @@ test('tablet layouts preserve lesson dates and switch cover rubrics to complete 
     expect(css).toMatch(/@media \(max-width: 900px\)[\s\S]*?\.cover-rubric-cards \{ display: grid;/);
 });
 
+test('mobile submission tabs do not reserve a desktop process-rail offset', async () => {
+    const css = await readFile('app/globals.css', 'utf8');
+
+    const desktopRailOffset = css.lastIndexOf('.submission-review-tabs { display: grid;');
+    const mobileReset = css.lastIndexOf('.submission-review-tabs { top: 0; }');
+
+    expect(desktopRailOffset).toBeGreaterThan(-1);
+    expect(mobileReset).toBeGreaterThan(desktopRailOffset);
+});
+
 test('disabled PDF pickers use muted tokens instead of the active green affordance', async () => {
     const css = await readFile('app/globals.css', 'utf8');
 
@@ -31,17 +41,18 @@ test('disabled PDF pickers use muted tokens instead of the active green affordan
 });
 
 test('mobile PDF workflow keeps Korean semantic phrases together', async () => {
-    const [roster, upload, grading] = await Promise.all([
+    const [roster, upload, grading, review] = await Promise.all([
         readFile('components/workflow/StudentRosterEditor.jsx', 'utf8'),
         readFile('components/workflow/StudentPdfUpload.jsx', 'utf8'),
         readFile('components/workflow/OcrGradingStage.jsx', 'utf8'),
+        readFile('components/workflow/SubmissionReviewWorkspace.jsx', 'utf8'),
     ]);
 
     expect(roster).toContain('<span className="nowrap">학년 · 반 · 번호 · 이름</span>');
     expect(upload).toContain('<span className="nowrap">표지를 뺀 답안 PDF만</span>');
     expect(upload).toContain('<span className="nowrap">이 학생의 수행평가 안내 표지</span>');
     expect(grading).toContain('<span className="nowrap">원본을 다시 연결하기 전에는</span>');
-    expect(grading).toContain('<span className="nowrap">모든 근거를 확인한 뒤</span>');
+    expect(review).toContain('<span className="nowrap">모든 근거를 확인한 뒤</span>');
 });
 
 test('change log records KST time and categorized requests', async () => {

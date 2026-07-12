@@ -15,6 +15,82 @@ function Harness({ initial = [], assessment = makeAssessment() }) {
     return <SubmissionFileProvider><OcrGradingStage assessment={assessment} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
 }
 
+function reviewedSubmission(assessment = makeAssessment()) {
+    const grading = { criteria: [
+        { criterionId: 'criterion-1', score: 35, evidence: '관찰 근거', feedback: '구체적입니다.', sourceRefs: [{ elementId: 'element-1', page: 2, text: '관찰 근거', coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] }] },
+        { criterionId: 'criterion-2', score: 35, evidence: '기능 설명', feedback: '연결했습니다.', sourceRefs: [] },
+        { criterionId: 'criterion-3', score: 15, evidence: '수정 과정', feedback: '과정을 확인했습니다.', sourceRefs: [] },
+    ], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
+    return {
+        id: 'reviewed', studentName: '김하늘', fileName: '김하늘.pdf', file: new File(['%PDF-review'], '김하늘.pdf', { type: 'application/pdf' }),
+        originalAttached: true, originalReviewedAt: null, originalRevision: 1, coverPages: [1], answerPages: [2], status: 'graded',
+        extractedText: '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.',
+        elements: [{ id: 'element-1', page: 2, category: 'equation', text: '관찰 근거', confidence: 0.7, coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] }],
+        elementsTruncated: false, grading, approved: false,
+        sourceHash: gradingSourceHash(assessment, '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.'),
+    };
+}
+
+test('Given linked risky evidence When grading is reviewed Then source and original checks gate approval and mobile review tabs remain accessible', async () => {
+    const user = userEvent.setup();
+    const assessment = makeAssessment();
+    render(<Harness initial={[reviewedSubmission(assessment)]} assessment={assessment}/>);
+
+    expect(screen.getByRole('tab', { name: '원본 답안' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'OCR 결과' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '채점 결과' })).toBeInTheDocument();
+    expect(screen.getByText('수식')).toBeInTheDocument();
+    expect(screen.getByText('낮은 신뢰도')).toBeInTheDocument();
+    expect(screen.getByText('교사 확인 필요')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '김하늘 채점 승인' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: '관찰 근거 원본에서 보기' }));
+    expect(screen.getByRole('tab', { name: '원본 답안' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(screen.getByRole('tab', { name: '원본 답안' })).toHaveFocus());
+    await user.click(screen.getByLabelText('김하늘 element-1 근거 확인 완료'));
+    await user.click(screen.getByLabelText('김하늘 원본 답안 확인 완료'));
+
+    expect(screen.getByRole('button', { name: '김하늘 채점 승인' })).toBeEnabled();
+});
+
+test('Given mobile review tabs When arrow keys are pressed Then focus and selection move without a pointer', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={[reviewedSubmission()]}/>);
+    const originalTab = screen.getByRole('tab', { name: '원본 답안' });
+    originalTab.focus();
+
+    await user.keyboard('{ArrowRight}');
+
+    expect(screen.getByRole('tab', { name: 'OCR 결과' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'OCR 결과' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('Given an approved original When the rubric changes Then original review and approval are revoked', async () => {
+    const assessment = makeAssessment();
+    const initial = { ...reviewedSubmission(assessment), originalReviewedAt: '2026-07-12T12:00:00.000Z', confirmedElementIds: ['element-1'], approved: true };
+    const { rerender } = render(<Harness initial={[initial]} assessment={assessment}/>);
+
+    rerender(<Harness initial={[initial]} assessment={{ ...assessment, totalPoints: assessment.totalPoints + 1 }}/>);
+
+    await waitFor(() => expect(screen.getByLabelText('김하늘 원본 답안 확인 완료')).not.toBeChecked());
+    expect(screen.getByRole('button', { name: '김하늘 채점 승인' })).toBeDisabled();
+    expect(screen.getByText('수정되어 교사 승인이 해제되었습니다.')).toBeInTheDocument();
+});
+
+test('Given a reviewed original When OCR text is edited Then review and approval are cleared', async () => {
+    const user = userEvent.setup();
+    const assessment = makeAssessment();
+    const initial = { ...reviewedSubmission(assessment), originalReviewedAt: '2026-07-12T12:00:00.000Z', confirmedElementIds: ['element-1'], approved: true };
+    render(<Harness initial={[initial]} assessment={assessment}/>);
+
+    const ocr = screen.getByLabelText('OCR 추출 원문');
+    await user.type(ocr, ' 수정');
+
+    expect(screen.queryByLabelText('김하늘 원본 답안 확인 완료')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '김하늘 채점 승인' })).not.toBeInTheDocument();
+    expect(screen.getByText('수정되어 교사 승인이 해제되었습니다.')).toBeInTheDocument();
+});
+
 function RosterHarness() {
     const [students, setStudents] = useState([{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }]);
     const [submissions, setSubmissions] = useState([]);
@@ -154,10 +230,10 @@ test('keeps both grading results when two student requests finish in reverse ord
     await user.click(screen.getByRole('button', { name: '김학생 채점하기' }));
     await user.click(screen.getByRole('button', { name: '이학생 채점하기' }));
     resolveSecond(Response.json({ grading }));
-    expect(await screen.findByRole('button', { name: '이학생 채점 승인' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: '이학생 채점 승인' })).toBeDisabled();
     resolveFirst(Response.json({ grading }));
-    expect(await screen.findByRole('button', { name: '김학생 채점 승인' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '이학생 채점 승인' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: '김학생 채점 승인' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '이학생 채점 승인' })).toBeDisabled();
 });
 
 test('does not restore a deleted student when an in-flight OCR request finishes', async () => {
@@ -216,5 +292,6 @@ test.each([
 
     expect(screen.queryByRole('button', { name: '연결한 답안 PDF OCR 시작' })).not.toBeInTheDocument();
     expect(screen.getByText('원본 PDF 다시 연결')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '원본 PDF 다시 연결하기' })).toHaveAttribute('href', '#student-pdf-upload-title');
     expect(screen.getByRole('button', { name: '김학생 채점 승인' })).toBeDisabled();
 });

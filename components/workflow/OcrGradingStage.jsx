@@ -2,10 +2,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { runWithConcurrency } from '@/lib/batch-queue';
 import { gradingContentIsValid, gradingIsCurrent, gradingSourceHash } from '@/lib/workflow-lineage';
-import { GradingEditor } from './GradingEditor.jsx';
+import { linkGradingSources } from '@/lib/grading-source-refs.js';
 import { StudentPdfUpload } from './StudentPdfUpload.jsx';
 import { StudentRosterEditor } from './StudentRosterEditor.jsx';
 import { useSubmissionFiles } from './SubmissionFileProvider.jsx';
+import { SubmissionReviewWorkspace } from './SubmissionReviewWorkspace.jsx';
 
 const EMPTY_COLLECTION = Object.freeze([]);
 
@@ -23,6 +24,12 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
         const detachedIds = new Set(detached.map(item => item.id));
         onChange(current => current.map(item => detachedIds.has(item.id) ? { ...item, originalAttached: false, originalReviewedAt: null, approved: false, approvalRevoked: Boolean(item.approved || item.grading) } : item));
     }, [files.has, files.revision, onChange, submissions]);
+    useEffect(() => {
+        const invalidated = submissions.filter(item => item.grading && (item.originalReviewedAt || item.approved) && !gradingIsCurrent(assessment, item));
+        if (!invalidated.length) return;
+        const ids = new Set(invalidated.map(item => item.id));
+        onChange(current => current.map(item => ids.has(item.id) ? { ...item, originalReviewedAt: null, approved: false, approvalRevoked: true } : item));
+    }, [assessment, onChange, submissions]);
     const updateOne = (id, patch) => onChange(current => current.map(item => item.id === id ? { ...item, ...patch } : item));
     const processOcr = async targets => {
         setBusy(true); setMessage('');
@@ -38,7 +45,7 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
                 const body = await response.json().catch(() => ({}));
                 if (visualAnalysisRequiredRef.current !== requestedVisualAnalysis) throw new Error('수행평가의 시각 분석 설정이 변경되었습니다. 현재 설정으로 OCR을 다시 시도해주세요.');
                 if (!response.ok) throw new Error(body.message || 'OCR 처리에 실패했습니다.');
-                apply(item.id, { ...body, status: 'extracted', error: '', file: undefined, grading: null, approved: false });
+                apply(item.id, { ...body, status: 'extracted', error: '', file: undefined, grading: null, originalReviewedAt: null, confirmedElementIds: [], approved: false });
             } catch (error) { apply(item.id, { status: 'ocr_error', error: error.message || 'OCR 처리에 실패했습니다.' }); }
         });
         setBusy(false);
@@ -51,7 +58,7 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
             const response = await fetch('/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assessment, studentName, extractedText: submission.extractedText }) });
             const body = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(body.message || '채점 결과를 만들지 못했습니다.');
-            updateOne(submission.id, { status: 'graded', grading: body.grading, approved: false, approvalRevoked: false, sourceHash: gradingSourceHash(assessment, submission.extractedText), error: '' });
+            updateOne(submission.id, { status: 'graded', grading: linkGradingSources(body.grading, submission.elements), originalReviewedAt: null, confirmedElementIds: [], approved: false, approvalRevoked: false, sourceHash: gradingSourceHash(assessment, submission.extractedText), error: '' });
         } catch (error) { updateOne(submission.id, { status: 'grade_error', error: error.message || '채점 결과를 만들지 못했습니다.' }); }
     };
     return <section className="workflow-stage workflow-stage--wide">
@@ -71,11 +78,12 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
             <div className="submission-item__head"><label>학생 이름 {index + 1}<input value={studentName} disabled={Boolean(linkedStudent)} onChange={event => updateOne(submission.id, { studentName: event.target.value, approved: false })}/></label><div><strong>{submission.fileName}</strong><span>{submission.originalAttached !== true ? '원본 PDF 다시 연결 필요' : submission.status === 'pending' ? 'OCR 대기' : submission.status === 'extracting' ? 'OCR 처리 중…' : submission.status === 'extracted' ? `${submission.pageCount}쪽 OCR 완료` : submission.status === 'grading' ? '루브릭 채점 중…' : stale ? '다시 채점 필요' : submission.approved ? '교사 승인 완료' : submission.grading ? '채점 검토 필요' : '처리 확인 필요'}</span></div><button type="button" className="text-button" onClick={() => { files.remove(submission.id); onChange(current => current.filter(item => item.id !== submission.id)); }}>{studentName} 삭제</button></div>
             {submission.originalAttached !== true && <p className="stale-notice" role="status"><strong>원본 PDF 다시 연결</strong><span>새로고침으로 원본 파일이 사라졌습니다. <span className="nowrap">OCR·채점 초안은</span> 남아 있지만 <span className="nowrap">원본을 다시 연결하기 전에는</span> 승인할 수 없습니다.</span></p>}
             {submission.error && <p className="item-error" role="alert">{submission.error}</p>}
+            {submission.approvalRevoked && !submission.grading && <p className="approval-revoked" role="status">수정되어 교사 승인이 해제되었습니다.</p>}
             {submission.originalAttached === true && submission.status === 'ocr_error' && (files.has(submission.id) || submission.file) && <button type="button" className="secondary-button" onClick={() => processOcr([submission])}>{studentName} OCR 다시 시도</button>}
-            {submission.extractedText && <label className="ocr-text-field">OCR 추출 원문<textarea rows="9" value={submission.extractedText} onChange={event => updateOne(submission.id, { extractedText: event.target.value, status: 'extracted', grading: null, approved: false })}/></label>}
+            {submission.extractedText && !submission.grading && <label className="ocr-text-field">OCR 추출 원문<textarea rows="9" value={submission.extractedText} onChange={event => updateOne(submission.id, { extractedText: event.target.value, status: 'extracted', grading: null, originalReviewedAt: null, confirmedElementIds: [], approved: false, approvalRevoked: Boolean(submission.approved || submission.grading) })}/></label>}
             {submission.extractedText?.trim().length >= 20 && (!submission.grading || stale) && <button type="button" disabled={submission.status === 'grading'} onClick={() => grade(submission)}>{stale ? `${studentName} 다시 채점하기` : `${studentName} 채점하기`}</button>}
             {stale && <p className="stale-notice" role="status"><strong>수행평가가 변경됨</strong><span>이전 채점은 참고용으로 유지됩니다. 현재 루브릭으로 다시 채점해주세요.</span></p>}
-            {submission.grading && <><GradingEditor assessment={assessment} submission={{ ...submission, studentName }} onChange={next => updateOne(submission.id, next)}/>{!validGrading && <p className="form-alert" role="alert">모든 점수는 평가 요소별 배점 범위 안에 있어야 하며 근거와 피드백을 입력해야 합니다.</p>}<div className="approval-actions"><p>AI 채점은 초안입니다. OCR 원문과 <span className="nowrap">모든 근거를 확인한 뒤</span> 승인해주세요.</p><button type="button" disabled={stale || !validGrading || submission.originalAttached !== true} className={submission.approved ? 'secondary-button' : ''} onClick={() => updateOne(submission.id, { approved: !submission.approved, status: submission.approved ? 'graded' : 'approved', approvalRevoked: false })}>{submission.approved ? '승인 취소' : `${studentName} 채점 승인`}</button></div></>}
+            {submission.grading && <SubmissionReviewWorkspace assessment={assessment} submission={{ ...submission, studentName }} studentName={studentName} fileUrl={files.get(submission.id)?.packetUrl ?? ''} stale={stale} validGrading={validGrading} onPatch={patch => updateOne(submission.id, patch)}/>}
         </article>;})}</div>
         {!submissions.length && <p className="empty-state">학생별 PDF 파일명을 <span className="nowrap">학생 이름으로 준비하면</span> <span className="nowrap">확인이 더 빠릅니다.</span></p>}
     </section>;

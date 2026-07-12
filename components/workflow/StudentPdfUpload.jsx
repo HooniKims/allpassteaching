@@ -48,6 +48,7 @@ function submissionForPacket(packet, student, existing, fileName) {
         grading: existing?.grading ?? null,
         originalAttached: true,
         originalReviewedAt: null,
+        confirmedElementIds: [],
         originalRevision: (existing?.originalRevision ?? 0) + 1,
         approved: false,
         approvalRevoked: Boolean(existing?.approved || existing?.grading),
