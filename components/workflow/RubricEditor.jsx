@@ -11,22 +11,32 @@ const move = (items, index, offset) => {
     [next[index], next[target]] = [next[target], next[index]];
     return next;
 };
+const synchronizeEvidenceMap = (backwardDesign, criteria) => ({
+    ...backwardDesign,
+    evidenceMap: backwardDesign.evidenceMap.map(mapping => {
+        const linked = criteria.filter(criterion => criterion.standardCodes.includes(mapping.standardCode));
+        return {
+            ...mapping,
+            criterionIds: linked.map(criterion => criterion.id),
+            taskEvidenceTypes: linked.map(criterion => criterion.evidence),
+            evidenceTypes: [...new Set(linked.map(criterion => criterion.kind === 'process' ? '과정 증거' : '결과 증거'))],
+            scoreBasis: `${linked.map(criterion => `${criterion.name} ${criterion.maxPoints}점`).join(', ')} · 수준별 정의 점수`,
+        };
+    }),
+});
 
 export function RubricEditor({ value, onChange }) {
     const [criterionCandidate, setCriterionCandidate] = useState(null);
     const [error, setError] = useState('');
     const commit = patch => onChange({ ...value, ...patch });
     const updateTask = patch => commit({ task: { ...value.task, ...patch } });
-    const updateCriterion = (index, patch) => commit({ rubric: { ...value.rubric, criteria: value.rubric.criteria.map((criterion, current) => current === index ? { ...criterion, ...patch } : criterion) } });
-    const evidenceMapWithCriterion = (criterionId, standardCodes, remove = false) => value.backwardDesign.evidenceMap.map(mapping => {
-        const withoutCriterion = mapping.criterionIds.filter(id => id !== criterionId);
-        return { ...mapping, criterionIds: !remove && standardCodes.includes(mapping.standardCode) ? [...withoutCriterion, criterionId] : withoutCriterion };
-    });
+    const commitCriteria = criteria => commit({ rubric: { ...value.rubric, criteria }, backwardDesign: synchronizeEvidenceMap(value.backwardDesign, criteria) });
+    const updateCriterion = (index, patch) => commitCriteria(value.rubric.criteria.map((criterion, current) => current === index ? { ...criterion, ...patch } : criterion));
     const toggleCriterionStandard = (index, code) => {
         const criterion = value.rubric.criteria[index];
         const standardCodes = criterion.standardCodes.includes(code) ? criterion.standardCodes.filter(item => item !== code) : [...criterion.standardCodes, code];
         const criteria = value.rubric.criteria.map((item, current) => current === index ? { ...item, standardCodes } : item);
-        commit({ rubric: { ...value.rubric, criteria }, backwardDesign: { ...value.backwardDesign, evidenceMap: evidenceMapWithCriterion(criterion.id, standardCodes) } });
+        commitCriteria(criteria);
     };
     const updateLevel = (criterionIndex, levelIndex, patch) => {
         const criterion = value.rubric.criteria[criterionIndex];
@@ -72,18 +82,17 @@ export function RubricEditor({ value, onChange }) {
         const maxPoints = 10;
         const levels = value.rubric.levels.map((level, index) => ({ levelId: level.id, score: Math.max(0, maxPoints - index * 2), description: '관찰 가능한 수행 수준을 입력하세요.' }));
         const criterion = { id: uid('criterion'), name: '새 평가영역', description: '평가할 내용을 입력하세요.', standardCodes: [value.task.standards[0].code], kind: 'outcome', maxPoints, intervalPoints: 2, evidence: '학생 산출물에서 확인할 증거', levels };
-        commit({ rubric: { ...value.rubric, criteria: [...value.rubric.criteria, criterion] }, backwardDesign: { ...value.backwardDesign, evidenceMap: evidenceMapWithCriterion(criterion.id, criterion.standardCodes) } });
+        commitCriteria([...value.rubric.criteria, criterion]);
     };
     const duplicateCriterion = index => {
         if (value.rubric.criteria.length >= 15) return;
         const current = value.rubric.criteria[index];
         const copy = { ...structuredClone(current), id: uid('criterion'), name: `${current.name} 복사본` };
-        commit({ rubric: { ...value.rubric, criteria: value.rubric.criteria.toSpliced(index + 1, 0, copy) }, backwardDesign: { ...value.backwardDesign, evidenceMap: evidenceMapWithCriterion(copy.id, copy.standardCodes) } });
+        commitCriteria(value.rubric.criteria.toSpliced(index + 1, 0, copy));
     };
     const removeCriterion = index => {
         if (value.rubric.criteria.length <= 2) return;
-        const criterion = value.rubric.criteria[index];
-        commit({ rubric: { ...value.rubric, criteria: value.rubric.criteria.toSpliced(index, 1) }, backwardDesign: { ...value.backwardDesign, evidenceMap: evidenceMapWithCriterion(criterion.id, [], true) } });
+        commitCriteria(value.rubric.criteria.toSpliced(index, 1));
     };
     const moveCriterion = (index, offset) => commit({ rubric: { ...value.rubric, criteria: move(value.rubric.criteria, index, offset) } });
     const regenerate = async criterionId => {
@@ -103,7 +112,7 @@ export function RubricEditor({ value, onChange }) {
             return;
         }
         const criteria = value.rubric.criteria.map((item, current) => current === index ? criterionCandidate.value : item);
-        commit({ rubric: { ...value.rubric, criteria }, backwardDesign: { ...value.backwardDesign, evidenceMap: evidenceMapWithCriterion(criterionCandidate.value.id, criterionCandidate.value.standardCodes) } });
+        commitCriteria(criteria);
         setCriterionCandidate(null);
     };
     return <div className="structured-editor assessment-editor">

@@ -36,3 +36,18 @@ test('rejects grading against a rubric that the teacher has not approved', async
     const response = await POST(request({ assessment: { ...makeAssessment(), sourceHash: 'lesson-source', approved: false }, studentName: '김학생', extractedText }));
     expect(response.status).toBe(400);
 });
+
+test('수식·도표·그림 분석이 필요한 평가는 원본 확인 전 자동 점수를 만들지 않는다', async () => {
+    const assessment = approvedAssessment();
+    assessment.visualAnalysisRequired = true;
+    vi.stubGlobal('fetch', vi.fn());
+
+    const response = await POST(request({ assessment, studentName: '김학생', extractedText }));
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('visual_review_required');
+    expect(body.teacherReview.totalScore).toBeNull();
+    expect(body.teacherReview.criteria.every(item => item.score === null)).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+});

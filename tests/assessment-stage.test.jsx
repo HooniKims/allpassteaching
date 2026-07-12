@@ -177,7 +177,7 @@ test('평가영역을 추가·복제·삭제하면 양방향 성취기준 연결
     await user.click(within(screen.getByRole('group', { name: '1. 관찰 근거' })).getByRole('button', { name: '복제' }));
 
     const map = screen.getByRole('heading', { name: '성취기준 ↔ 과제 ↔ 평가영역 연결표' }).closest('section');
-    expect(within(map).getByText(/관찰 근거 복사본/)).toBeInTheDocument();
+    expect(within(map).getAllByText(/관찰 근거 복사본/).length).toBeGreaterThan(0);
 });
 
 test('표지 미리보기는 복사 문구가 아니라 현재 과제·성취기준·체크포인트를 실시간으로 읽는다', async () => {
@@ -195,7 +195,7 @@ test('표지 미리보기는 복사 문구가 아니라 현재 과제·성취기
     const product = screen.getByLabelText('산출물');
     await user.clear(product); await user.type(product, '피드백을 반영한 최종 탐구 포스터');
 
-    expect(within(preview).getByText((_, node) => node?.tagName === 'P' && node.textContent.includes('피드백을 반영한 최종 탐구 포스터'))).toBeInTheDocument();
+    expect(within(preview).getByText((_, node) => node?.tagName === 'DD' && node.textContent.includes('피드백을 반영한 최종 탐구 포스터'))).toBeInTheDocument();
 });
 
 test('선택 영역 AI 후보 생성 뒤 원본을 수정하면 낡은 후보 적용을 차단하고 상세 비교를 유지한다', async () => {
@@ -234,4 +234,55 @@ test('학생용 표지 미리보기는 모바일 카드에서도 모든 성취�
     for (const label of ['탁월 · 40점', '충실 · 35점', '기초 · 30점', '보완 필요 · 25점']) {
         expect(within(firstCriterion).getByText(label)).toBeInTheDocument();
     }
+});
+
+test('전체 재생성 후보를 받은 뒤 현재 평가를 수정하면 후보 적용을 차단하고 편집본을 보존한다', async () => {
+    const user = userEvent.setup();
+    const candidate = makeAssessment(); candidate.task.title = 'AI 후보 과제';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ assessment: candidate })));
+    function Harness() {
+        const lessonPlan = makeGeneratedPlan();
+        const [value, setValue] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        return <AssessmentStage lessonPlan={lessonPlan} value={value} request={request} onRequestChange={() => {}} onChange={setValue}/>;
+    }
+    render(<Harness/>);
+
+    await user.click(screen.getByRole('button', { name: '수행평가 다시 생성' }));
+    expect(await screen.findByText('AI 후보 과제')).toBeInTheDocument();
+    const taskName = screen.getByLabelText('과제명');
+    await user.clear(taskName); await user.type(taskName, '교사가 수정한 현재 과제');
+    await user.click(screen.getByRole('button', { name: '새 후보 적용' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('현재 평가가 바뀌었습니다');
+    expect(taskName).toHaveValue('교사가 수정한 현재 과제');
+});
+
+test('학생당 안내 표지를 끄면 표지 편집기와 표지 전용 내보내기를 숨긴다', () => {
+    const lessonPlan = makeGeneratedPlan();
+    const value = { ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false, includeStudentCover: false };
+    render(<AssessmentStage lessonPlan={lessonPlan} value={value} request={{ ...request, includeStudentCover: false }} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    expect(screen.queryByRole('heading', { name: '학생용 수행평가 안내 표지' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '표지만 PDF 저장' })).not.toBeInTheDocument();
+    expect(screen.getByText('학생당 안내 표지를 사용하지 않습니다.')).toBeInTheDocument();
+});
+
+test('표지 미리보기는 과목·전이 목표·GRASPS·제출 조건·준비물·유의점을 현재 평가에서 읽는다', () => {
+    const lessonPlan = makeGeneratedPlan();
+    render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
+    const preview = screen.getByRole('region', { name: '학생용 안내 표지 미리보기' });
+
+    for (const content of ['과학', '새로운 식물을 관찰할 때도', '학교 화단 식물의 건강 상태', '식물 탐구자', '학급 친구', '수업 시간 40분', '식물 표본', '식물을 훼손하지 않는다']) {
+        expect(within(preview).getByText(new RegExp(content))).toBeInTheDocument();
+    }
+});
+
+test('알려진 정합성 경고는 교사가 실행할 수 있는 수정 방법과 함께 보여준다', () => {
+    const lessonPlan = makeGeneratedPlan();
+    const assessment = makeAssessment();
+    assessment.backwardDesign.alignmentIssues = [{ id: 'warn-1', severity: 'warning', code: 'task-authenticity', message: '과제 맥락을 더 실제적으로 확인하세요.', repairAction: '상황과 공유 대상을 현재 학급 맥락에 맞게 수정하세요.', resolved: false }];
+    render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...assessment, sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    expect(screen.getByText(/과제 맥락을 더 실제적으로/)).toBeInTheDocument();
+    expect(screen.getByText(/상황과 공유 대상을 현재 학급 맥락에 맞게/)).toBeInTheDocument();
 });

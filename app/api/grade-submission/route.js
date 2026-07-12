@@ -30,6 +30,16 @@ export async function POST(request) {
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) return Response.json({ code: 'invalid_request', message: '채점할 학생 내용과 루브릭을 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
     const input = parsed.data;
+    if (input.assessment.visualAnalysisRequired) {
+        return Response.json({
+            code: 'visual_review_required',
+            message: '수식·도표·그림이 포함된 평가는 원본 PDF를 교사가 확인한 뒤 점수를 확정할 수 있습니다.',
+            teacherReview: {
+                status: 'required', totalScore: null,
+                criteria: input.assessment.rubric.criteria.map(criterion => ({ criterionId: criterion.id, score: null, reason: '원본 시각 증거 확인 필요' })),
+            },
+        }, { status: 409 });
+    }
     try {
         const first = await chatContent({ messages: gradingMessages(input), timeoutMs: 60000 });
         let checked = parseGrading(first, input);

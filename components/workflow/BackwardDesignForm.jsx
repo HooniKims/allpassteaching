@@ -8,6 +8,13 @@ const examples = {
 };
 
 const splitComma = value => value.split(',').map(item => item.trim()).filter(Boolean);
+const protectedPhrases = { desiredResult: '해낼 수 있길', evidenceOfSuccess: '판단할 수 있나요?' };
+const questionLabel = (key, label) => {
+    const phrase = protectedPhrases[key];
+    if (!phrase) return label;
+    const [before, after] = label.split(phrase);
+    return <>{before}<span className="question-phrase">{phrase}</span>{after}</>;
+};
 
 export function BackwardDesignForm({ lessonPlan, value, onChange }) {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
@@ -27,7 +34,7 @@ export function BackwardDesignForm({ lessonPlan, value, onChange }) {
     };
     return <section className="document-section backward-design-form">
         <div className="section-heading"><div><p className="eyebrow">백워드 설계 · 도착점부터</p><h2>평가의 도착점을 먼저 정해볼까요?</h2></div><button type="button" className="secondary-button" disabled={!value.teacherIntent.desiredResult.trim() || status.type === 'loading'} onClick={suggest}>백워드 설계 AI 초안 제안</button></div>
-        <div className="backward-question-list">{Object.entries(BACKWARD_DESIGN_QUESTIONS).map(([key, label], index) => <label key={key}>{label}{index === 0 && <span aria-hidden="true"> *</span>}<textarea aria-label={label} required={index === 0} rows="3" value={value.teacherIntent[key]} placeholder={examples[key]} onChange={event => updateIntent({ [key]: event.target.value })}/><span className="field-help">{examples[key]}</span></label>)}</div>
+        <div className="backward-question-list">{Object.entries(BACKWARD_DESIGN_QUESTIONS).map(([key, label], index) => <label key={key}>{questionLabel(key, label)}{index === 0 && <span aria-hidden="true"> *</span>}<textarea aria-label={label} required={index === 0} rows="3" value={value.teacherIntent[key]} placeholder={examples[key]} onChange={event => updateIntent({ [key]: event.target.value })}/><span className="field-help">{examples[key]}</span></label>)}</div>
         {status.message && <p className={`status-line status-line--${status.type}`} role={status.type === 'error' ? 'alert' : 'status'}>{status.message}</p>}
         <div className="field-grid field-grid--two">
             <label>평가 이름<input value={value.assessmentName} onChange={event => update({ assessmentName: event.target.value })}/></label>

@@ -30,3 +30,12 @@ test('rejects invalid workflow documents and unsupported kinds', async () => {
     expect((await POST(request({}), { params: Promise.resolve({ kind: 'worksheet' }) })).status).toBe(400);
     expect((await POST(request(makeWorksheet()), { params: Promise.resolve({ kind: 'unknown' }) })).status).toBe(404);
 });
+
+test('학생 표지를 끈 평가의 표지 전용 내보내기를 거부한다', async () => {
+    const assessment = makeAssessment(); assessment.includeStudentCover = false;
+    const coverRequest = new Request('http://localhost/api/export-workflow/assessment-cover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment) });
+
+    const response = await POST(coverRequest, { params: Promise.resolve({ kind: 'assessment-cover' }) });
+
+    expect(response.status).toBe(409);
+});

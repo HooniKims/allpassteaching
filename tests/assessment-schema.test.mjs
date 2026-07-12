@@ -76,4 +76,38 @@ describe('백워드 설계 수행평가 계약', () => {
 
         expect(assessmentOutputSchema.safeParse(assessment).success).toBe(true);
     });
+
+    test('Given 두 성취기준의 평가영역 When 연결표가 서로 바뀌면 Then 집합만 덮어도 거부한다', () => {
+        const assessment = makeAssessment();
+        assessment.task.standards.push({ code: '6과11-03', text: '생물과 환경의 관계를 설명한다.' });
+        assessment.rubric.criteria[1].standardCodes = ['6과11-03'];
+        assessment.rubric.criteria[2].standardCodes = ['6과11-03'];
+        assessment.backwardDesign.evidenceMap = [
+            { ...assessment.backwardDesign.evidenceMap[0], standardCode: '6과11-02', criterionIds: ['criterion-2'] },
+            { ...assessment.backwardDesign.evidenceMap[0], standardCode: '6과11-03', criterionIds: ['criterion-1', 'criterion-3'] },
+        ];
+
+        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(false);
+    });
+
+    test('Given 같은 성취기준 연결 행이 중복되면 Then 양방향 증거맵을 거부한다', () => {
+        const assessment = makeAssessment();
+        assessment.backwardDesign.evidenceMap.push(structuredClone(assessment.backwardDesign.evidenceMap[0]));
+
+        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(false);
+    });
+
+    test('Given 최종본만 있는 체크포인트 When 피드백 뒤 수정 단계가 없으면 Then 거부한다', () => {
+        const assessment = makeAssessment();
+        assessment.backwardDesign.checkpoints = [{ id: 'only-final', title: '최종 제출', evidence: '최종본', feedbackPurpose: '최종 결과 확인', order: 1 }];
+
+        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(false);
+    });
+
+    test('Given AI가 임의 blocking 코드를 만들면 Then 알려진 수선 가능한 경고만 허용한다', () => {
+        const assessment = makeAssessment();
+        assessment.backwardDesign.alignmentIssues = [{ id: 'ai-block', severity: 'blocking', code: 'invented-danger', message: 'AI 임의 차단', resolved: false }];
+
+        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(false);
+    });
 });

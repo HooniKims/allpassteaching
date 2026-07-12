@@ -7,15 +7,47 @@ import { assessmentMessages, repairAssessmentMessages } from '@/lib/workflow-pro
 
 const requestSchema = z.object({ lessonPlan: lessonPlanSchema, assessmentRequest: assessmentRequestSchema });
 
+function reconcileTeacherOwnedFields(value, lessonPlan, assessmentRequest) {
+    return {
+        ...value,
+        assessmentName: assessmentRequest.assessmentName,
+        subject: lessonPlan.subject,
+        visualAnalysisRequired: assessmentRequest.visualAnalysisRequired,
+        includeStudentCover: assessmentRequest.includeStudentCover,
+        generationSettings: {
+            outputTypes: assessmentRequest.outputTypes,
+            answerTypes: assessmentRequest.answerTypes,
+            stages: assessmentRequest.stages,
+            additionalRequirements: assessmentRequest.additionalRequirements,
+        },
+        task: { ...value?.task, standards: lessonPlan.standards, product: assessmentRequest.outputTypes.join(', ') },
+        cover: { ...value?.cover, title: `${assessmentRequest.assessmentName} 안내` },
+    };
+}
+
+function teacherContractIssues(assessment, assessmentRequest) {
+    const issues = [];
+    const expectedProcessPoints = assessmentRequest.includeProcessInScore ? Math.round(assessmentRequest.totalPoints * assessmentRequest.processWeightPercent / 100) : 0;
+    const checks = [
+        [assessment.totalPoints === assessmentRequest.totalPoints, ['totalPoints'], '교사가 정한 전체 총점을 바꿀 수 없습니다.'],
+        [assessment.rubric.levels.length === assessmentRequest.levelCount, ['rubric', 'levels'], '교사가 정한 성취수준 수를 바꿀 수 없습니다.'],
+        [assessment.scoring.includeProcessInScore === assessmentRequest.includeProcessInScore, ['scoring', 'includeProcessInScore'], '교사가 정한 과정 점수 포함 여부를 바꿀 수 없습니다.'],
+        [assessment.scoring.processWeightPercent === assessmentRequest.processWeightPercent, ['scoring', 'processWeightPercent'], '교사가 정한 과정 점수 비중을 바꿀 수 없습니다.'],
+        [assessment.scoring.processTargetPoints === expectedProcessPoints, ['scoring', 'processTargetPoints'], '과정 목표 점수는 교사 설정에서 계산한 값이어야 합니다.'],
+    ];
+    checks.forEach(([matches, path, message]) => { if (!matches) issues.push({ path, message }); });
+    return issues;
+}
+
 function parseAssessment(content, lessonPlan, assessmentRequest) {
     try {
-        const value = JSON.parse(content);
+        const rawValue = JSON.parse(content);
+        const value = reconcileTeacherOwnedFields(rawValue, lessonPlan, assessmentRequest);
         const parsed = assessmentOutputSchema.safeParse(value);
         if (!parsed.success) return { success: false, value, issues: parsed.error.issues };
-        const actual = parsed.data.task.standards;
-        const standardsMatch = actual.length === lessonPlan.standards.length && lessonPlan.standards.every(item => actual.some(candidate => candidate.code === item.code && candidate.text === item.text));
-        if (!standardsMatch) return { success: false, value, issues: [{ path: ['task', 'standards'], message: '지도안 성취기준 코드와 원문을 정확히 보존해야 합니다.' }] };
         if (JSON.stringify(parsed.data.backwardDesign.teacherIntent) !== JSON.stringify(assessmentRequest.teacherIntent)) return { success: false, value, issues: [{ path: ['backwardDesign', 'teacherIntent'], message: '교사가 입력한 도착점과 증거 질문을 정확히 보존해야 합니다.' }] };
+        const contractIssues = teacherContractIssues(parsed.data, assessmentRequest);
+        if (contractIssues.length) return { success: false, value, issues: contractIssues };
         return { success: true, data: parsed.data };
     } catch (error) {
         return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] };

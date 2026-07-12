@@ -36,6 +36,8 @@ function criterionLevels(maxPoints, intervalPoints, descriptions) {
 
 export function makeAssessment() {
     return {
+        assessmentName: '식물 기관 탐구 수행평가',
+        subject: '과학',
         backwardDesign: {
             teacherIntent: {
                 desiredResult: '식물 기관의 구조와 기능을 관찰 근거로 설명한다.',
@@ -49,14 +51,14 @@ export function makeAssessment() {
             skills: ['관찰 기록하기', '증거로 설명하기', '피드백을 반영해 수정하기'],
             evidenceMap: [{
                 standardCode: '6과11-02',
-                taskEvidenceTypes: ['관찰 기록', '탐구 보고서'],
+                taskEvidenceTypes: ['기관별 생김새 기록', '관찰 사실과 기능을 연결한 문장', '초안, 피드백 표시, 수정본과 수정 이유'],
                 criterionIds: ['criterion-1', 'criterion-2', 'criterion-3'],
                 evidenceTypes: ['결과 증거', '과정 증거'],
-                scoreBasis: '루브릭의 정의된 수준별 점수',
+                scoreBasis: '관찰 근거 40점, 구조와 기능 설명 40점, 피드백 반영과 수정 20점 · 수준별 정의 점수',
             }],
             checkpoints: [
-                { id: 'checkpoint-1', title: '관찰 기록 초안', evidence: '기관별 관찰 기록', feedbackPurpose: '사실과 추론을 구분한다.', order: 1 },
-                { id: 'checkpoint-2', title: '피드백 반영본', evidence: '수정 표시와 수정 이유', feedbackPurpose: '근거가 설명을 뒷받침하는지 보완한다.', order: 2 },
+                { id: 'checkpoint-1', phase: 'feedback', title: '관찰 기록 초안', evidence: '기관별 관찰 기록', feedbackPurpose: '사실과 추론을 구분하도록 피드백한다.', order: 1 },
+                { id: 'checkpoint-2', phase: 'revision', title: '피드백 반영본', evidence: '수정 표시와 수정 이유', feedbackPurpose: '피드백을 반영해 근거와 설명을 수정한다.', order: 2 },
             ],
             supportPlan: [
                 { id: 'support-1', order: 1, title: '관찰 언어 준비', purpose: '관찰 사실을 구체화한다.', teacherAction: '기관별 관찰 어휘 예시를 제공한다.', studentEvidence: '관찰 어휘를 사용한 초안' },
@@ -79,12 +81,14 @@ export function makeAssessment() {
         cover: {
             title: '식물 기관 탐구 수행평가 안내',
             sections: [
-                { id: 'cover-purpose', type: 'purpose', label: '평가 목표', content: '구조와 기능을 관찰 근거로 설명합니다.', visible: true, order: 1 },
-                { id: 'cover-standards', type: 'standards', label: '성취기준', content: '평가와 연결된 성취기준을 확인하세요.', visible: true, order: 2 },
-                { id: 'cover-task', type: 'task', label: '수행과제', content: '관찰 보고서를 작성합니다.', visible: true, order: 3 },
-                { id: 'cover-checkpoints', type: 'checkpoints', label: '수행 과정', content: '초안과 피드백 반영본을 제출합니다.', visible: true, order: 4 },
-                { id: 'cover-rubric', type: 'rubric', label: '평가 기준', content: '아래 표의 기준과 점수를 확인하세요.', visible: true, order: 5 },
-                { id: 'cover-self-checklist', type: 'self-checklist', label: '제출 전 확인', content: '관찰 근거를 구체적으로 썼는가?\n피드백을 반영하고 수정 이유를 설명했는가?', visible: true, order: 6 },
+                { id: 'cover-subject', type: 'subject', label: '과목', content: '', visible: true, order: 1 },
+                { id: 'cover-transfer', type: 'transfer-goal', label: '전이 목표', content: '', visible: true, order: 2 },
+                { id: 'cover-standards', type: 'standards', label: '성취기준', content: '', visible: true, order: 3 },
+                { id: 'cover-grasps', type: 'grasps', label: '수행과제 맥락', content: '', visible: true, order: 4 },
+                { id: 'cover-submission', type: 'submission', label: '제출 안내', content: '', visible: true, order: 5 },
+                { id: 'cover-checkpoints', type: 'checkpoints', label: '수행 과정', content: '', visible: true, order: 6 },
+                { id: 'cover-rubric', type: 'rubric', label: '평가 기준', content: '', visible: true, order: 7 },
+                { id: 'cover-self-checklist', type: 'self-checklist', label: '제출 전 확인', content: '관찰 근거를 구체적으로 썼는가?\n피드백을 반영하고 수정 이유를 설명했는가?', visible: true, order: 8 },
             ],
         },
         rubric: {
@@ -98,5 +102,11 @@ export function makeAssessment() {
         scoring: { includeProcessInScore: true, processWeightPercent: 20, processTargetPoints: 20 },
         totalPoints: 100,
         visualAnalysisRequired: false,
+        includeStudentCover: true,
+        generationSettings: {
+            outputTypes: ['탐구 보고서'], answerTypes: ['서술형'],
+            stages: { draft: true, checkpoint: true, revision: true, final: true },
+            additionalRequirements: '',
+        },
     };
 }

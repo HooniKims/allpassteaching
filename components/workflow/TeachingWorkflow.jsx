@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
 import { createEmptyWorkflow, loadWorkflow, saveWorkflow } from '@/lib/workflow-store';
 import { workflowProcessStatuses } from '@/lib/workflow-lineage';
-import { ProcessTabs } from './ProcessTabs.jsx';
+import { ProcessTabs, teachingProcesses } from './ProcessTabs.jsx';
 import { WorkflowPrerequisite } from './WorkflowPrerequisite.jsx';
 import { WorksheetStage } from './WorksheetStage.jsx';
 import { AssessmentStage } from './AssessmentStage.jsx';
@@ -43,6 +43,7 @@ export function TeachingWorkflow() {
     const onLessonDraftChange = useCallback(lessonSnapshot => setProject(current => ({ ...current, lessonSnapshot })), []);
     const statuses = useMemo(() => workflowProcessStatuses(project), [project]);
     const activeProcess = project.activeProcess;
+    const activeProcessLabel = teachingProcesses.find(item => item.id === activeProcess)?.label ?? '현재 프로세스';
     const prerequisite = statuses[activeProcess] === 'prerequisite' ? prerequisiteContent[activeProcess] : null;
     const clearStudentData = () => {
         setProject(current => ({ ...current, submissions: [], records: [] }));
@@ -57,6 +58,7 @@ export function TeachingWorkflow() {
     return <div className="teaching-workflow">
         <ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/>
         <div id={`process-panel-${activeProcess}`} role="tabpanel" aria-labelledby={`process-tab-${activeProcess}`}>
+            <section className="process-panel-region" aria-label={`${activeProcessLabel} 작업 영역`}>
             {activeProcess === 'lesson' && <LessonPlanWorkspace onDraftChange={onLessonDraftChange}/>}
             {activeProcess !== 'lesson' && <main className="workflow-stage-shell">
                 {prerequisite
@@ -76,6 +78,7 @@ export function TeachingWorkflow() {
                     {confirmClear && <div className="privacy-panel__confirm" role="alert"><span>학생 이름, OCR, 채점, 세특을 모두 삭제할까요?</span><button type="button" className="danger-button" onClick={clearStudentData}>학생 자료 삭제 확인</button><button type="button" className="secondary-button" onClick={() => setConfirmClear(false)}>취소</button></div>}
                 </aside>}
             </main>}
+            </section>
         </div>
     </div>;
 }

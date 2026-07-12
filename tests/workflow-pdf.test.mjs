@@ -32,11 +32,15 @@ test('학생 표지만 내보내도 현재 루브릭 점수와 표지 섹션을 
     const pdf = await PDFDocument.load(bytes);
     const text = events.map(event => event.text).join('\n');
 
-    expect(pdf.getPageCount()).toBeGreaterThanOrEqual(1);
+    expect(pdf.getPageCount()).toBe(1);
     expect(text).toContain('평가 목표');
     expect(text).toContain('관찰 근거 · 40점');
     expect(text).toContain('탁월 · 39점');
     expect(text).not.toContain('교사용');
+    expect(text).toContain('과목 · 과학');
+    expect(text).toContain('상황 · 학교 화단 식물의 건강 상태를 설명해야 한다.');
+    expect(text).toContain('□ 관찰 근거를 구체적으로 썼는가?');
+    expect(text).not.toContain('• □');
 });
 
 test('표지에서 루브릭을 숨겨도 전체 수행평가 PDF에는 채점 루브릭을 포함한다', async () => {
@@ -59,4 +63,32 @@ test('numbers teacher answers by question id even when answer entries arrive out
     const texts = events.map(event => event.text);
     expect(texts.indexOf('1번 문항')).toBeLessThan(texts.indexOf('2번 문항'));
     expect(texts.indexOf(worksheet.teacherKey.answers.find(answer => answer.questionId === 'q-1').answer)).toBeLessThan(texts.indexOf(worksheet.teacherKey.answers.find(answer => answer.questionId === 'q-2').answer));
+});
+
+test('학생 표지를 끈 전체본은 표지 없이 과제부터 시작하고 표지만 생성할 수 없다', async () => {
+    const assessment = makeAssessment(); assessment.includeStudentCover = false;
+    const events = [];
+
+    const bytes = await buildWorkflowPdf('assessment', assessment, { onDraw: event => events.push(event) });
+    const pdf = await PDFDocument.load(bytes);
+
+    expect(events[0].text).toBe(assessment.task.title);
+    expect(pdf.getPageCount()).toBeGreaterThanOrEqual(1);
+    await expect(buildWorkflowPdf('assessment-cover', assessment)).rejects.toThrow(/표지/);
+});
+
+test('지원하는 최대 15개 영역·6수준도 학생 표지는 정확히 한 페이지이며 넘치면 명시적으로 실패한다', async () => {
+    const assessment = makeAssessment();
+    assessment.totalPoints = 150;
+    assessment.scoring = { includeProcessInScore: false, processWeightPercent: 0, processTargetPoints: 0 };
+    assessment.rubric.levels = Array.from({ length: 6 }, (_, index) => ({ id: `level-${index + 1}`, label: `${index + 1}수준` }));
+    assessment.rubric.criteria = Array.from({ length: 15 }, (_, index) => ({
+        id: `criterion-${index + 1}`, name: `평가영역 ${index + 1}`, description: '관찰 가능한 성취', standardCodes: ['6과11-02'], kind: 'outcome', maxPoints: 10, intervalPoints: 1, evidence: `증거 ${index + 1}`,
+        levels: assessment.rubric.levels.map((level, levelIndex) => ({ levelId: level.id, score: 10 - levelIndex, description: `수행 수준 ${levelIndex + 1}` })),
+    }));
+    const bytes = await buildWorkflowPdf('assessment-cover', assessment);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+
+    assessment.cover.sections.push({ id: 'too-long', type: 'custom', label: '추가 안내', content: '아주 긴 안내 문장 '.repeat(900), visible: true, order: 9 });
+    await expect(buildWorkflowPdf('assessment-cover', assessment)).rejects.toThrow(/한 페이지/);
 });
