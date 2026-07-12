@@ -10,6 +10,7 @@ import { WorksheetStage } from './WorksheetStage.jsx';
 import { AssessmentStage } from './AssessmentStage.jsx';
 import { OcrGradingStage } from './OcrGradingStage.jsx';
 import { RecordsStage } from './RecordsStage.jsx';
+import { SubmissionFileProvider, useSubmissionFiles } from './SubmissionFileProvider.jsx';
 
 const prerequisiteContent = {
     worksheet: { title: '먼저 지도안을 완성해주세요', description: '학습지는 지도안의 성취기준, 활동, 수업 모형을 바탕으로 만듭니다.', actionLabel: '지도안으로 이동', target: 'lesson' },
@@ -28,12 +29,26 @@ function StagePlaceholder({ process }) {
     return <section className="workflow-stage"><p className="eyebrow">{copy[0]}</p><h1>{copy[0]} 작업 공간</h1><p>{copy[1]}</p></section>;
 }
 
-export function TeachingWorkflow() {
+function detachRestoredSubmissionFiles(project) {
+    return {
+        ...project,
+        submissions: project.submissions.map(submission => submission.originalAttached === true ? {
+            ...submission,
+            originalAttached: false,
+            originalReviewedAt: null,
+            approved: false,
+            approvalRevoked: Boolean(submission.approved || submission.grading),
+        } : submission),
+    };
+}
+
+function TeachingWorkflowContent() {
+    const submissionFiles = useSubmissionFiles();
     const [project, setProject] = useState(createEmptyWorkflow);
     const [hydrated, setHydrated] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
     useEffect(() => {
-        setProject(loadWorkflow() ?? createEmptyWorkflow());
+        setProject(detachRestoredSubmissionFiles(loadWorkflow() ?? createEmptyWorkflow()));
         setHydrated(true);
     }, []);
     useEffect(() => {
@@ -47,6 +62,7 @@ export function TeachingWorkflow() {
     const activeProcessLabel = teachingProcesses.find(item => item.id === activeProcess)?.label ?? '현재 프로세스';
     const prerequisite = statuses[activeProcess] === 'prerequisite' ? prerequisiteContent[activeProcess] : null;
     const clearStudentData = () => {
+        submissionFiles.clear();
         setProject(current => ({ ...current, submissions: [], records: [] }));
         setConfirmClear(false);
     };
@@ -57,7 +73,12 @@ export function TeachingWorkflow() {
     }), []);
     const updateRecords = useCallback(updater => setProject(current => ({ ...current, records: typeof updater === 'function' ? updater(current.records) : updater })), []);
     const updateStudents = useCallback(updater => setProject(current => replaceProjectRoster(current, typeof updater === 'function' ? updater(current.students) : updater)), []);
-    const deleteStudent = useCallback(studentId => setProject(current => removeStudentFromProject(current, studentId)), []);
+    const deleteStudent = useCallback(studentId => {
+        const submissionIds = [];
+        for (const item of project.submissions) if (item.studentId === studentId) submissionIds.push(item.id);
+        submissionFiles.removeMany(submissionIds);
+        setProject(current => removeStudentFromProject(current, studentId));
+    }, [project.submissions, submissionFiles]);
     return <div className="teaching-workflow">
         <ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/>
         {activeProcess === 'lesson'
@@ -84,4 +105,8 @@ export function TeachingWorkflow() {
                 </aside>}
             </main>}
     </div>;
+}
+
+export function TeachingWorkflow() {
+    return <SubmissionFileProvider><TeachingWorkflowContent/></SubmissionFileProvider>;
 }

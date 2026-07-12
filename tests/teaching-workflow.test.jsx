@@ -35,3 +35,35 @@ test('restores the active process and can clear only student-derived data', asyn
         expect(saved.activeProcess).toBe('records');
     });
 });
+
+test('Given persisted PDF metadata When the page refreshes Then files are detached and prior approval is revoked', async () => {
+    const project = {
+        ...createEmptyWorkflow(),
+        submissions: [{
+            id: 'submission-a',
+            studentId: 'student-a',
+            studentName: '김학생',
+            fileName: '김학생.pdf',
+            packetPages: [1, 2],
+            answerPages: [2],
+            coverPages: [1],
+            originalAttached: true,
+            originalReviewedAt: '2026-07-12T12:00:00.000Z',
+            approved: true,
+            grading: { totalScore: 90 },
+        }],
+    };
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 3, data: project }));
+
+    render(<TeachingWorkflow/>);
+
+    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data.submissions[0]).toMatchObject({
+        packetPages: [1, 2],
+        answerPages: [2],
+        coverPages: [1],
+        originalAttached: false,
+        originalReviewedAt: null,
+        approved: false,
+        approvalRevoked: true,
+    }));
+});

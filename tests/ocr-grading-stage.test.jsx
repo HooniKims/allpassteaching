@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { PDFDocument } from 'pdf-lib';
 import { OcrGradingStage } from '@/components/workflow/OcrGradingStage.jsx';
+import { SubmissionFileProvider } from '@/components/workflow/SubmissionFileProvider.jsx';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { gradingSourceHash } from '@/lib/workflow-lineage';
 
@@ -10,53 +12,54 @@ afterEach(() => vi.restoreAllMocks());
 
 function Harness({ initial = [] }) {
     const [submissions, setSubmissions] = useState(initial);
-    return <OcrGradingStage assessment={makeAssessment()} submissions={submissions} onChange={setSubmissions}/>;
+    return <SubmissionFileProvider><OcrGradingStage assessment={makeAssessment()} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
 }
 
 function RosterHarness() {
     const [students, setStudents] = useState([{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }]);
     const [submissions, setSubmissions] = useState([]);
-    return <>
+    return <SubmissionFileProvider>
         <OcrGradingStage assessment={makeAssessment()} students={students} submissions={submissions} onStudentsChange={setStudents} onDeleteStudent={() => {}} onChange={setSubmissions}/>
         <output data-testid="submission-state">{JSON.stringify(submissions)}</output>
-    </>;
+    </SubmissionFileProvider>;
 }
 
-test('accepts up to ten PDF files and derives editable student names', async () => {
-    const user = userEvent.setup();
-    render(<Harness/>);
-    const input = screen.getByLabelText('학생 PDF 파일');
-    expect(input).toHaveAttribute('multiple');
-    expect(input).toHaveAttribute('accept', 'application/pdf,.pdf');
+async function validPdf(name) {
+    const document = await PDFDocument.create();
+    document.addPage([300, 400]);
+    return new File([await document.save()], name, { type: 'application/pdf' });
+}
 
-    await user.upload(input, [new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), new File(['%PDF'], '이학생.pdf', { type: 'application/pdf' })]);
+test('replaces the old ten-file limit with the shared fifty-student limit', () => {
+    render(<RosterHarness/>);
 
-    expect(screen.getByDisplayValue('김학생')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('이학생')).toBeInTheDocument();
+    expect(screen.getByText('최대 50개 · 각 10MB')).toBeInTheDocument();
+    expect(screen.getByLabelText('학생별 개별 PDF 파일')).toHaveAttribute('multiple');
+    expect(screen.getByLabelText('학생별 개별 PDF 파일')).toHaveAttribute('accept', 'application/pdf,.pdf');
 });
 
 test('같은 이름의 명단이 있어도 PDF는 자동 연결하지 않고 교사가 안정적인 학생 ID를 직접 연결한다', async () => {
     const user = userEvent.setup();
     render(<RosterHarness/>);
 
-    await user.upload(screen.getByLabelText('학생 PDF 파일'), new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }));
-    const before = JSON.parse(screen.getByTestId('submission-state').textContent);
-    expect(before[0]).toMatchObject({ studentName: '김학생', studentId: null, needsStudentLink: true });
+    await user.upload(screen.getByLabelText('학생별 개별 PDF 파일'), await validPdf('김학생.pdf'));
+    expect(JSON.parse(screen.getByTestId('submission-state').textContent)).toEqual([]);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '김학생 명단 연결' }), 'student-a');
+    await user.selectOptions(screen.getByRole('combobox', { name: '김학생.pdf 학생 연결' }), 'student-a');
+    await user.click(screen.getByRole('button', { name: '학생별 PDF 연결하기' }));
 
-    const after = JSON.parse(screen.getByTestId('submission-state').textContent);
+    const after = JSON.parse(await waitFor(() => screen.getByTestId('submission-state').textContent.includes('student-a') ? screen.getByTestId('submission-state').textContent : ''));
     expect(after[0]).toMatchObject({ studentName: '김학생', studentId: 'student-a', needsStudentLink: false });
 });
 
-test('rejects more than ten files without creating partial rows', async () => {
+test('rejects more than fifty files without creating partial rows', async () => {
     const user = userEvent.setup();
-    render(<Harness/>);
-    const files = Array.from({ length: 11 }, (_, index) => new File(['%PDF'], `${index + 1}번.pdf`, { type: 'application/pdf' }));
-    await user.upload(screen.getByLabelText('학생 PDF 파일'), files);
+    render(<RosterHarness/>);
+    const selected = Array.from({ length: 51 }, (_, index) => new File(['%PDF-'], `${index + 1}번.pdf`, { type: 'application/pdf' }));
+    await user.upload(screen.getByLabelText('학생별 개별 PDF 파일'), selected);
 
-    expect(screen.getByRole('alert')).toHaveTextContent('최대 10개');
-    expect(screen.queryAllByLabelText(/학생 이름/)).toHaveLength(0);
+    expect(screen.getByRole('alert')).toHaveTextContent('최대 50개');
+    expect(JSON.parse(screen.getByTestId('submission-state').textContent)).toEqual([]);
 });
 
 test('keeps successful OCR when another student fails', async () => {
@@ -64,9 +67,12 @@ test('keeps successful OCR when another student fails', async () => {
     vi.stubGlobal('fetch', vi.fn()
         .mockResolvedValueOnce(Response.json({ extractedText: '첫 학생 관찰 결과는 충분히 구체적으로 기록되었습니다.', ocrModel: 'document-parse', pageCount: 1 }))
         .mockResolvedValueOnce(Response.json({ message: '읽을 수 없는 PDF' }, { status: 422 })));
-    render(<Harness/>);
-    await user.upload(screen.getByLabelText('학생 PDF 파일'), [new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), new File(['%PDF'], '이학생.pdf', { type: 'application/pdf' })]);
-    await user.click(screen.getByRole('button', { name: '선택한 PDF OCR 시작' }));
+    const initial = [
+        { id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), status: 'pending', extractedText: '' },
+        { id: 'b', studentName: '이학생', fileName: '이학생.pdf', file: new File(['%PDF'], '이학생.pdf', { type: 'application/pdf' }), status: 'pending', extractedText: '' },
+    ];
+    render(<Harness initial={initial}/>);
+    await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
 
     expect(await screen.findByDisplayValue('첫 학생 관찰 결과는 충분히 구체적으로 기록되었습니다.')).toBeInTheDocument();
     expect(await screen.findByText('읽을 수 없는 PDF')).toBeInTheDocument();
@@ -86,7 +92,7 @@ test('keeps both grading results when two student requests finish in reverse ord
     vi.stubGlobal('fetch', vi.fn()
         .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
         .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve; })));
-    function ConcurrentHarness() { const [items, setItems] = useState([base('김학생'), base('이학생')]); return <OcrGradingStage assessment={assessment} submissions={items} onChange={setItems}/>; }
+    function ConcurrentHarness() { const [items, setItems] = useState([base('김학생'), base('이학생')]); return <SubmissionFileProvider><OcrGradingStage assessment={assessment} submissions={items} onChange={setItems}/></SubmissionFileProvider>; }
     render(<ConcurrentHarness/>);
 
     await user.click(screen.getByRole('button', { name: '김학생 채점하기' }));
@@ -102,9 +108,9 @@ test('does not restore a deleted student when an in-flight OCR request finishes'
     const user = userEvent.setup();
     let resolveOcr;
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveOcr = resolve; })));
-    render(<Harness/>);
-    await user.upload(screen.getByLabelText('학생 PDF 파일'), new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }));
-    await user.click(screen.getByRole('button', { name: '선택한 PDF OCR 시작' }));
+    const initial = [{ id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }), status: 'pending', extractedText: '' }];
+    render(<Harness initial={initial}/>);
+    await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
     await user.click(screen.getByRole('button', { name: '김학생 삭제' }));
     resolveOcr(Response.json({ extractedText: '삭제 뒤 도착한 OCR 내용은 다시 추가되면 안 됩니다.', ocrModel: 'document-parse', pageCount: 1 }));
     await waitFor(() => expect(screen.queryByDisplayValue('김학생')).not.toBeInTheDocument());
@@ -122,5 +128,5 @@ test('disables approval when a teacher score exceeds the criterion maximum', () 
     submission.sourceHash = gradingSourceHash(assessment, submission.extractedText);
     render(<Harness initial={[submission]}/>);
     expect(screen.getByRole('button', { name: '김학생 채점 승인' })).toBeDisabled();
-    expect(screen.getByRole('alert')).toHaveTextContent('배점 범위');
+    expect(screen.getByText(/모든 점수는 평가 요소별 배점 범위/)).toBeInTheDocument();
 });

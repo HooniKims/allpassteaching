@@ -8,6 +8,14 @@ test('uses local Paperlogy and approved green action token', async () => {
     expect(css).not.toMatch(/#6366f1|#8b5cf6|linear-gradient/i);
 });
 
+test('every CSS custom property reference resolves to a declared design token', async () => {
+    const css = await readFile('app/globals.css', 'utf8');
+    const declarations = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map(match => match[1]));
+    const references = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map(match => match[1]));
+
+    expect([...references].filter(token => !declarations.has(token))).toEqual([]);
+});
+
 test('tablet layouts preserve lesson dates and switch cover rubrics to complete cards', async () => {
     const css = await readFile('app/globals.css', 'utf8');
 
