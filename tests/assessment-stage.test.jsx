@@ -47,7 +47,7 @@ test('generates a performance assessment from the lesson source and teacher requ
     expect(fetch).toHaveBeenCalledWith('/api/generate-assessment', expect.objectContaining({ body: expect.stringContaining('assessmentRequest') }));
 });
 
-test('warns when teacher-edited rubric points no longer total 100', async () => {
+test('keeps the last valid rubric while an unapplied point draft is being edited', async () => {
     const user = userEvent.setup();
     function Harness() {
         const [value, setValue] = useState({ ...makeAssessment(), sourceHash: 'old' });
@@ -58,8 +58,8 @@ test('warns when teacher-edited rubric points no longer total 100', async () => 
     const points = screen.getByLabelText('관찰 근거 영역 총점');
     await user.clear(points); await user.type(points, '20');
 
-    expect(screen.getByRole('alert')).toHaveTextContent('현재 80점');
-    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
 });
 
 test('requires explicit teacher confirmation and revokes it after editing', async () => {
@@ -99,6 +99,7 @@ test('교사가 급간을 다시 계산하고 표지 섹션을 편집·재정렬
     await user.clear(total); await user.type(total, '60');
     const criterionTotal = screen.getByLabelText('관찰 근거 영역 총점');
     await user.clear(criterionTotal); await user.type(criterionTotal, '30');
+    await user.click(screen.getByRole('button', { name: '관찰 근거 영역 배점 적용' }));
     const interval = screen.getByLabelText('관찰 근거 급간 점수');
     await user.clear(interval); await user.type(interval, '5');
     await user.click(screen.getByRole('button', { name: '관찰 근거 급간으로 다시 계산' }));
@@ -285,4 +286,125 @@ test('알려진 정합성 경고는 교사가 실행할 수 있는 수정 방법
 
     expect(screen.getByText(/과제 맥락을 더 실제적으로/)).toBeInTheDocument();
     expect(screen.getByText(/상황과 공유 대상을 현재 학급 맥락에 맞게/)).toBeInTheDocument();
+});
+
+test('교사가 전체 총점과 수준 수를 적용하면 평가와 authoritative request가 함께 갱신되어 내보낼 수 있다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    function Harness() {
+        const [assessment, setAssessment] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        const [assessmentRequest, setAssessmentRequest] = useState(request);
+        return <><output data-testid="request-total">{assessmentRequest.totalPoints}</output><output data-testid="request-levels">{assessmentRequest.levelCount}</output><AssessmentStage lessonPlan={lessonPlan} value={assessment} request={assessmentRequest} onRequestChange={setAssessmentRequest} onChange={setAssessment}/></>;
+    }
+    render(<Harness/>);
+
+    const total = screen.getByLabelText('전체 총점');
+    await user.clear(total); await user.type(total, '60');
+    await user.click(screen.getByRole('button', { name: '전체 총점과 배점 적용' }));
+    expect(screen.getByTestId('request-total')).toHaveTextContent('60');
+    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: '성취수준 추가' }));
+    expect(screen.getByTestId('request-levels')).toHaveTextContent('5');
+    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+});
+
+test('적용할 수 없는 전체 총점은 기존 평가와 request를 그대로 보존한다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    function Harness() {
+        const [assessment, setAssessment] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        const [assessmentRequest, setAssessmentRequest] = useState(request);
+        return <><output data-testid="request-total">{assessmentRequest.totalPoints}</output><AssessmentStage lessonPlan={lessonPlan} value={assessment} request={assessmentRequest} onRequestChange={setAssessmentRequest} onChange={setAssessment}/></>;
+    }
+    render(<Harness/>);
+    const total = screen.getByLabelText('전체 총점');
+    await user.clear(total); await user.type(total, '1');
+    await user.click(screen.getByRole('button', { name: '전체 총점과 배점 적용' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('적용할 수 없습니다');
+    expect(screen.getByTestId('request-total')).toHaveTextContent('100');
+});
+
+test('영역 총점 적용도 전체 총점·과정 비중·수준별 점수를 하나의 유효 계약으로 갱신한다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    function Harness() {
+        const [assessment, setAssessment] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        const [assessmentRequest, setAssessmentRequest] = useState(request);
+        return <><output data-testid="request-total">{assessmentRequest.totalPoints}</output><output data-testid="request-process">{assessmentRequest.processWeightPercent}</output><AssessmentStage lessonPlan={lessonPlan} value={assessment} request={assessmentRequest} onRequestChange={setAssessmentRequest} onChange={setAssessment}/></>;
+    }
+    render(<Harness/>);
+    const points = screen.getByLabelText('관찰 근거 영역 총점');
+    await user.clear(points); await user.type(points, '45');
+    await user.click(screen.getByRole('button', { name: '관찰 근거 영역 배점 적용' }));
+
+    expect(screen.getByTestId('request-total')).toHaveTextContent('105');
+    expect(screen.getByTestId('request-process')).toHaveTextContent('19');
+    expect(screen.getByLabelText('관찰 근거 탁월 점수')).toHaveValue(45);
+    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+});
+
+test('적용할 수 없는 영역 총점은 기존 평가와 request를 그대로 보존한다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    function Harness() {
+        const [assessment, setAssessment] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        const [assessmentRequest, setAssessmentRequest] = useState(request);
+        return <><output data-testid="request-total">{assessmentRequest.totalPoints}</output><output data-testid="criterion-max">{assessment.rubric.criteria[0].maxPoints}</output><AssessmentStage lessonPlan={lessonPlan} value={assessment} request={assessmentRequest} onRequestChange={setAssessmentRequest} onChange={setAssessment}/></>;
+    }
+    render(<Harness/>);
+    const points = screen.getByLabelText('관찰 근거 영역 총점');
+    await user.clear(points); await user.type(points, '1');
+    await user.click(screen.getByRole('button', { name: '관찰 근거 영역 배점 적용' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('최소 3점');
+    expect(screen.getByTestId('request-total')).toHaveTextContent('100');
+    expect(screen.getByTestId('criterion-max')).toHaveTextContent('40');
+});
+
+test('직접 입력 표지 항목은 이미 존재하는 필수 singleton 유형으로 바꿀 수 없다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    function Harness() {
+        const [assessment, setAssessment] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        return <AssessmentStage lessonPlan={lessonPlan} value={assessment} request={request} onRequestChange={() => {}} onChange={setAssessment}/>;
+    }
+    render(<Harness/>);
+    await user.click(screen.getByRole('button', { name: '표지 항목 추가' }));
+    const group = screen.getByRole('group', { name: /새 안내/ });
+    const type = within(group).getByLabelText('항목 유형');
+
+    expect(within(type).queryByRole('option', { name: '평가 기준' })).not.toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: '삭제' })).toBeEnabled();
+});
+
+test('연결표 화면은 증거 구분과 점수 근거를 함께 보여준다', () => {
+    const lessonPlan = makeGeneratedPlan();
+    render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
+    const map = screen.getByRole('heading', { name: '성취기준 ↔ 과제 ↔ 평가영역 연결표' }).closest('section');
+
+    expect(within(map).getByText(/증거 구분: 결과 증거, 과정 증거/)).toBeInTheDocument();
+    expect(within(map).getByText(/점수 근거:/)).toBeInTheDocument();
+});
+
+test('학생 표지 데스크톱 표도 모든 수준의 점수와 수행 설명을 보여준다', () => {
+    const lessonPlan = makeGeneratedPlan();
+    render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
+    const table = screen.getByRole('table', { name: '표 형식 평가 기준' });
+
+    expect(within(table).getAllByText('40점').length).toBeGreaterThan(0);
+    expect(within(table).getByText('모든 기관을 구체적으로 기록함')).toBeInTheDocument();
+});
+
+test('표지 PDF가 한 페이지를 넘으면 서버의 구체적인 수정 안내를 그대로 보여주고 편집본을 보존한다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code: 'cover_overflow', message: '학생 안내 표지는 한 페이지에 들어가야 합니다. 표지 문구를 줄여주세요.' }, { status: 422 })));
+    render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    await user.click(screen.getByRole('button', { name: '표지만 PDF 저장' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('표지 문구를 줄여주세요');
+    expect(screen.getByLabelText('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
 });

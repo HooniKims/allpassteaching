@@ -110,4 +110,37 @@ describe('백워드 설계 수행평가 계약', () => {
 
         expect(assessmentOutputSchema.safeParse(assessment).success).toBe(false);
     });
+
+    test('Given 평가영역이 두 성취기준을 선언하면 Then 두 pair가 각각 정확히 한 번 연결되어야 한다', () => {
+        const assessment = makeAssessment();
+        assessment.task.standards.push({ code: '6과11-03', text: '생물과 환경의 관계를 설명한다.' });
+        assessment.rubric.criteria[0].standardCodes = ['6과11-02', '6과11-03'];
+        assessment.rubric.criteria[1].standardCodes = ['6과11-03'];
+        assessment.backwardDesign.evidenceMap = [
+            { ...assessment.backwardDesign.evidenceMap[0], standardCode: '6과11-02', criterionIds: ['criterion-1'], taskEvidenceTypes: [assessment.rubric.criteria[0].evidence], evidenceTypes: ['결과 증거'], scoreBasis: '관찰 근거 40점 · 수준별 정의 점수' },
+            { ...assessment.backwardDesign.evidenceMap[0], standardCode: '6과11-03', criterionIds: ['criterion-2'], taskEvidenceTypes: [assessment.rubric.criteria[1].evidence], evidenceTypes: ['결과 증거'], scoreBasis: '구조와 기능 설명 40점 · 수준별 정의 점수' },
+        ];
+
+        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(false);
+    });
+
+    test('Given 15개 평가영역이 한 성취기준에 연결되면 Then 실제 최대 계약으로 유효하다', () => {
+        const assessment = makeAssessment();
+        assessment.totalPoints = 150;
+        assessment.scoring = { includeProcessInScore: false, processWeightPercent: 0, processTargetPoints: 0 };
+        assessment.rubric.criteria = Array.from({ length: 15 }, (_, index) => ({ ...structuredClone(assessment.rubric.criteria[0]), id: `criterion-${index + 1}`, name: `영역 ${index + 1}`, kind: 'outcome', maxPoints: 10, intervalPoints: 1, evidence: `증거 ${index + 1}`, levels: assessment.rubric.levels.map((level, levelIndex) => ({ levelId: level.id, score: 10 - levelIndex, description: `수행 ${levelIndex + 1}` })) }));
+        assessment.backwardDesign.evidenceMap = [{ standardCode: '6과11-02', taskEvidenceTypes: assessment.rubric.criteria.map(item => item.evidence), criterionIds: assessment.rubric.criteria.map(item => item.id), evidenceTypes: ['결과 증거'], scoreBasis: `${assessment.rubric.criteria.map(item => `${item.name} 10점`).join(', ')} · 수준별 정의 점수` }];
+
+        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(true);
+    });
+
+    test('Given 학생 표지를 쓰면 Then self-checklist도 보이는 singleton으로 필요하다', () => {
+        const missing = makeAssessment();
+        missing.cover.sections = missing.cover.sections.filter(section => section.type !== 'self-checklist');
+        const duplicate = makeAssessment();
+        duplicate.cover.sections.push({ ...duplicate.cover.sections.find(section => section.type === 'self-checklist'), id: 'check-2', order: 9 });
+
+        expect(assessmentOutputSchema.safeParse(missing).success).toBe(false);
+        expect(assessmentOutputSchema.safeParse(duplicate).success).toBe(false);
+    });
 });

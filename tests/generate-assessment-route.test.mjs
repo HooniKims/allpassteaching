@@ -82,3 +82,28 @@ test('AI가 덧붙이는 메타데이터보다 교사 평가명·과목·산출�
     expect(body.assessment.task.product).toBe('포스터');
     expect(body.assessment.generationSettings).toEqual({ outputTypes: ['포스터'], answerTypes: ['논술형'], stages: requested.stages, additionalRequirements: '도표 포함' });
 });
+
+test('지원 상한인 15개 평가영역을 실제 생성 API 계약으로 통과시킨다', async () => {
+    const generated = makeAssessment();
+    generated.totalPoints = 150;
+    generated.scoring = { includeProcessInScore: false, processWeightPercent: 0, processTargetPoints: 0 };
+    generated.rubric.levels = Array.from({ length: 6 }, (_, index) => ({ id: `level-${index + 1}`, label: `${index + 1}수준` }));
+    generated.rubric.criteria = Array.from({ length: 15 }, (_, index) => ({
+        id: `criterion-${index + 1}`, name: `평가영역 ${index + 1}`, description: `성취 증거 ${index + 1}`, standardCodes: ['6과11-02'], kind: 'outcome', maxPoints: 10, intervalPoints: 1, evidence: `관찰 증거 ${index + 1}`,
+        levels: generated.rubric.levels.map((level, levelIndex) => ({ levelId: level.id, score: 10 - levelIndex, description: `${levelIndex + 1}수준 수행 설명` })),
+    }));
+    generated.backwardDesign.evidenceMap = [{
+        standardCode: '6과11-02',
+        criterionIds: generated.rubric.criteria.map(criterion => criterion.id),
+        taskEvidenceTypes: generated.rubric.criteria.map(criterion => criterion.evidence),
+        evidenceTypes: ['결과 증거'],
+        scoreBasis: `${generated.rubric.criteria.map(criterion => `${criterion.name} ${criterion.maxPoints}점`).join(', ')} · 수준별 정의 점수`,
+    }];
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(generated)));
+
+    const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest: { ...assessmentRequest, totalPoints: 150, levelCount: 6, includeProcessInScore: false, processWeightPercent: 0 } }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).assessment.rubric.criteria).toHaveLength(15);
+});

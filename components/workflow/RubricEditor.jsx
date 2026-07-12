@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { deriveLevelScores } from '@/lib/rubric-score';
 import { sourceHash } from '@/lib/source-hash';
 
@@ -25,13 +25,89 @@ const synchronizeEvidenceMap = (backwardDesign, criteria) => ({
     }),
 });
 
-export function RubricEditor({ value, onChange }) {
+function allocatePoints(criteria, target, minimum) {
+    if (!criteria.length) {
+        if (target !== 0) throw new Error('배점을 적용할 평가영역이 없습니다.');
+        return new Map();
+    }
+    if (target < criteria.length * minimum) throw new Error(`${criteria.length}개 평가영역과 현재 성취수준에는 최소 ${criteria.length * minimum}점이 필요합니다.`);
+    const remaining = target - criteria.length * minimum;
+    const weightTotal = criteria.reduce((sum, criterion) => sum + criterion.maxPoints, 0);
+    const weighted = criteria.map(criterion => {
+        const exact = weightTotal ? remaining * criterion.maxPoints / weightTotal : remaining / criteria.length;
+        return { criterion, points: minimum + Math.floor(exact), fraction: exact - Math.floor(exact) };
+    });
+    let unassigned = target - weighted.reduce((sum, item) => sum + item.points, 0);
+    weighted.toSorted((left, right) => right.fraction - left.fraction).forEach(item => { if (unassigned > 0) { item.points += 1; unassigned -= 1; } });
+    return new Map(weighted.map(item => [item.criterion.id, item.points]));
+}
+
+function criterionWithMaximum(criterion, maxPoints, levelCount) {
+    const intervalPoints = Math.max(1, Math.min(criterion.intervalPoints, Math.floor(maxPoints / (levelCount - 1))));
+    const scores = deriveLevelScores(maxPoints, intervalPoints, levelCount);
+    return { ...criterion, maxPoints, intervalPoints, levels: criterion.levels.map((level, index) => ({ ...level, score: scores[index] })) };
+}
+
+function percentForPoints(totalPoints, processPoints, preferred) {
+    const matches = Array.from({ length: 101 }, (_, percent) => percent).filter(percent => Math.round(totalPoints * percent / 100) === processPoints);
+    if (!matches.length) throw new Error('현재 전체 총점에서는 과정 배점을 정확한 비율로 표현할 수 없습니다. 다른 배점을 입력해주세요.');
+    return matches.toSorted((left, right) => Math.abs(left - preferred) - Math.abs(right - preferred))[0];
+}
+
+export function RubricEditor({ value, request, onRequestChange, onChange }) {
     const [criterionCandidate, setCriterionCandidate] = useState(null);
     const [error, setError] = useState('');
+    const [totalDraft, setTotalDraft] = useState(String(value.totalPoints));
+    const [pointDrafts, setPointDrafts] = useState(() => Object.fromEntries(value.rubric.criteria.map(criterion => [criterion.id, String(criterion.maxPoints)])));
+    const pointContractFingerprint = value.rubric.criteria.map(criterion => `${criterion.id}:${criterion.maxPoints}`).join('|');
+    useEffect(() => setTotalDraft(String(value.totalPoints)), [value.totalPoints]);
+    useEffect(() => setPointDrafts(Object.fromEntries(value.rubric.criteria.map(criterion => [criterion.id, String(criterion.maxPoints)]))), [pointContractFingerprint]);
     const commit = patch => onChange({ ...value, ...patch });
     const updateTask = patch => commit({ task: { ...value.task, ...patch } });
     const commitCriteria = criteria => commit({ rubric: { ...value.rubric, criteria }, backwardDesign: synchronizeEvidenceMap(value.backwardDesign, criteria) });
     const updateCriterion = (index, patch) => commitCriteria(value.rubric.criteria.map((criterion, current) => current === index ? { ...criterion, ...patch } : criterion));
+    const commitContract = (criteria, nextRequest, scoring) => {
+        onChange({ ...value, totalPoints: nextRequest.totalPoints, scoring, rubric: { ...value.rubric, criteria }, backwardDesign: synchronizeEvidenceMap(value.backwardDesign, criteria) });
+        onRequestChange(nextRequest);
+        setError('');
+    };
+    const applyCriteriaContract = criteria => {
+        try {
+            const totalPoints = criteria.reduce((sum, criterion) => sum + criterion.maxPoints, 0);
+            const processPoints = criteria.filter(criterion => criterion.kind === 'process').reduce((sum, criterion) => sum + criterion.maxPoints, 0);
+            const includeProcessInScore = processPoints > 0;
+            const processWeightPercent = includeProcessInScore ? percentForPoints(totalPoints, processPoints, request.processWeightPercent) : 0;
+            commitContract(criteria, { ...request, totalPoints, includeProcessInScore, processWeightPercent }, { includeProcessInScore, processWeightPercent, processTargetPoints: processPoints });
+            return true;
+        } catch (cause) {
+            setError(`배점 변경을 적용할 수 없습니다. ${cause.message}`);
+            return false;
+        }
+    };
+    const applyTotalPoints = () => {
+        try {
+            const totalPoints = Number(totalDraft);
+            if (!Number.isInteger(totalPoints) || totalPoints < 1 || totalPoints > 1000) throw new Error('전체 총점은 1~1,000의 정수여야 합니다.');
+            const levelMinimum = value.rubric.levels.length - 1;
+            const processTargetPoints = request.includeProcessInScore ? Math.round(totalPoints * request.processWeightPercent / 100) : 0;
+            const process = value.rubric.criteria.filter(criterion => criterion.kind === 'process');
+            const outcome = value.rubric.criteria.filter(criterion => criterion.kind === 'outcome');
+            const allocations = new Map([...allocatePoints(process, processTargetPoints, levelMinimum), ...allocatePoints(outcome, totalPoints - processTargetPoints, levelMinimum)]);
+            const criteria = value.rubric.criteria.map(criterion => criterionWithMaximum(criterion, allocations.get(criterion.id), value.rubric.levels.length));
+            commitContract(criteria, { ...request, totalPoints }, { ...value.scoring, processTargetPoints });
+        } catch (cause) { setError(`전체 총점을 적용할 수 없습니다. ${cause.message}`); }
+    };
+    const applyCriterionMaximum = index => {
+        const criterion = value.rubric.criteria[index];
+        const maxPoints = Number(pointDrafts[criterion.id]);
+        const minimum = value.rubric.levels.length - 1;
+        if (!Number.isInteger(maxPoints) || maxPoints < minimum || maxPoints > 1000) {
+            setError(`배점 변경을 적용할 수 없습니다. 현재 ${value.rubric.levels.length}수준에는 영역별 최소 ${minimum}점이 필요합니다.`);
+            return;
+        }
+        const criteria = value.rubric.criteria.map((item, current) => current === index ? criterionWithMaximum(item, maxPoints, value.rubric.levels.length) : item);
+        applyCriteriaContract(criteria);
+    };
     const toggleCriterionStandard = (index, code) => {
         const criterion = value.rubric.criteria[index];
         const standardCodes = criterion.standardCodes.includes(code) ? criterion.standardCodes.filter(item => item !== code) : [...criterion.standardCodes, code];
@@ -49,7 +125,8 @@ export function RubricEditor({ value, onChange }) {
             const scores = deriveLevelScores(criterion.maxPoints, intervalPoints, definitions.length);
             return { ...criterion, intervalPoints, levels: definitions.map((definition, index) => ({ levelId: definition.id, score: scores[index], description: currentById.get(definition.id)?.description ?? '관찰 가능한 수행 수준을 입력하세요.' })) };
         });
-        commit({ rubric: { levels: definitions, criteria } });
+        onChange({ ...value, rubric: { levels: definitions, criteria }, backwardDesign: synchronizeEvidenceMap(value.backwardDesign, criteria) });
+        onRequestChange({ ...request, levelCount: definitions.length });
     };
     const addLevelDefinition = () => {
         if (value.rubric.levels.length >= 6) return;
@@ -82,17 +159,17 @@ export function RubricEditor({ value, onChange }) {
         const maxPoints = 10;
         const levels = value.rubric.levels.map((level, index) => ({ levelId: level.id, score: Math.max(0, maxPoints - index * 2), description: '관찰 가능한 수행 수준을 입력하세요.' }));
         const criterion = { id: uid('criterion'), name: '새 평가영역', description: '평가할 내용을 입력하세요.', standardCodes: [value.task.standards[0].code], kind: 'outcome', maxPoints, intervalPoints: 2, evidence: '학생 산출물에서 확인할 증거', levels };
-        commitCriteria([...value.rubric.criteria, criterion]);
+        applyCriteriaContract([...value.rubric.criteria, criterion]);
     };
     const duplicateCriterion = index => {
         if (value.rubric.criteria.length >= 15) return;
         const current = value.rubric.criteria[index];
         const copy = { ...structuredClone(current), id: uid('criterion'), name: `${current.name} 복사본` };
-        commitCriteria(value.rubric.criteria.toSpliced(index + 1, 0, copy));
+        applyCriteriaContract(value.rubric.criteria.toSpliced(index + 1, 0, copy));
     };
     const removeCriterion = index => {
         if (value.rubric.criteria.length <= 2) return;
-        commitCriteria(value.rubric.criteria.toSpliced(index, 1));
+        applyCriteriaContract(value.rubric.criteria.toSpliced(index, 1));
     };
     const moveCriterion = (index, offset) => commit({ rubric: { ...value.rubric, criteria: move(value.rubric.criteria, index, offset) } });
     const regenerate = async criterionId => {
@@ -112,8 +189,7 @@ export function RubricEditor({ value, onChange }) {
             return;
         }
         const criteria = value.rubric.criteria.map((item, current) => current === index ? criterionCandidate.value : item);
-        commitCriteria(criteria);
-        setCriterionCandidate(null);
+        if (applyCriteriaContract(criteria)) setCriterionCandidate(null);
     };
     return <div className="structured-editor assessment-editor">
         <section className="document-section"><h2>수행과제</h2>
@@ -122,12 +198,12 @@ export function RubricEditor({ value, onChange }) {
             <div className="field-grid field-grid--two">{[['수행 절차', 'procedure'], ['제출 조건', 'conditions'], ['준비물', 'materials'], ['유의점', 'cautions']].map(([label, key]) => <label key={key}>{label} <span className="optional">한 줄에 하나</span><textarea rows="4" value={value.task[key].join('\n')} onChange={event => updateTask({ [key]: splitLines(event.target.value) })}/></label>)}</div>
         </section>
         <section className="document-section"><div className="section-heading"><div><h2>점수형 분석적 루브릭</h2><p>전체 총점, 영역별 총점, 급간과 수준별 점수를 교사가 직접 바꿀 수 있습니다.</p></div><button type="button" className="secondary-button" onClick={addCriterion} disabled={value.rubric.criteria.length >= 15}>평가영역 추가</button></div>
-            <label className="compact-field">전체 총점<input aria-label="전체 총점" type="number" min="1" max="1000" value={value.totalPoints} onChange={event => commit({ totalPoints: Number(event.target.value) })}/></label>
+            <div className="inline-apply-field"><label className="compact-field">전체 총점<input aria-label="전체 총점" type="number" min="1" max="1000" value={totalDraft} onChange={event => setTotalDraft(event.target.value)}/></label><button type="button" className="secondary-button" aria-label="전체 총점과 배점 적용" onClick={applyTotalPoints}>총점과 영역 배점 적용</button></div>
             {error && <p className="form-alert" role="alert">{error}</p>}
             <section className="level-definition-editor"><div className="section-heading"><div><h3>성취수준</h3><p>2~6개 수준의 이름과 순서를 바꿀 수 있습니다.</p></div><button type="button" className="secondary-button" onClick={addLevelDefinition} disabled={value.rubric.levels.length >= 6}>성취수준 추가</button></div><div>{value.rubric.levels.map((level, index) => <article key={level.id}><label>{index + 1}수준 이름<input aria-label={`${index + 1}수준 이름`} value={level.label} onChange={event => renameLevelDefinition(index, event.target.value)}/></label><div className="row-actions"><button type="button" aria-label={`${index + 1}수준 왼쪽으로`} onClick={() => moveLevelDefinition(index, -1)} disabled={index === 0}>왼쪽</button><button type="button" aria-label={`${index + 1}수준 오른쪽으로`} onClick={() => moveLevelDefinition(index, 1)} disabled={index === value.rubric.levels.length - 1}>오른쪽</button><button type="button" aria-label={`${index + 1}수준 복제`} onClick={() => duplicateLevelDefinition(index)} disabled={value.rubric.levels.length >= 6}>복제</button><button type="button" aria-label={`${index + 1}수준 삭제`} onClick={() => removeLevelDefinition(index)} disabled={value.rubric.levels.length <= 2}>삭제</button></div></article>)}</div></section>
             <div className="rubric-criteria-editor">{value.rubric.criteria.map((criterion, index) => <fieldset className="rubric-criterion-card" key={criterion.id}><legend>{index + 1}. {criterion.name}</legend>
                 <div className="row-actions"><button type="button" onClick={() => moveCriterion(index, -1)} disabled={index === 0}>위로</button><button type="button" onClick={() => moveCriterion(index, 1)} disabled={index === value.rubric.criteria.length - 1}>아래로</button><button type="button" onClick={() => duplicateCriterion(index)}>복제</button><button type="button" onClick={() => removeCriterion(index)} disabled={value.rubric.criteria.length <= 2}>삭제</button><button type="button" onClick={() => regenerate(criterion.id)}>이 영역만 AI 다시 생성</button></div>
-                <div className="field-grid field-grid--two"><label>영역명<input value={criterion.name} onChange={event => updateCriterion(index, { name: event.target.value })}/></label><label>증거 구분<select value={criterion.kind} onChange={event => updateCriterion(index, { kind: event.target.value })}><option value="outcome">결과 증거</option><option value="process">과정 증거</option></select></label><label>{criterion.name} 영역 총점<input aria-label={`${criterion.name} 영역 총점`} type="number" min="1" max="1000" value={criterion.maxPoints} onChange={event => updateCriterion(index, { maxPoints: Number(event.target.value) })}/></label><label>{criterion.name} 급간 점수<input aria-label={`${criterion.name} 급간 점수`} type="number" min="1" max="1000" value={criterion.intervalPoints} onChange={event => updateCriterion(index, { intervalPoints: Number(event.target.value) })}/></label></div>
+                <div className="field-grid field-grid--two"><label>영역명<input value={criterion.name} onChange={event => updateCriterion(index, { name: event.target.value })}/></label><label>증거 구분<select value={criterion.kind} onChange={event => applyCriteriaContract(value.rubric.criteria.map((item, current) => current === index ? { ...item, kind: event.target.value } : item))}><option value="outcome">결과 증거</option><option value="process">과정 증거</option></select></label><div className="inline-apply-field"><label>{criterion.name} 영역 총점<input aria-label={`${criterion.name} 영역 총점`} type="number" min="1" max="1000" value={pointDrafts[criterion.id] ?? ''} onChange={event => setPointDrafts(current => ({ ...current, [criterion.id]: event.target.value }))}/></label><button type="button" className="secondary-button" aria-label={`${criterion.name} 영역 배점 적용`} onClick={() => applyCriterionMaximum(index)}>적용</button></div><label>{criterion.name} 급간 점수<input aria-label={`${criterion.name} 급간 점수`} type="number" min="1" max="1000" value={criterion.intervalPoints} onChange={event => updateCriterion(index, { intervalPoints: Number(event.target.value) })}/></label></div>
                 <fieldset className="criterion-standard-links"><legend>연결 성취기준</legend>{value.task.standards.map(standard => <label key={standard.code}><input aria-label={`[${standard.code}] 연결`} type="checkbox" checked={criterion.standardCodes.includes(standard.code)} onChange={() => toggleCriterionStandard(index, standard.code)}/><span><strong>[{standard.code}]</strong> {standard.text}</span></label>)}</fieldset>
                 <button type="button" className="secondary-button" onClick={() => recalculate(index)}>{criterion.name} 급간으로 다시 계산</button>
                 <label>평가 내용<textarea rows="2" value={criterion.description} onChange={event => updateCriterion(index, { description: event.target.value })}/></label><label>관찰 증거<textarea rows="2" value={criterion.evidence} onChange={event => updateCriterion(index, { evidence: event.target.value })}/></label>

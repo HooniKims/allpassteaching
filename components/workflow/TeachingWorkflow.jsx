@@ -57,28 +57,28 @@ export function TeachingWorkflow() {
     const updateRecords = useCallback(updater => setProject(current => ({ ...current, records: typeof updater === 'function' ? updater(current.records) : updater })), []);
     return <div className="teaching-workflow">
         <ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/>
-        <div id={`process-panel-${activeProcess}`} role="tabpanel" aria-labelledby={`process-tab-${activeProcess}`}>
-            <section className="process-panel-region" aria-label={`${activeProcessLabel} 작업 영역`}>
-            {activeProcess === 'lesson' && <LessonPlanWorkspace onDraftChange={onLessonDraftChange}/>}
-            {activeProcess !== 'lesson' && <main className="workflow-stage-shell">
-                {prerequisite
-                    ? <WorkflowPrerequisite {...prerequisite} onAction={() => setProject(current => ({ ...current, activeProcess: prerequisite.target }))}/>
-                    : activeProcess === 'worksheet'
-                        ? <WorksheetStage lessonPlan={project.lessonSnapshot.plan} value={project.worksheet} onChange={worksheet => setProject(current => ({ ...current, worksheet }))}/>
-                        : activeProcess === 'assessment'
-                            ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} value={project.assessment} request={project.assessmentRequest} onRequestChange={assessmentRequest => setProject(current => ({ ...current, assessmentRequest }))} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
-                            : activeProcess === 'grading'
-                                ? <OcrGradingStage assessment={project.assessment} submissions={project.submissions} onChange={updateSubmissions}/>
-                                : activeProcess === 'records'
-                                    ? <RecordsStage lessonPlan={project.lessonSnapshot.plan} assessment={project.assessment} submissions={project.submissions} records={project.records} onChange={updateRecords}/>
-                                    : <StagePlaceholder process={activeProcess}/>}
+        {activeProcess === 'lesson'
+            ? <div id="process-panel-lesson" role="tabpanel" aria-labelledby="process-tab-lesson"><LessonPlanWorkspace onDraftChange={onLessonDraftChange}/></div>
+            : <main className="workflow-stage-shell" aria-label={`${activeProcessLabel} 작업 영역`}>
+                <div id={`process-panel-${activeProcess}`} role="tabpanel" aria-labelledby={`process-tab-${activeProcess}`}>
+                    {prerequisite
+                        ? <WorkflowPrerequisite {...prerequisite} onAction={() => setProject(current => ({ ...current, activeProcess: prerequisite.target }))}/>
+                        : activeProcess === 'worksheet'
+                            ? <WorksheetStage lessonPlan={project.lessonSnapshot.plan} value={project.worksheet} onChange={worksheet => setProject(current => ({ ...current, worksheet }))}/>
+                            : activeProcess === 'assessment'
+                                ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} value={project.assessment} request={project.assessmentRequest} onRequestChange={assessmentRequest => setProject(current => ({ ...current, assessmentRequest }))} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
+                                : activeProcess === 'grading'
+                                    ? <OcrGradingStage assessment={project.assessment} submissions={project.submissions} onChange={updateSubmissions}/>
+                                    : activeProcess === 'records'
+                                        ? <RecordsStage lessonPlan={project.lessonSnapshot.plan} assessment={project.assessment} submissions={project.submissions} records={project.records} onChange={updateRecords}/>
+                                        : <StagePlaceholder process={activeProcess}/>
+                    }
+                </div>
                 {(activeProcess === 'grading' || activeProcess === 'records') && <aside className="privacy-panel" aria-label="학생 자료 보관 안내">
                     <p><strong>학생 자료 보호</strong><br/>PDF 원본은 저장하지 않습니다. 학생 이름·OCR·채점·세특은 현재 탭에만 임시 보관되어 <span className="nowrap">새로고침 후 복구되고</span>, <span className="nowrap">탭을 닫으면 사라집니다.</span></p>
                     {!confirmClear && <button type="button" className="danger-button" onClick={() => setConfirmClear(true)}>학생 자료 모두 지우기</button>}
                     {confirmClear && <div className="privacy-panel__confirm" role="alert"><span>학생 이름, OCR, 채점, 세특을 모두 삭제할까요?</span><button type="button" className="danger-button" onClick={clearStudentData}>학생 자료 삭제 확인</button><button type="button" className="secondary-button" onClick={() => setConfirmClear(false)}>취소</button></div>}
                 </aside>}
             </main>}
-            </section>
-        </div>
     </div>;
 }

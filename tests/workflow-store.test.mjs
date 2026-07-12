@@ -42,6 +42,19 @@ test('평가 요청의 세 질문과 생성 옵션을 현재 탭에 보존한다
     expect(loadWorkflow().assessmentRequest).toMatchObject({ teacherIntent: { desiredResult: '관찰 근거로 설명한다.' }, totalPoints: 60 });
 });
 
+test('교사가 확정한 총점·수준 수와 같은 수행평가 계약을 함께 보존한다', () => {
+    const project = createEmptyWorkflow();
+    project.assessmentRequest = { ...project.assessmentRequest, totalPoints: 60, levelCount: 5 };
+    project.assessment = { totalPoints: 60, rubric: { levels: Array.from({ length: 5 }, (_, index) => ({ id: `level-${index + 1}` })) } };
+
+    saveWorkflow(project);
+    const loaded = loadWorkflow();
+
+    expect(loaded.assessmentRequest).toMatchObject({ totalPoints: 60, levelCount: 5 });
+    expect(loaded.assessment.totalPoints).toBe(60);
+    expect(loaded.assessment.rubric.levels).toHaveLength(5);
+});
+
 test('migrates the earlier activeStage name and supplies empty collections', () => {
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 0, data: { activeStage: 'worksheet', worksheet: { title: '기존 학습지' } } }));
 

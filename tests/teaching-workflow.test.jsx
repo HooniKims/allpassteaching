@@ -13,7 +13,7 @@ test('opens every process but explains the missing prerequisite in context', asy
     await user.click(screen.getByRole('tab', { name: /학습지/ }));
     expect(screen.getByRole('heading', { name: '먼저 지도안을 완성해주세요' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '지도안으로 이동' })).toBeEnabled();
-    expect(screen.getByRole('region', { name: '학습지 작업 영역' })).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: '학습지 작업 영역' })).toBeInTheDocument();
 });
 
 test('restores the active process and can clear only student-derived data', async () => {

@@ -6,7 +6,8 @@ import { makeAssessment, makeWorksheet } from '../tests/fixtures/workflow.mjs';
 const grading = {
     criteria: [
         { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털이 있다', feedback: '관찰 근거를 구체적으로 기록했습니다.' },
-        { criterionId: 'criterion-2', score: 50, evidence: '뿌리는 물을 흡수한다', feedback: '구조와 기능을 근거로 연결했습니다.' },
+        { criterionId: 'criterion-2', score: 35, evidence: '뿌리는 물을 흡수한다', feedback: '구조와 기능을 근거로 연결했습니다.' },
+        { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '피드백 반영과 수정 이유를 확인했습니다.' },
     ],
     totalScore: 85,
     summary: '관찰한 사실을 기능 설명의 근거로 활용했습니다.',
@@ -16,11 +17,20 @@ const recordText = '관찰한 식물 기관의 특징을 구체적으로 기록�
 
 test.beforeEach(async ({ page }) => {
     const plan = makeGeneratedPlan();
-    await page.addInitScript(({ lessonPlan }) => {
+    const assessment = makeAssessment();
+    const assessmentRequest = {
+        assessmentName: assessment.assessmentName, teacherIntent: assessment.backwardDesign.teacherIntent,
+        totalPoints: assessment.totalPoints, levelCount: assessment.rubric.levels.length,
+        includeProcessInScore: assessment.scoring.includeProcessInScore, processWeightPercent: assessment.scoring.processWeightPercent,
+        outputTypes: assessment.generationSettings.outputTypes, answerTypes: assessment.generationSettings.answerTypes,
+        stages: assessment.generationSettings.stages, visualAnalysisRequired: assessment.visualAnalysisRequired,
+        includeStudentCover: assessment.includeStudentCover, additionalRequirements: assessment.generationSettings.additionalRequirements,
+    };
+    await page.addInitScript(({ lessonPlan, storedAssessmentRequest }) => {
         sessionStorage.clear();
         sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 4, maxReached: 4, basics: { schoolLevel: lessonPlan.schoolLevel, grade: lessonPlan.grade, subject: lessonPlan.subject, subjectMode: 'official', displaySubject: lessonPlan.subject, mappedSubjects: [lessonPlan.subject], mode: 'single', sessions: 1, intent: lessonPlan.title, studentNeeds: '', metadata: lessonPlan.metadata }, standards: lessonPlan.standards, instructionModel: { ...lessonPlan.instructionModel, stages: [] }, plan: lessonPlan, originalPlan: lessonPlan } }));
-        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 1, data: { activeProcess: 'lesson', lessonSnapshot: { plan: lessonPlan }, worksheet: null, assessment: null, submissions: [], records: [] } }));
-    }, { lessonPlan: plan });
+        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: { activeProcess: 'lesson', lessonSnapshot: { plan: lessonPlan }, worksheet: null, assessmentRequest: storedAssessmentRequest, assessment: null, submissions: [], records: [] } }));
+    }, { lessonPlan: plan, storedAssessmentRequest: assessmentRequest });
 });
 
 test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }) => {
@@ -41,6 +51,8 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await expect(page.getByLabel('학습지 제목')).toHaveValue('식물의 구조와 기능 탐구 학습지');
 
     await page.getByRole('tab', { name: /수행평가/ }).click();
+    await page.getByLabel('이 평가를 마친 학생이 무엇을 이해하고, 스스로 해낼 수 있길 바라나요?').fill('식물 기관의 구조와 기능을 관찰 근거로 설명한다.');
+    await page.getByLabel('평가 이름').fill('식물 기관 탐구 수행평가');
     await page.getByRole('button', { name: '수행평가 생성하기' }).click();
     await expect(page.getByLabel('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
     await page.getByRole('button', { name: '수행평가·루브릭 확인 완료' }).click();

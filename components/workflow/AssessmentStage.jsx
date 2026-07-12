@@ -9,7 +9,10 @@ import { AssessmentCoverEditor } from './AssessmentCoverEditor.jsx';
 
 async function downloadAssessment(kind, value) {
     const response = await fetch(`/api/export-workflow/${kind}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
-    if (!response.ok) throw new Error('PDF 저장에 실패했습니다.');
+    if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || 'PDF 저장에 실패했습니다.');
+    }
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -76,8 +79,8 @@ export function AssessmentStage({ lessonPlan, value, request, onRequestChange, o
             {!valueContractMatchesRequest && <p className="form-alert" role="alert">생성 뒤 평가 설정이 바뀌었습니다. 현재 교사 설정으로 수행평가를 다시 생성해주세요.</p>}
             {blockingIssues.length > 0 && <div className="form-alert" role="alert"><strong>성취기준 연결을 먼저 보완해주세요.</strong>{blockingIssues.map(item => <p key={item.id}>{item.message}</p>)}</div>}
             {value.backwardDesign.alignmentIssues.some(item => item.severity === 'warning' && !item.resolved) && <aside className="alignment-warning"><h2>정합성 확인 권장</h2>{value.backwardDesign.alignmentIssues.filter(item => item.severity === 'warning' && !item.resolved).map(item => <p key={item.id}>{item.message}<br/><strong>수정 방법:</strong> {item.repairAction}</p>)}</aside>}
-            <section className="document-section alignment-map"><h2>성취기준 ↔ 과제 ↔ 평가영역 연결표</h2>{value.backwardDesign.evidenceMap.map(mapping => <article key={mapping.standardCode}><strong>[{mapping.standardCode}]</strong><span>과제 증거: {mapping.taskEvidenceTypes.join(', ')}</span><span>평가영역: {mapping.criterionIds.map(id => value.rubric.criteria.find(item => item.id === id)?.name ?? id).join(', ')}</span><span>점수 근거: {mapping.scoreBasis}</span></article>)}<h3>수업 중 지원 계획</h3><ol>{value.backwardDesign.supportPlan.toSorted((a, b) => a.order - b.order).map(item => <li key={item.id}><strong>{item.title}</strong> — {item.teacherAction} / 확인 증거: {item.studentEvidence}</li>)}</ol></section>
-            <RubricEditor value={value} onChange={next => onChange({ ...next, approved: false })}/>
+            <section className="document-section alignment-map"><h2>성취기준 ↔ 과제 ↔ 평가영역 연결표</h2>{value.backwardDesign.evidenceMap.map(mapping => <article key={mapping.standardCode}><strong>[{mapping.standardCode}]</strong><span>과제 증거: {mapping.taskEvidenceTypes.join(', ')}</span><span>평가영역: {mapping.criterionIds.map(id => value.rubric.criteria.find(item => item.id === id)?.name ?? id).join(', ')}</span><span>증거 구분: {mapping.evidenceTypes.join(', ')}</span><span className="alignment-map__score-basis">점수 근거: {mapping.scoreBasis}</span></article>)}<h3>수업 중 지원 계획</h3><ol>{value.backwardDesign.supportPlan.toSorted((a, b) => a.order - b.order).map(item => <li key={item.id}><strong>{item.title}</strong> — {item.teacherAction} / 확인 증거: {item.studentEvidence}</li>)}</ol></section>
+            <RubricEditor value={value} request={request} onRequestChange={onRequestChange} onChange={next => onChange({ ...next, approved: false })}/>
             {value.includeStudentCover && request.includeStudentCover
                 ? <AssessmentCoverEditor value={value} onChange={next => onChange({ ...next, approved: false })}/>
                 : <p className="cover-disabled-notice" role="status">학생당 안내 표지를 사용하지 않습니다.</p>}

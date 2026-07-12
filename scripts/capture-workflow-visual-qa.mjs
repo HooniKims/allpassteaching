@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { makeGeneratedPlan } from '../tests/fixtures/lesson-plan.mjs';
 import { makeAssessment, makeWorksheet } from '../tests/fixtures/workflow.mjs';
 import { sourceHash } from '../lib/source-hash.js';
@@ -15,10 +16,25 @@ const lessonPlan = makeGeneratedPlan();
 const lessonSourceHash = sourceHash(lessonPlan);
 const worksheet = { ...makeWorksheet(), sourceHash: lessonSourceHash };
 const assessment = { ...makeAssessment(), sourceHash: lessonSourceHash, approved: true };
+const assessmentRequest = {
+    assessmentName: assessment.assessmentName,
+    teacherIntent: assessment.backwardDesign.teacherIntent,
+    totalPoints: assessment.totalPoints,
+    levelCount: assessment.rubric.levels.length,
+    includeProcessInScore: assessment.scoring.includeProcessInScore,
+    processWeightPercent: assessment.scoring.processWeightPercent,
+    outputTypes: assessment.generationSettings.outputTypes,
+    answerTypes: assessment.generationSettings.answerTypes,
+    stages: assessment.generationSettings.stages,
+    visualAnalysisRequired: assessment.visualAnalysisRequired,
+    includeStudentCover: assessment.includeStudentCover,
+    additionalRequirements: assessment.generationSettings.additionalRequirements,
+};
 const grading = {
     criteria: [
         { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털이 있다', feedback: '관찰 근거가 구체적입니다.' },
-        { criterionId: 'criterion-2', score: 50, evidence: '뿌리는 물을 흡수한다', feedback: '구조와 기능을 연결했습니다.' },
+        { criterionId: 'criterion-2', score: 35, evidence: '뿌리는 물을 흡수한다', feedback: '구조와 기능을 연결했습니다.' },
+        { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '수정 이유를 구체적으로 적었습니다.' },
     ], totalScore: 85, summary: '관찰 사실을 기능 설명에 활용했습니다.', nextSteps: '다른 기관도 같은 방식으로 설명해보세요.',
 };
 const submissions = ['김학생', '이학생'].map((studentName, index) => ({
@@ -28,7 +44,7 @@ const submissions = ['김학생', '이학생'].map((studentName, index) => ({
 }));
 const recordText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 가는 털과 물 흡수 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러났으며 다른 기관에도 같은 설명 방식을 적용하려는 학습 방향을 보임.';
 const records = submissions.map(submission => ({ submissionId: submission.id, studentName: submission.studentName, sourceHash: sourceHash({ assessment, grading: submission.grading }), status: 'done', text: recordText, approved: true }));
-const workflow = { activeProcess: 'lesson', lessonSnapshot: { plan: lessonPlan }, worksheet: null, assessment: null, submissions: [], records: [] };
+const workflow = { activeProcess: 'lesson', lessonSnapshot: { plan: lessonPlan }, worksheet: null, assessmentRequest, assessment: null, submissions: [], records: [] };
 const lessonDraft = { step: 4, maxReached: 4, basics: { schoolLevel: lessonPlan.schoolLevel, grade: lessonPlan.grade, subject: lessonPlan.subject, subjectMode: 'official', displaySubject: lessonPlan.subject, mappedSubjects: [lessonPlan.subject], mode: 'single', sessions: 1, intent: lessonPlan.title, studentNeeds: '', metadata: lessonPlan.metadata }, standards: lessonPlan.standards, instructionModel: lessonPlan.instructionModel, plan: lessonPlan, originalPlan: lessonPlan };
 
 const browser = await chromium.launch();
@@ -42,7 +58,7 @@ for (const viewport of viewports) {
     page.on('pageerror', error => consoleErrors.push(error.message));
     await page.addInitScript(({ storedWorkflow, storedLesson }) => {
         sessionStorage.clear();
-        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 1, data: storedWorkflow }));
+        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: storedWorkflow }));
         sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: storedLesson }));
     }, { storedWorkflow: workflow, storedLesson: lessonDraft });
     await page.route('**/api/generate-worksheet', route => route.fulfill({ json: { worksheet } }));
@@ -82,6 +98,9 @@ for (const viewport of viewports) {
         await page.waitForTimeout(120);
         const artifactPath = path.join(outputDirectory, `${viewport.name}-${name}.png`);
         await page.screenshot({ path: artifactPath, fullPage: true });
+        const axeViolations = process === 'assessment'
+            ? (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()).violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => ({ target: node.target, html: node.html })) }))
+            : [];
         const metrics = await page.evaluate(() => {
             const visibleControls = [...document.querySelectorAll('button,input,select,textarea')].filter(element => {
                 const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
@@ -103,7 +122,7 @@ for (const viewport of viewports) {
                 }).map(element => element.getAttribute('aria-label') || element.textContent.trim() || element.tagName),
             };
         });
-        evidence.push({ viewport, process: name, artifactPath, metrics, consoleErrors: [...consoleErrors] });
+        evidence.push({ viewport, process: name, artifactPath, metrics, axeViolations, consoleErrors: [...consoleErrors] });
     };
     await capture('records', 'records-review');
     const recordApprovalButtons = page.getByRole('button', { name: '교사 확인 완료' });
@@ -130,4 +149,4 @@ for (const viewport of viewports) {
 }
 await browser.close();
 await writeFile(path.join(outputDirectory, 'evidence.json'), JSON.stringify({ capturedAt: new Date().toISOString(), baseURL, pageCount: evidence.length, evidence }, null, 2));
-console.log(JSON.stringify({ pageCount: evidence.length, outputDirectory, failures: evidence.filter(item => item.metrics.documentOverflow > 1 || item.metrics.clippedControls.length || item.consoleErrors.length).map(item => ({ viewport: item.viewport.name, process: item.process, metrics: item.metrics, consoleErrors: item.consoleErrors })) }, null, 2));
+console.log(JSON.stringify({ pageCount: evidence.length, outputDirectory, failures: evidence.filter(item => item.metrics.documentOverflow > 1 || item.metrics.clippedControls.length || item.axeViolations.length || item.consoleErrors.length).map(item => ({ viewport: item.viewport.name, process: item.process, metrics: item.metrics, axeViolations: item.axeViolations, consoleErrors: item.consoleErrors })) }, null, 2));
