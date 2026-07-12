@@ -23,13 +23,16 @@ test.beforeEach(async ({ page }) => {
 
 test('빠른 작업은 숨기고 느린 불투명 작업·취소를 정직하게 표시한다', async ({ page }, testInfo) => {
     let call = 0;
+    let releaseSlowRoute;
+    const slowRouteReleased = new Promise(resolve => { releaseSlowRoute = resolve; });
     const consoleErrors = [];
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     await page.route('**/api/generate-plan', async route => {
-        call += 1;
-        const delay = call === 1 ? 50 : call === 5 ? 7_000 : 3_000;
+        const currentCall = ++call;
+        const delay = currentCall === 1 ? 50 : currentCall === 5 ? 7_000 : 3_000;
         await new Promise(resolve => setTimeout(resolve, delay));
-        await route.fulfill({ json: { plan: { ...makeGeneratedPlan(), title: `진행 검증 지도안 ${call}`, standards: [standard] } } });
+        if (currentCall === 5) releaseSlowRoute();
+        await route.fulfill({ json: { plan: { ...makeGeneratedPlan(), title: `진행 검증 지도안 ${currentCall}`, standards: [standard] } } });
     });
     await page.goto('/');
 
@@ -61,10 +64,18 @@ test('빠른 작업은 숨기고 느린 불투명 작업·취소를 정직하게
     const cancelDialog = page.getByRole('dialog', { name: '수업 지도안 생성' });
     await expect(cancelDialog).toBeVisible();
     await expect(cancelDialog.locator('.operation-progress--indeterminate > span')).toHaveCSS('animation-name', 'none');
+    await page.keyboard.press('Escape');
+    await expect(cancelDialog).toBeVisible();
+    await expect(page.getByText(/작업을 취소했습니다/)).toHaveCount(0);
     await expect(cancelDialog.getByRole('button', { name: '작업 취소' })).toBeVisible({ timeout: 6_000 });
-    await cancelDialog.getByRole('button', { name: '작업 취소' }).click();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
     await expect(cancelDialog).toBeHidden();
     await expect(page.getByText(/작업을 취소했습니다/)).toBeVisible();
+    await expect(page.getByText(/작업을 취소했습니다/)).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '지도안 다시 생성' })).toBeFocused();
+    await page.screenshot({ path: `/Volumes/exDisk/vibecoding project/19.allpassteaching/.omo/evidence/task-12-escape-fix-${testInfo.project.name}.png`, fullPage: true });
+    await slowRouteReleased;
     await expect(page.getByLabel('1차시 수업 제목')).toHaveValue('진행 검증 지도안 4');
     expect(consoleErrors).toEqual([]);
 });
@@ -83,10 +94,15 @@ test('두 학생 OCR은 실제 완료 수를 표시하고 취소 뒤 실패 학�
         } }));
     }, { plan: lessonPlan, storedAssessment: assessment, roster: students });
     let ocrCall = 0;
+    let releaseSecondOriginal;
+    const secondOriginalReleased = new Promise(resolve => { releaseSecondOriginal = resolve; });
     await page.route('**/api/ocr', async route => {
         const currentCall = ++ocrCall;
         if (currentCall === 1) await new Promise(resolve => setTimeout(resolve, 1_300));
-        if (currentCall === 2) await new Promise(resolve => setTimeout(resolve, 7_000));
+        if (currentCall === 2) {
+            await new Promise(resolve => setTimeout(resolve, 7_000));
+            releaseSecondOriginal();
+        }
         await route.fulfill({ json: {
             extractedText: `학생 ${currentCall}의 관찰 근거와 구조·기능 설명 및 수정 과정이 충분히 기록된 답안입니다.`,
             elements: [], elementsTruncated: false, visualAnalysisStatus: 'not_requested', autoScoreAllowed: true,
@@ -108,15 +124,21 @@ test('두 학생 OCR은 실제 완료 수를 표시하고 취소 뒤 실패 학�
     await expect(dialog.getByRole('progressbar', { name: '실제 진행률' })).toHaveAttribute('aria-valuenow', '50');
     await expect(dialog).toContainText('1/2명 완료 · 성공 1명 · 실패 0명 · 대기 1명');
     await expect(dialog).toContainText('50%');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
     for (const width of [375, 768, 1280]) {
         await page.setViewportSize({ width, height: 900 });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
         await page.screenshot({ path: `/Volumes/exDisk/vibecoding project/19.allpassteaching/.omo/evidence/task-12-progress-batch-${width}.png` });
     }
     await expect(dialog.getByRole('button', { name: '작업 취소' })).toBeVisible({ timeout: 6_000 });
-    await dialog.getByRole('button', { name: '작업 취소' }).click();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
     await expect(page.getByLabel('OCR 추출 원문')).toHaveCount(1);
     await page.getByRole('button', { name: '이학생 OCR 다시 시도' }).click();
     await expect(page.getByLabel('OCR 추출 원문')).toHaveCount(2);
+    await secondOriginalReleased;
+    await expect(page.getByLabel('OCR 추출 원문').nth(1)).toHaveValue(/학생 3의 관찰 근거/);
     expect(ocrCall).toBe(3);
 });

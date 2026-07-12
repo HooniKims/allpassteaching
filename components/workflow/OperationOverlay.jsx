@@ -4,21 +4,19 @@ import { getOperationTiming } from '@/lib/operation-state.js';
 
 const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function OperationOverlay({ operation, now, onCancel, returnFocus }) {
+export function OperationOverlay({ operation, now, onCancel }) {
     const panelRef = useRef(null);
     useEffect(() => {
         panelRef.current?.focus();
-        return () => {
-            const restore = () => {
-                if (returnFocus instanceof HTMLElement && document.contains(returnFocus)) returnFocus.focus();
-            };
-            restore();
-            setTimeout(restore, 0);
-        };
-    }, [returnFocus]);
+    }, []);
     const timing = getOperationTiming(operation, now);
     const cancelAvailable = operation.cancelable && now - operation.startedAt >= 5_000;
-    const containFocus = event => {
+    const handleDialogKeyDown = event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            if (cancelAvailable) onCancel();
+            return;
+        }
         if (event.key !== 'Tab') return;
         const focusable = [...panelRef.current.querySelectorAll(focusableSelector)];
         if (!focusable.length) { event.preventDefault(); panelRef.current.focus(); return; }
@@ -29,7 +27,7 @@ export function OperationOverlay({ operation, now, onCancel, returnFocus }) {
         if (!event.shiftKey && (active === last || active === panelRef.current || !panelRef.current.contains(active))) { event.preventDefault(); first.focus(); }
     };
     return <div className="operation-overlay" data-testid="operation-overlay">
-        <section className="operation-overlay__panel" role="dialog" aria-modal="true" aria-labelledby="operation-title" ref={panelRef} tabIndex="-1" onKeyDown={containFocus}>
+        <section className="operation-overlay__panel" role="dialog" aria-modal="true" aria-labelledby="operation-title" ref={panelRef} tabIndex="-1" onKeyDown={handleDialogKeyDown}>
             <p className="eyebrow">작업 진행 중</p>
             <h2 id="operation-title">{operation.label}</h2>
             <div className="operation-overlay__status" role="status" aria-label="작업 진행 상태" aria-live="polite">

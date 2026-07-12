@@ -31,7 +31,10 @@ export function OperationProvider({ children }) {
     const activeRef = useRef(null);
     const operationRef = useRef(null);
     const durationSessionRef = useRef({});
+    const focusTimerRef = useRef(null);
     const noticeTimerRef = useRef(null);
+    const returnFocusRef = useRef(null);
+    const wasVisibleRef = useRef(false);
 
     const publish = useCallback(next => {
         operationRef.current = next;
@@ -43,6 +46,7 @@ export function OperationProvider({ children }) {
         noticeTimerRef.current = setTimeout(() => setNotice(null), 7_000);
     }, []);
     useEffect(() => () => {
+        clearTimeout(focusTimerRef.current);
         clearTimeout(noticeTimerRef.current);
         const active = activeRef.current;
         if (!active) return;
@@ -51,6 +55,17 @@ export function OperationProvider({ children }) {
         active.controller.abort();
         activeRef.current = null;
     }, []);
+    useEffect(() => {
+        if (wasVisibleRef.current && !visible) {
+            const target = returnFocusRef.current;
+            clearTimeout(focusTimerRef.current);
+            focusTimerRef.current = setTimeout(() => {
+                focusTimerRef.current = null;
+                if (target instanceof HTMLElement && document.contains(target)) target.focus();
+            }, 0);
+        }
+        wasVisibleRef.current = visible;
+    }, [visible]);
 
     const runOperation = useCallback(async (config, task) => {
         if (activeRef.current) throw new OperationBusyError();
@@ -61,6 +76,7 @@ export function OperationProvider({ children }) {
         const token = Symbol(config.kind);
         const active = { controller, token, cancelled: false, delayTimer: null, returnFocus: document.activeElement };
         activeRef.current = active;
+        returnFocusRef.current = active.returnFocus;
         setBusy(true);
         publish(createOperation({ ...config, startedAt, estimate }));
         setNow(startedAt);
@@ -158,7 +174,7 @@ export function OperationProvider({ children }) {
     return <OperationContext.Provider value={value}>
         <div className={visible ? 'operation-host operation-host--busy' : 'operation-host'} aria-busy={visible} inert={visible ? true : undefined}>{children}</div>
         {visible && operation?.status === 'running' && (
-            <OperationOverlay operation={operation} now={now} onCancel={cancel} returnFocus={activeRef.current?.returnFocus}/>
+            <OperationOverlay operation={operation} now={now} onCancel={cancel}/>
         )}
         {notice && <div className={`operation-notice operation-notice--${notice.kind}`} role="status" aria-live="polite"><span>{notice.message}</span>{notice.retry && <button type="button" className="secondary-button" onClick={() => { const retry = notice.retry; setNotice(null); retry(); }}>{notice.retryLabel}</button>}</div>}
     </OperationContext.Provider>;

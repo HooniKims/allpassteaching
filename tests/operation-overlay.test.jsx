@@ -51,10 +51,27 @@ test('Given an active task When the provider unmounts Then every pending display
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
     // When
-    view.unmount();
+    await act(async () => view.unmount());
 
     // Then
     expect(vi.getTimerCount()).toBe(0);
+});
+
+test('Given the overlay is visible When the provider unmounts Then cleanup does not add a focus restoration timer', async () => {
+    // Given
+    vi.useFakeTimers();
+    const task = deferred();
+    const view = render(<OperationProvider><SingleHarness task={() => task.promise}/></OperationProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '분석 시작' }));
+    await act(async () => vi.advanceTimersByTime(1_000));
+    expect(screen.getByTestId('operation-overlay')).toBeInTheDocument();
+    const timerCountBeforeUnmount = vi.getTimerCount();
+
+    // When
+    await act(async () => view.unmount());
+
+    // Then
+    expect(vi.getTimerCount()).toBe(timerCountBeforeUnmount - 1);
 });
 
 test('Given an opaque request When it lasts one second Then phase and approximate ETA are announced without a fake percent', async () => {
@@ -93,9 +110,63 @@ test('Given a cancellable request When five seconds pass and cancel is chosen Th
 
     // When
     fireEvent.click(screen.getByRole('button', { name: '작업 취소' }));
+    await act(async () => vi.advanceTimersByTime(0));
 
     // Then
     expect(capturedSignal.aborted).toBe(true);
+    expect(screen.queryByTestId('operation-overlay')).not.toBeInTheDocument();
+    expect(screen.getByText(/작업을 취소했습니다/)).toBeInTheDocument();
+    expect(startButton).toHaveFocus();
+    await act(async () => task.resolve('늦은 결과'));
+    expect(screen.queryByText('늦은 결과')).not.toBeInTheDocument();
+});
+
+test('Given cancellation is still guarded When Escape is pressed Then the running operation stays visible and active', async () => {
+    // Given
+    vi.useFakeTimers();
+    const task = deferred();
+    let capturedSignal;
+    render(<OperationProvider><SingleHarness task={() => task.promise} onSignal={signal => { capturedSignal = signal; }}/></OperationProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '분석 시작' }));
+    await act(async () => vi.advanceTimersByTime(1_000));
+    const dialog = screen.getByRole('dialog', { name: '학생 답안 분석' });
+
+    // When
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    // Then
+    expect(capturedSignal.aborted).toBe(false);
+    expect(dialog).toBeInTheDocument();
+    expect(screen.queryByText(/작업을 취소했습니다/)).not.toBeInTheDocument();
+    await act(async () => task.resolve('완료됨'));
+});
+
+test('Given cancellation is available When Escape is pressed repeatedly Then the button cancellation path aborts once, restores focus, and ignores late completion', async () => {
+    // Given
+    vi.useFakeTimers();
+    const task = deferred();
+    let capturedSignal;
+    let abortCount = 0;
+    render(<OperationProvider><SingleHarness task={() => task.promise} onSignal={signal => {
+        capturedSignal = signal;
+        signal.addEventListener('abort', () => { abortCount += 1; });
+    }}/></OperationProvider>);
+    const startButton = screen.getByRole('button', { name: '분석 시작' });
+    startButton.focus();
+    fireEvent.click(startButton);
+    await act(async () => vi.advanceTimersByTime(1_000));
+    await act(async () => vi.advanceTimersByTime(4_000));
+    const dialog = screen.getByRole('dialog', { name: '학생 답안 분석' });
+    expect(screen.getByRole('button', { name: '작업 취소' })).toBeVisible();
+
+    // When
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await act(async () => vi.advanceTimersByTime(0));
+
+    // Then
+    expect(capturedSignal.aborted).toBe(true);
+    expect(abortCount).toBe(1);
     expect(screen.queryByTestId('operation-overlay')).not.toBeInTheDocument();
     expect(screen.getByText(/작업을 취소했습니다/)).toBeInTheDocument();
     expect(startButton).toHaveFocus();
