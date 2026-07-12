@@ -5,8 +5,12 @@ import { ProcessTabs } from '@/components/workflow/ProcessTabs.jsx';
 
 const statuses = { lesson: 'complete', worksheet: 'review', assessment: 'prerequisite', grading: 'prerequisite', records: 'prerequisite' };
 const originalScrollIntoView = Element.prototype.scrollIntoView;
+const originalScrollTo = Element.prototype.scrollTo;
 
-afterEach(() => { Element.prototype.scrollIntoView = originalScrollIntoView; });
+afterEach(() => {
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+    Element.prototype.scrollTo = originalScrollTo;
+});
 
 test('renders all five processes with text statuses and allows blocked tabs to be selected', async () => {
     const user = userEvent.setup();
@@ -35,11 +39,14 @@ test('moves tab focus with arrow keys', async () => {
     expect(lessonTab).toHaveFocus();
 });
 
-test('keeps the active process visible inside the horizontally scrolling mobile rail', () => {
+test('keeps the active process visible without changing the keyboard navigation starting point', () => {
     const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
+    Element.prototype.scrollTo = scrollTo;
 
     render(<ProcessTabs activeProcess="grading" statuses={statuses} onChange={() => {}}/>);
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center' });
+    expect(scrollTo).toHaveBeenCalled();
+    expect(scrollIntoView).not.toHaveBeenCalled();
 });

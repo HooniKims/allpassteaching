@@ -61,6 +61,30 @@ test('version 2 allowlist round-trips every workflow subtree the current app con
     expect(WORKFLOW_VERSION).toBe(2);
 });
 
+test('worksheet authoring metadata and all ten question variants survive the private workflow allowlist', () => {
+    const project = fullWorkflow();
+    const questionTypes = [
+        'blank', 'short-answer', 'descriptive', 'essay', 'true-false',
+        'multiple-choice-5', 'table-chart', 'drawing-diagram', 'experiment-record', 'self-assessment',
+    ];
+    project.worksheet.generationRequest = { additionalRequirements: '표와 그림 문항을 포함하세요.', questionTypes };
+    project.worksheet.document.sections[0].questions = questionTypes.map((type, index) => {
+        const common = { id: `q-${index + 1}`, type, prompt: `${type} 문항`, standardCodes: ['6과11-02'] };
+        if (type === 'multiple-choice-5') return { ...common, choices: ['①', '②', '③', '④', '⑤'], responseLines: 1 };
+        if (type === 'table-chart' || type === 'drawing-diagram') return { ...common, responseAreaHeight: 180 };
+        return { ...common, responseLines: 4 };
+    });
+    project.worksheet.document.sections = [project.worksheet.document.sections[0]];
+    project.worksheet.teacherKey.answers = project.worksheet.document.sections[0].questions.map(question => ({
+        questionId: question.id,
+        answer: `${question.type} 예시 답안`,
+    }));
+
+    saveWorkflow(project);
+
+    expect(loadWorkflow()?.worksheet).toEqual(project.worksheet);
+});
+
 test('allowlisted ordinary ASCII and base64-like educational text round-trips exactly', () => {
     const project = fullWorkflow();
     project.assessment.task.title = 'ChristopherRobin';

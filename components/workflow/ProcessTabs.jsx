@@ -14,7 +14,11 @@ export function ProcessTabs({ activeProcess, statuses, onChange }) {
     const tabsRef = useRef([]);
     useEffect(() => {
         const activeIndex = teachingProcesses.findIndex(process => process.id === activeProcess);
-        tabsRef.current[activeIndex]?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+        const activeTab = tabsRef.current[activeIndex];
+        const rail = activeTab?.parentElement;
+        if (!activeTab || !rail?.scrollTo) return;
+        const centeredLeft = activeTab.offsetLeft - (rail.clientWidth - activeTab.offsetWidth) / 2;
+        rail.scrollTo({ left: Math.max(0, centeredLeft), behavior: 'auto' });
     }, [activeProcess]);
     const moveFocus = (event, index) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
