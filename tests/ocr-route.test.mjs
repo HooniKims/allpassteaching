@@ -42,22 +42,40 @@ test('returns only normalized OCR fields', async () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store');
 });
 
-test('accepts boolean-like visual analysis and safely gates missing Enhanced capability', async () => {
+test('accepts the exact true visual-analysis flag and returns safe capability and review state', async () => {
     process.env.UPSTAGE_API_KEY = 'test-key';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ content: { text: '표준 참고' }, usage: { pages: 1 }, elements: [] })));
 
-    const response = await POST(request(new File(['%PDF-test'], '합성.pdf', { type: 'application/pdf' }), 'on'));
+    const response = await POST(request(new File(['%PDF-test'], '합성.pdf', { type: 'application/pdf' }), 'true'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({ visualAnalysisStatus: 'enhanced_unavailable', reviewState: 'teacher_review', autoScoreAllowed: false });
+    expect(body).toMatchObject({ visualAnalysisStatus: 'enhanced_unavailable', requiresVisualReview: true, reviewState: 'teacher_review', autoScoreAllowed: false });
     expect(fetch.mock.calls[0][1].body.get('mode')).toBe('standard');
 });
 
-test('rejects invalid visual analysis flags without calling Upstage', async () => {
+test.each([
+    ['omitted', undefined],
+    ['explicit false', 'false'],
+])('treats %s visual-analysis mode deterministically as not requested', async (_label, visualAnalysis) => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ content: { text: '표준 OCR 결과' }, usage: { pages: 1 }, elements: [] })));
+
+    const response = await POST(request(new File(['%PDF-test'], '서술형.pdf', { type: 'application/pdf' }), visualAnalysis));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ visualAnalysisStatus: 'not_requested', requiresVisualReview: false, reviewState: 'ready_for_rubric_review', autoScoreAllowed: true });
+    expect(fetch.mock.calls[0][1].body.get('mode')).toBe('standard');
+});
+
+test.each([
+    ['unknown text', 'sometimes'],
+    ['file value', new File(['true'], 'flag.txt', { type: 'text/plain' })],
+])('rejects invalid visual analysis flags supplied as %s without calling Upstage', async (_label, visualAnalysis) => {
     vi.stubGlobal('fetch', vi.fn());
 
-    const response = await POST(request(new File(['%PDF-test'], '합성.pdf', { type: 'application/pdf' }), 'sometimes'));
+    const response = await POST(request(new File(['%PDF-test'], '합성.pdf', { type: 'application/pdf' }), visualAnalysis));
 
     expect(response.status).toBe(400);
     expect(response.headers.get('Cache-Control')).toBe('no-store');

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { runWithConcurrency } from '@/lib/batch-queue';
 import { gradingContentIsValid, gradingIsCurrent, gradingSourceHash } from '@/lib/workflow-lineage';
 import { GradingEditor } from './GradingEditor.jsx';
@@ -14,6 +14,9 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [fileBusy, setFileBusy] = useState(false);
+    const visualAnalysisRequired = assessment?.visualAnalysisRequired === true;
+    const visualAnalysisRequiredRef = useRef(visualAnalysisRequired);
+    useLayoutEffect(() => { visualAnalysisRequiredRef.current = visualAnalysisRequired; }, [visualAnalysisRequired]);
     useEffect(() => {
         const detached = submissions.filter(item => item.originalAttached !== false && !files.has(item.id) && !item.file);
         if (!detached.length) return;
@@ -29,9 +32,11 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
             try {
                 const answerFile = files.get(item.id)?.answerFile ?? item.file;
                 if (!answerFile) throw new Error('원본 PDF를 다시 연결해주세요.');
-                const form = new FormData(); form.set('document', answerFile, answerFile.name);
+                const requestedVisualAnalysis = visualAnalysisRequiredRef.current;
+                const form = new FormData(); form.set('document', answerFile, answerFile.name); form.set('visualAnalysis', String(requestedVisualAnalysis));
                 const response = await fetch('/api/ocr', { method: 'POST', body: form });
                 const body = await response.json().catch(() => ({}));
+                if (visualAnalysisRequiredRef.current !== requestedVisualAnalysis) throw new Error('수행평가의 시각 분석 설정이 변경되었습니다. 현재 설정으로 OCR을 다시 시도해주세요.');
                 if (!response.ok) throw new Error(body.message || 'OCR 처리에 실패했습니다.');
                 apply(item.id, { ...body, status: 'extracted', error: '', file: undefined, grading: null, approved: false });
             } catch (error) { apply(item.id, { status: 'ocr_error', error: error.message || 'OCR 처리에 실패했습니다.' }); }

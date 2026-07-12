@@ -10,9 +10,9 @@ import { gradingSourceHash } from '@/lib/workflow-lineage';
 
 afterEach(() => vi.restoreAllMocks());
 
-function Harness({ initial = [] }) {
+function Harness({ initial = [], assessment = makeAssessment() }) {
     const [submissions, setSubmissions] = useState(initial);
-    return <SubmissionFileProvider><OcrGradingStage assessment={makeAssessment()} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
+    return <SubmissionFileProvider><OcrGradingStage assessment={assessment} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
 }
 
 function RosterHarness() {
@@ -77,6 +77,62 @@ test('keeps successful OCR when another student fails', async () => {
     expect(await screen.findByDisplayValue('첫 학생 관찰 결과는 충분히 구체적으로 기록되었습니다.')).toBeInTheDocument();
     expect(await screen.findByText('읽을 수 없는 PDF')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '이학생 OCR 다시 시도' })).toBeEnabled();
+});
+
+test('sends the approved visual-analysis requirement for every batch and retry OCR request', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(Response.json({ message: '읽을 수 없는 PDF' }, { status: 422 }))));
+    const assessment = { ...makeAssessment(), approved: true, visualAnalysisRequired: true };
+    const initial = [
+        { id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF-a'], '김학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' },
+        { id: 'b', studentName: '이학생', fileName: '이학생.pdf', file: new File(['%PDF-b'], '이학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' },
+    ];
+    render(<Harness initial={initial} assessment={assessment}/>);
+
+    await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await user.click(await screen.findByRole('button', { name: '김학생 OCR 다시 시도' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+
+    expect(fetch.mock.calls.map(([, options]) => options.body.get('visualAnalysis'))).toEqual(['true', 'true', 'true']);
+});
+
+test('sends an explicit false visual-analysis requirement for nonvisual assessments', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ extractedText: '관찰 결과를 충분히 기록한 서술형 답안입니다.', ocrModel: 'document-parse', pageCount: 1 })));
+    const assessment = { ...makeAssessment(), approved: true, visualAnalysisRequired: false };
+    const initial = [{ id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF-a'], '김학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' }];
+    render(<Harness initial={initial} assessment={assessment}/>);
+
+    await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+
+    expect(fetch.mock.calls[0][1].body.get('visualAnalysis')).toBe('false');
+});
+
+test('discards an OCR response when the current assessment changes to a different visual mode', async () => {
+    const user = userEvent.setup();
+    let resolveFirst;
+    vi.stubGlobal('fetch', vi.fn()
+        .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
+        .mockResolvedValueOnce(Response.json({ extractedText: '현재 시각 분석 설정으로 다시 추출한 답안 내용입니다.', ocrModel: 'document-parse', pageCount: 1, visualAnalysisStatus: 'enhanced_used', reviewState: 'teacher_review', autoScoreAllowed: false })));
+    const initial = [{ id: 'a', studentName: '김학생', fileName: '김학생.pdf', file: new File(['%PDF-a'], '김학생.pdf', { type: 'application/pdf' }), originalAttached: true, status: 'pending', extractedText: '' }];
+    const nonvisual = { ...makeAssessment(), approved: true, visualAnalysisRequired: false };
+    const visual = { ...makeAssessment(), approved: true, visualAnalysisRequired: true };
+    const { rerender } = render(<Harness initial={initial} assessment={nonvisual}/>);
+
+    await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(fetch.mock.calls[0][1].body.get('visualAnalysis')).toBe('false');
+    rerender(<Harness initial={initial} assessment={visual}/>);
+    resolveFirst(Response.json({ extractedText: '이전 설정으로 도착한 OCR 결과는 사용하지 않습니다.', ocrModel: 'document-parse', pageCount: 1, visualAnalysisStatus: 'not_requested', reviewState: 'ready_for_rubric_review', autoScoreAllowed: true }));
+
+    expect(await screen.findByText(/수행평가의 시각 분석 설정이 변경/)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('이전 설정으로 도착한 OCR 결과는 사용하지 않습니다.')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '김학생 OCR 다시 시도' }));
+    expect(await screen.findByDisplayValue('현재 시각 분석 설정으로 다시 추출한 답안 내용입니다.')).toBeInTheDocument();
+    expect(fetch.mock.calls[1][1].body.get('visualAnalysis')).toBe('true');
 });
 
 test('keeps both grading results when two student requests finish in reverse order', async () => {

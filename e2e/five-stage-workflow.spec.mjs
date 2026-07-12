@@ -20,6 +20,10 @@ const studentRoster = [
     { id: 'student-b', grade: '2', className: '3', number: 2, name: '이학생' },
 ];
 
+function makeVisualAssessment() {
+    return { ...makeAssessment(), visualAnalysisRequired: true };
+}
+
 async function combinedSubmissionPdf() {
     const document = await PDFDocument.create();
     for (let index = 0; index < 4; index += 1) document.addPage([300, 400]);
@@ -35,9 +39,20 @@ function uploadedPdf(request) {
     return body.subarray(start, eof + 5);
 }
 
+function uploadedFormValue(request, name) {
+    const body = request.postDataBuffer().toString('latin1');
+    const marker = `name="${name}"\r\n\r\n`;
+    const start = body.indexOf(marker);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const valueStart = start + marker.length;
+    const end = body.indexOf('\r\n', valueStart);
+    expect(end).toBeGreaterThan(valueStart);
+    return body.slice(valueStart, end);
+}
+
 test.beforeEach(async ({ page }) => {
     const plan = makeGeneratedPlan();
-    const assessment = makeAssessment();
+    const assessment = makeVisualAssessment();
     const assessmentRequest = {
         assessmentName: assessment.assessmentName, teacherIntent: assessment.backwardDesign.teacherIntent,
         totalPoints: assessment.totalPoints, levelCount: assessment.rubric.levels.length,
@@ -56,10 +71,12 @@ test.beforeEach(async ({ page }) => {
 test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }) => {
     let ocrCalls = 0;
     const uploadedPageCounts = [];
+    const uploadedVisualModes = [];
     await page.route('**/api/generate-worksheet', route => route.fulfill({ json: { worksheet: makeWorksheet() } }));
-    await page.route('**/api/generate-assessment', route => route.fulfill({ json: { assessment: makeAssessment() } }));
+    await page.route('**/api/generate-assessment', route => route.fulfill({ json: { assessment: makeVisualAssessment() } }));
     await page.route('**/api/ocr', async route => {
         uploadedPageCounts.push((await PDFDocument.load(uploadedPdf(route.request()))).getPageCount());
+        uploadedVisualModes.push(uploadedFormValue(route.request(), 'visualAnalysis'));
         ocrCalls += 1;
         if (ocrCalls === 2) return route.fulfill({ status: 422, json: { message: '첫 시도에서 문서를 읽지 못했습니다.' } });
         return route.fulfill({ json: { extractedText: '관찰 결과 뿌리에 가는 털이 있다. 뿌리는 물을 흡수한다. 줄기는 물질을 운반한다.', ocrModel: 'document-parse', pageCount: 1 } });
@@ -90,6 +107,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.getByRole('button', { name: /OCR 다시 시도/ }).click();
     await expect(page.getByLabel('OCR 추출 원문')).toHaveCount(2);
     expect(uploadedPageCounts).toEqual([1, 1, 1]);
+    expect(uploadedVisualModes).toEqual(['true', 'true', 'true']);
 
     for (const studentName of ['김학생', '이학생']) {
         await page.getByRole('button', { name: `${studentName} 채점하기` }).click();
