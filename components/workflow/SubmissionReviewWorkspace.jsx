@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useRef, useState } from 'react';
 import { evidenceCoordinatesUsable } from '@/lib/evidence-coordinates.js';
+import { gradingCanBeFinalized } from '@/lib/workflow-lineage.js';
 import { GradingEditor } from './GradingEditor.jsx';
 import { PdfEvidenceViewer } from './PdfEvidenceViewer.jsx';
 
@@ -11,6 +12,16 @@ const TABS = [
 ];
 const VISUAL_CATEGORIES = new Set(['equation', 'chart', 'figure']);
 const CATEGORY_LABELS = { equation: '수식', chart: '도표', figure: '그림' };
+
+function approvalFingerprint(submission) {
+    return JSON.stringify({
+        grading: submission.grading,
+        originalReviewedAt: submission.originalReviewedAt,
+        reviewedOriginalRevision: submission.reviewedOriginalRevision,
+        originalRevision: submission.originalRevision,
+        confirmedElementIds: submission.confirmedElementIds,
+    });
+}
 
 function elementNeedsReview(element) {
     return VISUAL_CATEGORIES.has(element?.category) || (Number.isFinite(element?.confidence) && element.confidence < 0.85) || !evidenceCoordinatesUsable(element?.coordinates);
@@ -39,18 +50,24 @@ export function requiredEvidenceCheckIds(submission) {
     return [...new Set(ids)];
 }
 
-export function SubmissionReviewWorkspace({ assessment, submission, studentName, fileUrl, stale, validGrading, onPatch }) {
+export function SubmissionReviewWorkspace({ assessment, submission, studentName, fileUrl, stale, validGrading, onFinalize, onPatch }) {
     const [activeTab, setActiveTab] = useState('original');
     const [activeSourceRef, setActiveSourceRef] = useState(null);
+    const [approvalError, setApprovalError] = useState('');
+    const [finalizing, setFinalizing] = useState(false);
     const tabRefs = useRef({});
     const reviewRef = useRef(null);
+    const submissionRef = useRef(submission);
+    submissionRef.current = submission;
     const documentKey = `${submission.id}:${submission.studentId}:${submission.originalRevision}:${fileUrl}`;
     const requiredIds = useMemo(() => requiredEvidenceCheckIds(submission), [submission]);
     const confirmedIds = submission.confirmedElementIds ?? [];
     const sourceChecksComplete = requiredIds.every(id => confirmedIds.includes(id));
     const originalAvailable = submission.originalAttached === true && Boolean(fileUrl || submission.file);
-    const originalReviewed = originalAvailable && Boolean(submission.originalReviewedAt) && !stale;
-    const approvalAllowed = !stale && validGrading && originalAvailable && originalReviewed && sourceChecksComplete;
+    const originalReviewed = originalAvailable && Boolean(submission.originalReviewedAt)
+        && submission.reviewedOriginalRevision === submission.originalRevision && !stale;
+    const gradingReady = gradingCanBeFinalized(assessment, submission.grading, submission.extractedText, submission.elements);
+    const approvalAllowed = !stale && validGrading && gradingReady && originalAvailable && originalReviewed && sourceChecksComplete;
     const selectSource = sourceRef => {
         setActiveSourceRef({ ...sourceRef, ownerKey: documentKey });
         setActiveTab('original');
@@ -62,9 +79,30 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
     };
     const toggleEvidence = id => {
         const next = confirmedIds.includes(id) ? confirmedIds.filter(value => value !== id) : [...confirmedIds, id];
-        onPatch({ confirmedElementIds: next, originalReviewedAt: null, approved: false, approvalRevoked: Boolean(submission.approved || submission.approvalRevoked) });
+        onPatch({ confirmedElementIds: next, originalReviewedAt: null, reviewedOriginalRevision: null, approved: false, approvalRevoked: Boolean(submission.approved || submission.approvalRevoked) });
     };
-    const editOcr = value => onPatch({ extractedText: value, status: 'extracted', grading: null, originalReviewedAt: null, confirmedElementIds: [], approved: false, approvalRevoked: Boolean(submission.approved || submission.grading) });
+    const editOcr = value => onPatch({ extractedText: value, status: 'extracted', grading: null, originalReviewedAt: null, reviewedOriginalRevision: null, confirmedElementIds: [], approved: false, approvalRevoked: Boolean(submission.approved || submission.grading) });
+    const toggleApproval = async () => {
+        setApprovalError('');
+        if (submission.approved) {
+            onPatch({ approved: false, status: 'graded', grading: { ...submission.grading, totalScore: null }, approvalRevoked: false });
+            return;
+        }
+        setFinalizing(true);
+        const requestFingerprint = approvalFingerprint(submission);
+        try {
+            const grading = await onFinalize(submission);
+            if (requestFingerprint !== approvalFingerprint(submissionRef.current)) {
+                setApprovalError('채점 내용이 변경되어 승인 결과를 적용하지 않았습니다. 현재 내용을 다시 확인해주세요.');
+                return;
+            }
+            onPatch({ grading, approved: true, status: 'approved', approvalRevoked: false });
+        } catch (error) {
+            setApprovalError(error instanceof Error ? error.message : '채점 승인에 실패했습니다.');
+        } finally {
+            setFinalizing(false);
+        }
+    };
     const moveTab = (event, currentIndex) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
@@ -90,12 +128,14 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
         </section>
         <section id={`${submission.id}-grading-panel`} role="tabpanel" aria-labelledby={`${submission.id}-grading-tab`} className={`submission-review__panel submission-review__panel--grading${activeTab === 'grading' ? ' is-active' : ''}`}>
             <GradingEditor assessment={assessment} submission={submission} onChange={onPatch} onSourceSelect={selectSource}/>
-            {!validGrading && <p className="form-alert" role="alert">모든 점수는 평가 요소별 배점 범위 안에 있어야 하며 근거와 피드백을 입력해야 합니다.</p>}
+            {!validGrading && <p className="form-alert" role="alert">모든 평가영역은 현재 루브릭 수준과 정확한 점수, 직접 근거, 평가 이유, 피드백을 사용해야 합니다.</p>}
             <div className="original-review-gate">
                 {!sourceChecksComplete && <p>교사 확인 필요 근거 {requiredIds.filter(id => !confirmedIds.includes(id)).length}개를 먼저 확인해주세요.</p>}
-                <label><input type="checkbox" aria-label={`${studentName} 원본 답안 확인 완료`} checked={originalReviewed} disabled={!originalAvailable || !validGrading || !sourceChecksComplete} onChange={event => onPatch({ originalReviewedAt: event.target.checked ? new Date().toISOString() : null, approved: false })}/>{studentName} 원본 답안 확인 완료</label>
+                {!gradingReady && <p>각 평가영역의 수준을 선택하고 근거·이유·피드백을 확인해주세요.</p>}
+                <label><input type="checkbox" aria-label={`${studentName} 원본 답안 확인 완료`} checked={originalReviewed} disabled={!originalAvailable || !validGrading || !sourceChecksComplete} onChange={event => onPatch({ originalReviewedAt: event.target.checked ? new Date().toISOString() : null, reviewedOriginalRevision: event.target.checked ? submission.originalRevision : null, approved: false })}/>{studentName} 원본 답안 확인 완료</label>
             </div>
-            <div className="approval-actions"><p>AI 채점은 초안입니다. 현재 원본과 <span className="nowrap">모든 근거를 확인한 뒤</span> 승인해주세요.</p><button type="button" disabled={!approvalAllowed} className={submission.approved ? 'secondary-button' : ''} onClick={() => onPatch({ approved: !submission.approved, status: submission.approved ? 'graded' : 'approved', approvalRevoked: false })}>{submission.approved ? '승인 취소' : `${studentName} 채점 승인`}</button></div>
+            {approvalError && <p className="form-alert" role="alert">{approvalError}</p>}
+            <div className="approval-actions"><p>AI 채점은 초안입니다. 현재 원본과 <span className="nowrap">모든 근거를 확인한 뒤</span> 승인해주세요.</p><button type="button" disabled={finalizing || (!submission.approved && !approvalAllowed)} className={submission.approved ? 'secondary-button' : ''} onClick={toggleApproval}>{submission.approved ? '승인 취소' : finalizing ? '확정 점수 계산 중…' : `${studentName} 채점 승인`}</button></div>
         </section>
     </div>;
 }

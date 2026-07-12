@@ -9,15 +9,18 @@ import { gradingSourceHash } from '@/lib/workflow-lineage';
 
 afterEach(() => vi.restoreAllMocks());
 const grading = { criteria: [
-    { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털', feedback: '구체적입니다.' },
-    { criterionId: 'criterion-2', score: 35, evidence: '물을 흡수한다', feedback: '연결했습니다.' },
-    { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '수정 과정을 확인했습니다.' },
-], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
+    { status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '구체적입니다.', confidence: .9, sourceRefs: [{ elementId: 'e1', page: 1 }], teacherConfirmed: true },
+    { status: 'scored', criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '물을 흡수한다', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '연결했습니다.', confidence: .9, sourceRefs: [{ elementId: 'e2', page: 1 }], teacherConfirmed: true },
+    { status: 'scored', criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 과정을 확인했습니다.', confidence: .9, sourceRefs: [{ elementId: 'e3', page: 1 }], teacherConfirmed: true },
+], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
 const assessment = makeAssessment();
 const submissions = [
     { id: 's1', studentName: '김학생', approved: true, extractedText: '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.', grading },
     { id: 's2', studentName: '이학생', approved: false, extractedText: '관찰 결과 미승인 내용입니다.', grading },
-].map(item => ({ ...item, sourceHash: gradingSourceHash(assessment, item.extractedText) }));
+].map(item => {
+    const currentHash = gradingSourceHash(assessment, item.extractedText);
+    return { ...item, grading: { ...item.grading, sourceHash: currentHash }, sourceHash: currentHash };
+});
 const generatedText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 구조와 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러남.';
 
 function Harness() { const [records, setRecords] = useState([]); return <RecordsStage lessonPlan={makeGeneratedPlan()} assessment={assessment} submissions={submissions} records={records} onChange={setRecords}/>; }

@@ -2,19 +2,21 @@ import { expect, test } from 'vitest';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { generationDraft, makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 import { createGenerationSnapshot } from '@/lib/lesson-input';
-import { gradingContentIsValid, gradingSourceHash, recordSourceHash, workflowProcessStatuses } from '@/lib/workflow-lineage';
+import { gradingCanBeFinalized, gradingContentIsValid, gradingSourceHash, recordSourceHash, workflowProcessStatuses } from '@/lib/workflow-lineage';
 import { sourceHash } from '@/lib/source-hash';
 
 const grading = { criteria: [
-    { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털', feedback: '관찰 근거가 구체적입니다.' },
-    { criterionId: 'criterion-2', score: 35, evidence: '물을 흡수한다', feedback: '구조와 기능을 연결했습니다.' },
-    { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '수정 과정의 근거를 확인했습니다.' },
-], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.' };
+    { status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거가 구체적입니다.', confidence: .92, sourceRefs: [{ elementId: 'e1', page: 1 }], teacherConfirmed: true },
+    { status: 'scored', criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '물을 흡수한다', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '다른 기관도 연결해보세요.', confidence: .9, sourceRefs: [{ elementId: 'e2', page: 1 }], teacherConfirmed: true },
+    { status: 'scored', criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 이유를 더 설명해보세요.', confidence: .88, sourceRefs: [{ elementId: 'e3', page: 1 }], teacherConfirmed: true },
+], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.' };
 
 function projectFixture() {
     const plan = makeGeneratedPlan();
     const assessment = { ...makeAssessment(), sourceHash: sourceHash(plan), approved: true };
-    const submission = { id: 's1', studentName: '김학생', extractedText: '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.', grading, approved: true };
+    const extractedText = '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.';
+    const currentGrading = { ...grading, sourceHash: gradingSourceHash(assessment, extractedText) };
+    const submission = { id: 's1', studentName: '김학생', extractedText, grading: currentGrading, approved: true };
     submission.sourceHash = gradingSourceHash(assessment, submission.extractedText);
     const record = { submissionId: submission.id, sourceHash: recordSourceHash(assessment, submission), status: 'done', text: '현재 근거로 작성한 세특', approved: true };
     return { activeProcess: 'records', lessonSnapshot: { ...generationDraft, generatedFrom: createGenerationSnapshot(generationDraft), plan }, worksheet: null, assessment, submissions: [submission], records: [record] };
@@ -22,16 +24,31 @@ function projectFixture() {
 
 test('accepts only bounded criterion scores with complete evidence and feedback', () => {
     const assessment = makeAssessment();
-    expect(gradingContentIsValid(assessment, grading)).toBe(true);
-    expect(gradingContentIsValid(assessment, { ...grading, criteria: grading.criteria.map((item, index) => index ? item : { ...item, score: 99 }) })).toBe(false);
-    expect(gradingContentIsValid(assessment, { ...grading, criteria: grading.criteria.map((item, index) => index ? item : { ...item, evidence: '' }) })).toBe(false);
+    const current = { ...grading, sourceHash: gradingSourceHash(assessment, '') };
+    expect(gradingContentIsValid(assessment, current)).toBe(true);
+    expect(gradingContentIsValid(assessment, { ...current, criteria: current.criteria.map((item, index) => index ? item : { ...item, score: 34 }) })).toBe(false);
+    expect(gradingContentIsValid(assessment, { ...current, criteria: current.criteria.map((item, index) => index ? item : { ...item, evidence: '' }) })).toBe(false);
 });
 
 test('keeps existing numeric grading consumers compatible with dynamic rubric level arrays', () => {
     const assessment = makeAssessment();
 
     expect(Array.isArray(assessment.rubric.criteria[0].levels)).toBe(true);
-    expect(gradingContentIsValid(assessment, grading)).toBe(true);
+    expect(gradingContentIsValid(assessment, { ...grading, sourceHash: gradingSourceHash(assessment, '') })).toBe(true);
+});
+
+test('Given a scoreless teacher-review criterion When checking finalization Then no low score is invented and approval stays blocked', () => {
+    const assessment = makeAssessment();
+    const review = {
+        ...grading,
+        criteria: grading.criteria.map((item, index) => index ? item : { status: 'teacher_review', criterionId: item.criterionId, selectedLevelId: null, score: null, evidence: item.evidence, reviewReason: '수식 기호 확인 필요', confidence: .6, sourceRefs: item.sourceRefs, teacherConfirmed: false }),
+        provisionalTotal: 50,
+        totalScore: null,
+        sourceHash: gradingSourceHash(assessment, ''),
+    };
+
+    expect(gradingContentIsValid(assessment, review)).toBe(true);
+    expect(gradingCanBeFinalized(assessment, review)).toBe(false);
 });
 
 test('marks grading and records incomplete when the approved rubric changes', () => {

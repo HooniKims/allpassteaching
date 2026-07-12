@@ -10,11 +10,12 @@ const text = '관찰한 식물 기관의 특징을 구체적인 문장으로 기
 const lessonPlan = makeGeneratedPlan();
 const assessment = { ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: true };
 const submissionBase = { id: 's1', studentName: '김학생', approved: true, extractedText: '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.', grading: { criteria: [
-    { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털', feedback: '관찰 근거가 구체적입니다.' },
-    { criterionId: 'criterion-2', score: 35, evidence: '물을 흡수한다', feedback: '구조와 기능을 연결했습니다.' },
-    { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '수정 과정의 근거를 확인했습니다.' },
-], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.' } };
-const submission = { ...submissionBase, sourceHash: gradingSourceHash(assessment, submissionBase.extractedText) };
+    { status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거가 구체적입니다.', confidence: .9, sourceRefs: [{ elementId: 'e1', page: 1 }], teacherConfirmed: true },
+    { status: 'scored', criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '물을 흡수한다', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '구조와 기능을 연결했습니다.', confidence: .9, sourceRefs: [{ elementId: 'e2', page: 1 }], teacherConfirmed: true },
+    { status: 'scored', criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 과정의 근거를 확인했습니다.', confidence: .9, sourceRefs: [{ elementId: 'e3', page: 1 }], teacherConfirmed: true },
+], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.' } };
+const currentGradingHash = gradingSourceHash(assessment, submissionBase.extractedText);
+const submission = { ...submissionBase, grading: { ...submissionBase.grading, sourceHash: currentGradingHash }, sourceHash: currentGradingHash };
 const request = body => new Request('http://localhost/api/generate-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const completion = value => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) } }] }), { status: 200 });
 

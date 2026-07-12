@@ -36,6 +36,7 @@ function detachRestoredSubmissionFiles(project) {
             ...submission,
             originalAttached: false,
             originalReviewedAt: null,
+            reviewedOriginalRevision: null,
             approved: false,
             approvalRevoked: Boolean(submission.approved || submission.grading),
         })),
