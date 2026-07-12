@@ -99,6 +99,19 @@ function parseRecord(content, targetLength, evidence) {
                         && refs.some(ref => ref.elementId === revision.afterSourceRef.elementId && ref.page === revision.afterSourceRef.page);
                     if (!revision?.changeReason?.trim() || !citesBefore || !citesAfter) issues.push({ path: ['claims', index], message: `${criterionId} 수정 주장은 같은 평가영역의 수정 전·후 직접 근거와 원본 위치를 모두 연결해야 합니다.` });
                 });
+                const expectedQuotes = claim.criterionIds.filter(id => growthIds.has(id)).flatMap(criterionId => {
+                    const revision = evidence.growthEvidence.find(item => item.criterionId === criterionId)?.revisionEvidence;
+                    return revision ? [`${criterionId}\0before\0${revision.beforeEvidence}`, `${criterionId}\0after\0${revision.afterEvidence}`] : [];
+                });
+                const actualQuotes = claim.evidenceQuotes.map(item => `${item.criterionId}\0${item.stage}\0${item.quote}`);
+                const expectedRefs = claim.criterionIds.filter(id => growthIds.has(id)).flatMap(criterionId => {
+                    const revision = evidence.growthEvidence.find(item => item.criterionId === criterionId)?.revisionEvidence;
+                    return revision ? [`${criterionId}\0${revision.beforeSourceRef.elementId}\0${revision.beforeSourceRef.page}`, `${criterionId}\0${revision.afterSourceRef.elementId}\0${revision.afterSourceRef.page}`] : [];
+                });
+                const actualRefs = claim.sourceRefs.map(item => `${item.criterionId}\0${item.elementId}\0${item.page}`);
+                const exactQuotes = expectedQuotes.length === actualQuotes.length && new Set(actualQuotes).size === actualQuotes.length && actualQuotes.every(item => expectedQuotes.includes(item));
+                const exactRefs = expectedRefs.length === actualRefs.length && new Set(actualRefs).size === actualRefs.length && actualRefs.every(item => expectedRefs.includes(item));
+                if (!exactQuotes || !exactRefs) issues.push({ path: ['claims', index], message: '수정 주장은 같은 평가영역의 수정 전·후 인용과 원본 위치만 정확히 한 번씩 포함해야 합니다.' });
             }
             if (claim.kind !== 'revision' && hasUnsupportedGrowthInference(claim.text, false)) issues.push({ path: ['claims', index, 'text'], message: '성장 주장은 실제 수정 근거와 revision 유형으로 연결해야 합니다.' });
         });

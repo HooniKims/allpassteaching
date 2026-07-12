@@ -198,6 +198,23 @@ test('rejects mixed revision criterion ids when any id lacks structured revision
     expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+test('rejects unrelated extra performance citations on an otherwise valid revision claim', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const revisedSubmission = submissionWithRevisionEvidence();
+    const valid = { text, kind: 'revision', criterionIds: ['criterion-3'], evidenceQuotes: [
+        { criterionId: 'criterion-3', stage: 'before', quote: '뿌리에 가는 털' }, { criterionId: 'criterion-3', stage: 'after', quote: '관찰 결과' },
+    ], sourceRefs: [
+        { criterionId: 'criterion-3', elementId: 'e1', page: 1 }, { criterionId: 'criterion-3', elementId: 'e3', page: 1 },
+    ] };
+    const extra = { claims: [{ ...valid, evidenceQuotes: [...valid.evidenceQuotes, { criterionId: 'criterion-3', stage: 'performance', quote: '관찰 결과' }], sourceRefs: [...valid.sourceRefs, { criterionId: 'criterion-3', elementId: 'e3', page: 1 }] }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(extra)).mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input({ currentSubmission: revisedSubmission })));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 test('rejects an expired record context before calling the model', async () => {
     vi.stubGlobal('fetch', vi.fn());
     const recordContext = createRecordContext({ lessonPlan, assessment, students: [student], submissions: [submission] }, Date.now() - 5 * 60_000 - 1);

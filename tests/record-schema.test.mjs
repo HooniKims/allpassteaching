@@ -37,6 +37,8 @@ test('blocks normalized Korean rank score superlative comparison and personality
         '반에서 1등임', '반 에서 １ 등임', '학급에서 가장 높은 점수를 받음', '다른 친구들에 비해 뛰어남',
         '친구들 중 가장 우수함', '매우 부지런함', '90퍼센트를 달성함', '백 점 만점에 팔십오 점을 받음', '모범적 태도를 보임',
         '매우 성/실한 태도임', '또래/보다 뛰어남', '책​임감이 있음', '학급에서 1/등임',
+        '관찰 태도가 모범적임', '반에서 일 등을 차지함', '전체 학생 가운데 최고임', '교우보다 우월한 결과를 보임',
+        '평가에서 구십 프로를 달성함', '수행 결과는 팔십오 점임', '품행이 단정함',
     ];
     for (const phrase of blocked) expect(recordOutputSchema.safeParse({ text: `${text} ${phrase}.` }).success).toBe(false);
     expect(recordOutputSchema.safeParse({ text: `${text} 꾸준히 관찰한 식물의 성장 조건을 설명함.` }).success).toBe(true);
