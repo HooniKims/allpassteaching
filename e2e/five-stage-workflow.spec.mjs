@@ -4,21 +4,28 @@ import { PDFDocument } from 'pdf-lib';
 import { makeGeneratedPlan } from '../tests/fixtures/lesson-plan.mjs';
 import { makeAssessment, makeWorksheet } from '../tests/fixtures/workflow.mjs';
 import { gradingSourceHash } from '../lib/workflow-lineage.js';
+import { canonicalGradingOrigin, canonicalGradingSourceRef } from '../lib/grading-evidence.js';
 
-function grading(assessment, extractedText) {
-    const rootRef = { elementId: 'root-evidence', page: 1, text: '뿌리에 가는 털이 있다', coordinates: [{ x: .12, y: .2 }, { x: .72, y: .35 }] };
-    const equationRef = { elementId: 'equation-evidence', page: 1, text: 'x² = 4', coordinates: [{ x: .12, y: .42 }, { x: .72, y: .52 }] };
+function grading(input) {
+    const { assessment, extractedText, elements } = input;
+    const refs = new Map(elements.map(element => [element.id, canonicalGradingSourceRef(element)]));
+    const criteria = [
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털이 있다', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거를 구체적으로 기록했습니다.', confidence: .96, sourceRefs: [refs.get('root-evidence')], teacherConfirmed: false },
+        { status: 'teacher_review', reviewRequired: true, criterionId: 'criterion-2', selectedLevelId: null, score: null, evidence: 'x² = 4', reviewReason: '수식의 핵심 기호를 원본에서 확인해야 합니다.', confidence: .66, sourceRefs: [refs.get('equation-evidence')], teacherConfirmed: false },
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '피드백을 반영해 설명을 고쳤다', reason: '피드백 반영 과정의 근거가 드러납니다.', feedback: '피드백 반영과 수정 이유를 확인했습니다.', confidence: .91, sourceRefs: [refs.get('revision-evidence')], teacherConfirmed: false },
+    ];
+    const reviewOrigins = criteria.map(canonicalGradingOrigin);
     return {
     criteria: [
-        { status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털이 있다', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거를 구체적으로 기록했습니다.', confidence: .96, sourceRefs: [rootRef], teacherConfirmed: false },
-        { status: 'teacher_review', criterionId: 'criterion-2', selectedLevelId: null, score: null, evidence: 'x² = 4', reviewReason: '수식의 핵심 기호를 원본에서 확인해야 합니다.', confidence: .66, sourceRefs: [equationRef], teacherConfirmed: false },
-        { status: 'scored', criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '피드백 반영 과정의 근거가 드러납니다.', feedback: '피드백 반영과 수정 이유를 확인했습니다.', confidence: .91, sourceRefs: [rootRef], teacherConfirmed: false },
+        ...criteria,
     ],
     provisionalTotal: 50,
     totalScore: null,
-    sourceHash: gradingSourceHash(assessment, extractedText),
+    sourceHash: gradingSourceHash(assessment, extractedText, elements, criteria, input),
     summary: '관찰한 사실을 기능 설명의 근거로 활용했습니다.',
     nextSteps: '줄기와 잎도 같은 방식으로 설명해보세요.',
+    reviewOrigins,
+    originToken: 'a'.repeat(64),
     };
 }
 const recordText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 가는 털과 물 흡수 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러났으며 다른 기관에도 같은 설명 방식을 적용하려는 학습 방향을 보임.';
@@ -89,12 +96,13 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
         return route.fulfill({ json: { extractedText: '관찰 결과 뿌리에 가는 털이 있다. 식을 계산하면 x² = 4이다. 피드백을 반영해 설명을 고쳤다.', elements: [
             { id: 'root-evidence', category: 'text', page: 1, text: '뿌리에 가는 털이 있다', confidence: .98, coordinates: [{ x: .12, y: .2 }, { x: .72, y: .35 }] },
             { id: 'equation-evidence', category: 'equation', page: 1, text: 'x² = 4', confidence: .66, coordinates: [{ x: .12, y: .42 }, { x: .72, y: .52 }] },
-        ], elementsTruncated: false, visualAnalysisStatus: 'enhanced_used', autoScoreAllowed: false, ocrModel: 'document-parse', pageCount: 1 } });
+            { id: 'revision-evidence', category: 'text', page: 1, text: '피드백을 반영해 설명을 고쳤다', confidence: .95, coordinates: [{ x: .12, y: .58 }, { x: .72, y: .68 }] },
+        ], elementsTruncated: false, visualAnalysisStatus: 'enhanced_used', autoScoreAllowed: true, ocrModel: 'document-parse', pageCount: 1 } });
     });
     await page.route('**/api/grade-submission', route => {
         const body = route.request().postDataJSON();
         if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85 } } });
-        return route.fulfill({ json: { grading: grading(body.assessment, body.extractedText) } });
+        return route.fulfill({ json: { grading: grading(body) } });
     });
     await page.route('**/api/generate-record', route => route.fulfill({ json: { record: { text: recordText } } }));
 
@@ -146,6 +154,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
         await submission.getByLabel(`${studentName} 원본 답안 확인 완료`).check();
         await expect(submission.getByRole('button', { name: `${studentName} 채점 승인` })).toBeEnabled();
         await submission.getByRole('button', { name: `${studentName} 채점 승인` }).click();
+        await expect(submission.getByText('교사 승인 완료')).toBeVisible();
     }
 
     await page.getByRole('tab', { name: /세특/ }).click();

@@ -1,6 +1,7 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { evidenceCoordinatesUsable } from '@/lib/evidence-coordinates.js';
+import { GLOBAL_GRADING_RISKS, gradingEvidenceRiskIds, ocrElementNeedsTeacherReview } from '@/lib/grading-evidence.js';
 import { gradingCanBeFinalized } from '@/lib/workflow-lineage.js';
 import { GradingEditor } from './GradingEditor.jsx';
 import { PdfEvidenceViewer } from './PdfEvidenceViewer.jsx';
@@ -10,11 +11,27 @@ const TABS = [
     { id: 'ocr', label: 'OCR 결과' },
     { id: 'grading', label: '채점 결과' },
 ];
-const VISUAL_CATEGORIES = new Set(['equation', 'chart', 'figure']);
 const CATEGORY_LABELS = { equation: '수식', chart: '도표', figure: '그림' };
+const GLOBAL_RISK_LABELS = {
+    [GLOBAL_GRADING_RISKS.elementsTruncated]: 'OCR 요소 일부 생략',
+    [GLOBAL_GRADING_RISKS.autoScoreDisabled]: '자동 채점 제한',
+    [GLOBAL_GRADING_RISKS.visualAnalysisUnavailable]: '시각 분석 확인 필요',
+    [GLOBAL_GRADING_RISKS.visualReviewRequired]: '시각 자료 원본 확인',
+};
 
-function approvalFingerprint(submission) {
+function approvalFingerprint(assessment, submission) {
     return JSON.stringify({
+        assessment,
+        id: submission.id,
+        studentId: submission.studentId,
+        studentName: submission.studentName,
+        extractedText: submission.extractedText,
+        elements: submission.elements,
+        elementsTruncated: submission.elementsTruncated,
+        visualAnalysisStatus: submission.visualAnalysisStatus,
+        autoScoreAllowed: submission.autoScoreAllowed,
+        requiresVisualReview: submission.requiresVisualReview,
+        originalAttached: submission.originalAttached,
         grading: submission.grading,
         originalReviewedAt: submission.originalReviewedAt,
         reviewedOriginalRevision: submission.reviewedOriginalRevision,
@@ -24,15 +41,16 @@ function approvalFingerprint(submission) {
 }
 
 function elementNeedsReview(element) {
-    return VISUAL_CATEGORIES.has(element?.category) || (Number.isFinite(element?.confidence) && element.confidence < 0.85) || !evidenceCoordinatesUsable(element?.coordinates);
+    return ocrElementNeedsTeacherReview(element);
 }
 
 function EvidenceChecks({ submission, studentName, confirmedIds, onToggle, onSourceSelect }) {
     const elements = submission.elements ?? [];
     const risky = elements.filter(elementNeedsReview);
+    const globalRisks = gradingEvidenceRiskIds(submission).filter(id => GLOBAL_RISK_LABELS[id]);
     return <section className="evidence-checks" aria-label={`${studentName} OCR 근거 확인`}>
         <div className="evidence-checks__heading"><h4>OCR 근거 확인</h4><p>수식·도표·그림과 낮은 신뢰도는 원본을 보고 확인하세요.</p></div>
-        {submission.elementsTruncated && <label className="evidence-check"><span><strong>OCR 요소 일부 생략</strong><small><span className="review-badge">요소 일부 생략</span><span className="review-badge review-badge--warning">교사 확인 필요</span></small></span><input type="checkbox" aria-label={`${studentName} 생략된 OCR 요소 확인 완료`} checked={confirmedIds.includes('__elements_truncated__')} onChange={() => onToggle('__elements_truncated__')}/></label>}
+        {globalRisks.map(id => <label className="evidence-check" key={id}><span><strong>{GLOBAL_RISK_LABELS[id]}</strong><small><span className="review-badge review-badge--warning">교사 확인 필요</span></small></span><input type="checkbox" aria-label={`${studentName} ${GLOBAL_RISK_LABELS[id]} 확인 완료`} checked={confirmedIds.includes(id)} onChange={() => onToggle(id)}/></label>)}
         {risky.map(element => <article className="evidence-check" key={element.id}>
             <button type="button" className="evidence-check__source" onClick={() => onSourceSelect({ elementId: element.id, page: element.page, text: element.text, coordinates: element.coordinates })}>
                 <strong>{element.text || `${element.page}쪽 OCR 요소`}</strong>
@@ -40,14 +58,12 @@ function EvidenceChecks({ submission, studentName, confirmedIds, onToggle, onSou
             </button>
             <label><span className="sr-only">{studentName} {element.id} 근거 확인 완료</span><input type="checkbox" aria-label={`${studentName} ${element.id} 근거 확인 완료`} checked={confirmedIds.includes(element.id)} onChange={() => onToggle(element.id)}/></label>
         </article>)}
-        {!risky.length && !submission.elementsTruncated && <p className="evidence-checks__empty">별도 확인이 필요한 시각·저신뢰 근거가 없습니다.</p>}
+        {!risky.length && !globalRisks.length && <p className="evidence-checks__empty">별도 확인이 필요한 시각·저신뢰 근거가 없습니다.</p>}
     </section>;
 }
 
 export function requiredEvidenceCheckIds(submission) {
-    const ids = (submission.elements ?? []).filter(elementNeedsReview).map(element => element.id);
-    if (submission.elementsTruncated) ids.push('__elements_truncated__');
-    return [...new Set(ids)];
+    return gradingEvidenceRiskIds(submission, submission.elements ?? []);
 }
 
 export function SubmissionReviewWorkspace({ assessment, submission, studentName, fileUrl, stale, validGrading, onFinalize, onPatch }) {
@@ -58,7 +74,14 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
     const tabRefs = useRef({});
     const reviewRef = useRef(null);
     const submissionRef = useRef(submission);
+    const assessmentRef = useRef(assessment);
+    const mountedRef = useRef(true);
     submissionRef.current = submission;
+    assessmentRef.current = assessment;
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
     const documentKey = `${submission.id}:${submission.studentId}:${submission.originalRevision}:${fileUrl}`;
     const requiredIds = useMemo(() => requiredEvidenceCheckIds(submission), [submission]);
     const confirmedIds = submission.confirmedElementIds ?? [];
@@ -66,7 +89,7 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
     const originalAvailable = submission.originalAttached === true && Boolean(fileUrl || submission.file);
     const originalReviewed = originalAvailable && Boolean(submission.originalReviewedAt)
         && submission.reviewedOriginalRevision === submission.originalRevision && !stale;
-    const gradingReady = gradingCanBeFinalized(assessment, submission.grading, submission.extractedText, submission.elements);
+    const gradingReady = gradingCanBeFinalized(assessment, submission.grading, submission.extractedText, submission.elements, submission);
     const approvalAllowed = !stale && validGrading && gradingReady && originalAvailable && originalReviewed && sourceChecksComplete;
     const selectSource = sourceRef => {
         setActiveSourceRef({ ...sourceRef, ownerKey: documentKey });
@@ -89,18 +112,19 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
             return;
         }
         setFinalizing(true);
-        const requestFingerprint = approvalFingerprint(submission);
+        const requestFingerprint = approvalFingerprint(assessment, submission);
         try {
             const grading = await onFinalize(submission);
-            if (requestFingerprint !== approvalFingerprint(submissionRef.current)) {
+            if (!mountedRef.current) return;
+            if (requestFingerprint !== approvalFingerprint(assessmentRef.current, submissionRef.current)) {
                 setApprovalError('채점 내용이 변경되어 승인 결과를 적용하지 않았습니다. 현재 내용을 다시 확인해주세요.');
                 return;
             }
             onPatch({ grading, approved: true, status: 'approved', approvalRevoked: false });
         } catch (error) {
-            setApprovalError(error instanceof Error ? error.message : '채점 승인에 실패했습니다.');
+            if (mountedRef.current) setApprovalError(error instanceof Error ? error.message : '채점 승인에 실패했습니다.');
         } finally {
-            setFinalizing(false);
+            if (mountedRef.current) setFinalizing(false);
         }
     };
     const moveTab = (event, currentIndex) => {
@@ -120,7 +144,7 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
         <section id={`${submission.id}-original-panel`} role="tabpanel" aria-labelledby={`${submission.id}-original-tab`} className={`submission-review__panel submission-review__panel--original${activeTab === 'original' ? ' is-active' : ''}`}>
             {fileUrl
                 ? <PdfEvidenceViewer fileUrl={fileUrl} studentName={studentName} documentKey={documentKey} answerPages={submission.answerPages} coverPages={submission.coverPages} activeSourceRef={activeSourceRef}/>
-                : <div className="pdf-reattach"><p>새로고침으로 원본 파일이 사라졌습니다. OCR·채점 초안은 유지됩니다.</p><a href="#student-pdf-upload-title">원본 PDF 다시 연결하기</a></div>}
+                : <div className="pdf-reattach"><p>새로고침으로 원본 파일이 사라졌습니다. <span className="nowrap">OCR·채점 초안은</span> 유지됩니다.</p><a href="#student-pdf-upload-title">원본 PDF 다시 연결하기</a></div>}
         </section>
         <section id={`${submission.id}-ocr-panel`} role="tabpanel" aria-labelledby={`${submission.id}-ocr-tab`} className={`submission-review__panel submission-review__panel--ocr${activeTab === 'ocr' ? ' is-active' : ''}`}>
             <label className="ocr-text-field">OCR 추출 원문<textarea rows="12" value={submission.extractedText} onChange={event => editOcr(event.target.value)}/></label>

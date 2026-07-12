@@ -26,7 +26,7 @@ test('Given a scoreless criterion When the editor renders Then the reason, evide
     expect(screen.getByRole('combobox', { name: '구조와 기능 설명 성취 수준' })).toHaveValue('');
     expect(screen.getByText('교사 확인 필요')).toBeInTheDocument();
     expect(screen.getByText('수식 기호를 원본에서 확인해야 합니다.')).toBeInTheDocument();
-    expect(screen.getByText('확정 총점은 모든 평가영역 확인 뒤 계산됩니다.')).toBeInTheDocument();
+    expect(screen.getByText(/확정 총점은 모든 평가영역/)).toHaveTextContent('확정 총점은 모든 평가영역 확인 뒤 계산됩니다.');
     expect(screen.queryByRole('spinbutton', { name: '구조와 기능 설명 점수' })).not.toBeInTheDocument();
 });
 

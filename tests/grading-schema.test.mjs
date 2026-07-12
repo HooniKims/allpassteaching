@@ -1,16 +1,17 @@
 import { expect, test } from 'vitest';
 import { gradingOutputSchema, storedGradingSchema } from '@/lib/grading-schema';
+import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
 
-const sourceRef = { elementId: 'element-1', page: 2, text: '뿌리에 가는 털이 있다', coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] };
+const sourceRef = canonicalGradingSourceRef({ id: 'element-1', page: 2, category: 'text', text: '뿌리에 가는 털이 있다', confidence: .82, coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] });
 const scored = {
-    status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35,
+    status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35,
     evidence: '뿌리에 가는 털이 있다', reason: '관찰 사실을 제시했으나 다른 기관과의 비교 증거는 없다.',
     feedback: '다른 기관과 비교해 설명해보세요.', confidence: 0.82, sourceRefs: [sourceRef], teacherConfirmed: false,
 };
 const teacherReview = {
-    status: 'teacher_review', criterionId: 'criterion-2', selectedLevelId: null, score: null,
+    status: 'teacher_review', reviewRequired: true, criterionId: 'criterion-2', selectedLevelId: null, score: null,
     evidence: 'x² = 4', reviewReason: '수식의 핵심 기호를 원본에서 확인해야 합니다.', confidence: 0.61,
-    sourceRefs: [{ ...sourceRef, elementId: 'element-2', text: 'x² = 4' }], teacherConfirmed: false,
+    sourceRefs: [canonicalGradingSourceRef({ id: 'element-2', page: 2, category: 'equation', text: 'x² = 4', confidence: .61, coordinates: sourceRef.coordinates })], teacherConfirmed: false,
 };
 const output = { criteria: [scored, teacherReview], summary: '관찰 근거를 활용했습니다.', nextSteps: '수식 기호를 원본과 대조해보세요.' };
 
@@ -33,7 +34,7 @@ test('Given a scored criterion When its reason is missing Then the result is rej
 });
 
 test('Given unresolved grading When stored Then provisional total is allowed but final total remains null', () => {
-    const stored = { ...output, provisionalTotal: 35, totalScore: null, sourceHash: 'src-current' };
+    const stored = { ...output, provisionalTotal: 35, totalScore: null, sourceHash: 'src-current', reviewOrigins: output.criteria.map(canonicalGradingOrigin), originToken: 'a'.repeat(64) };
 
     expect(storedGradingSchema.safeParse(stored).success).toBe(true);
 });

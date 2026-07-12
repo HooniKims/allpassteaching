@@ -49,6 +49,7 @@ test('Given persisted PDF metadata When the page refreshes Then files are detach
             coverPages: [1],
             originalAttached: true,
             originalReviewedAt: '2026-07-12T12:00:00.000Z',
+            status: 'approved',
             approved: true,
             grading: { totalScore: 90 },
         }],
@@ -63,6 +64,7 @@ test('Given persisted PDF metadata When the page refreshes Then files are detach
         coverPages: [1],
         originalAttached: false,
         originalReviewedAt: null,
+        status: 'graded',
         approved: false,
         approvalRevoked: true,
     }));

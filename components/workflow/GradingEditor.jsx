@@ -1,6 +1,5 @@
-function canonicalRef(element) {
-    return { elementId: element.id, page: element.page, text: element.text, coordinates: element.coordinates ?? [] };
-}
+import { canonicalGradingSourceRef, gradingEvidenceRiskIds } from '@/lib/grading-evidence.js';
+import { gradingSourceHash } from '@/lib/workflow-lineage.js';
 
 function criterionIsConfirmable(criterion) {
     return criterion.status === 'scored'
@@ -12,12 +11,15 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
     const rubricById = new Map(assessment.rubric.criteria.map(item => [item.id, item]));
     const applyGrading = grading => {
         const provisionalTotal = grading.criteria.reduce((sum, criterion) => sum + (criterion.status === 'scored' ? criterion.score : 0), 0);
+        const sourceHash = gradingSourceHash(assessment, submission.extractedText ?? '', submission.elements ?? [], grading.criteria, submission);
         onChange({
             ...submission,
-            grading: { ...grading, provisionalTotal, totalScore: null },
+            grading: { ...grading, provisionalTotal, totalScore: null, sourceHash },
+            sourceHash,
             originalReviewedAt: null,
             reviewedOriginalRevision: null,
             approved: false,
+            status: submission.status === 'approved' ? 'graded' : submission.status,
             approvalRevoked: Boolean(submission.approved || submission.approvalRevoked),
         });
     };
@@ -28,11 +30,15 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
     const chooseLevel = (index, criterion, rubric, levelId) => {
         const level = rubric.levels.find(item => item.levelId === levelId);
         if (!level) return;
+        const linkedElements = (criterion.sourceRefs ?? []).map(ref => (submission.elements ?? []).find(element => element.id === ref.elementId)).filter(Boolean);
+        const reviewRequired = criterion.status === 'teacher_review' || criterion.reviewRequired === true
+            || gradingEvidenceRiskIds(submission, linkedElements).length > 0;
         const next = {
             status: 'scored', decisionSource: 'teacher', criterionId: criterion.criterionId, selectedLevelId: level.levelId, score: level.score,
             evidence: criterion.evidence, reason: criterion.status === 'scored' ? criterion.reason : '',
             feedback: criterion.status === 'scored' ? criterion.feedback : '', confidence: criterion.confidence,
             sourceRefs: criterion.sourceRefs ?? [], teacherConfirmed: false,
+            reviewRequired,
         };
         applyGrading({ ...submission.grading, criteria: submission.grading.criteria.map((item, itemIndex) => itemIndex === index ? next : item) });
     };
@@ -42,7 +48,7 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
         : `확정 총점 ${submission.grading.totalScore}점`;
 
     return <section className="grading-editor" aria-label={`${submission.studentName} 채점 결과 편집`}>
-        <div className="grading-editor__head"><div><h3>루브릭 채점 결과</h3>{submission.grading.totalScore == null && <p>확정 총점은 모든 평가영역 확인 뒤 계산됩니다.</p>}</div><strong>{totalLabel}</strong></div>
+        <div className="grading-editor__head"><div><h3>루브릭 채점 결과</h3>{submission.grading.totalScore == null && <p>확정 총점은 모든 평가영역 <span className="nowrap">확인 뒤</span> 계산됩니다.</p>}</div><strong>{totalLabel}</strong></div>
         {submission.approvalRevoked && <p className="approval-revoked" role="status">수정되어 교사 승인이 해제되었습니다.</p>}
         <div className="grading-criteria">{submission.grading.criteria.map((criterion, index) => {
             const rubric = rubricById.get(criterion.criterionId);
@@ -58,7 +64,7 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
                 <div className="grading-source-links">{criterion.sourceRefs?.length
                     ? criterion.sourceRefs.map((sourceRef, sourceIndex) => <span className="grading-source-link" key={`${sourceRef.elementId}-${sourceIndex}`}><button type="button" className="text-button grading-source-view" aria-label={`${criterion.evidence} 원본에서 보기`} onClick={() => onSourceSelect(sourceRef)}>원본에서 보기</button><button type="button" className="text-button grading-source-remove" aria-label={`${criterion.evidence} 원본 연결 삭제`} onClick={() => updateCriterion(index, { sourceRefs: criterion.sourceRefs.filter((_, refIndex) => refIndex !== sourceIndex) })}>연결 삭제</button></span>)
                     : <span>원본 위치 연결 안 됨</span>}
-                    {availableElements.length > 0 && <label className="grading-source-picker">원본 근거 위치<select aria-label={`${rubric.name} 원본 근거 위치 연결`} value="" onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) updateCriterion(index, { sourceRefs: [canonicalRef(element)] }); }}><option value="">OCR 요소 선택</option>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50) || element.category}</option>)}</select></label>}
+                    {availableElements.length > 0 && <label className="grading-source-picker">원본 근거 위치<select aria-label={`${rubric.name} 원본 근거 위치 연결`} value="" onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) { const reviewRequired = criterion.reviewRequired === true || gradingEvidenceRiskIds(submission, [element]).length > 0; updateCriterion(index, { sourceRefs: [canonicalGradingSourceRef(element)], reviewRequired, ...(reviewRequired && criterion.status === 'scored' ? { decisionSource: 'teacher' } : {}) }); } }}><option value="">OCR 요소 선택</option>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50) || element.category}</option>)}</select></label>}
                 </div>
                 <label className="grading-confirm"><input type="checkbox" aria-label={`${rubric.name} 근거와 수준 확인 완료`} checked={criterion.teacherConfirmed === true} disabled={!criterionIsConfirmable(criterion)} onChange={event => updateCriterion(index, { teacherConfirmed: event.target.checked })}/><span>원본 근거와 선택 수준을 확인했습니다.</span></label>
             </fieldset>;

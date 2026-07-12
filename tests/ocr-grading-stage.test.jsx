@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,32 +7,39 @@ import { OcrGradingStage } from '@/components/workflow/OcrGradingStage.jsx';
 import { SubmissionFileProvider } from '@/components/workflow/SubmissionFileProvider.jsx';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { gradingSourceHash } from '@/lib/workflow-lineage';
+import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
 
 afterEach(() => vi.restoreAllMocks());
 
-function Harness({ initial = [], assessment = makeAssessment() }) {
+function Harness({ initial = [], assessment = makeAssessment(), students = [] }) {
     const [submissions, setSubmissions] = useState(initial);
-    return <SubmissionFileProvider><OcrGradingStage assessment={assessment} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
+    return <SubmissionFileProvider><OcrGradingStage assessment={assessment} students={students} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
 }
 
 function reviewedSubmission(assessment = makeAssessment()) {
+    const extractedText = '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.';
+    const elements = [
+        { id: 'element-1', page: 2, category: 'equation', text: '관찰 근거', confidence: 0.7, coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] },
+        { id: 'element-2', page: 2, category: 'text', text: '기능 설명', confidence: 0.95, coordinates: [{ x: 0.1, y: 0.35 }, { x: 0.8, y: 0.45 }] },
+        { id: 'element-3', page: 2, category: 'text', text: '수정 과정', confidence: 0.95, coordinates: [{ x: 0.1, y: 0.5 }, { x: 0.8, y: 0.6 }] },
+    ];
     const grading = { criteria: [
-        { status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '관찰 근거', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '구체적입니다.', confidence: .7, sourceRefs: [{ elementId: 'element-1', page: 2, text: '관찰 근거', coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] }], teacherConfirmed: false },
-        { status: 'scored', criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '기능 설명', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '연결했습니다.', confidence: .95, sourceRefs: [{ elementId: 'element-2', page: 2, text: '기능 설명', coordinates: [{ x: 0.1, y: 0.35 }, { x: 0.8, y: 0.45 }] }], teacherConfirmed: false },
-        { status: 'scored', criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '수정 과정', reason: '수정 과정의 근거가 드러납니다.', feedback: '과정을 확인했습니다.', confidence: .95, sourceRefs: [{ elementId: 'element-3', page: 2, text: '수정 과정', coordinates: [{ x: 0.1, y: 0.5 }, { x: 0.8, y: 0.6 }] }], teacherConfirmed: false },
-    ], provisionalTotal: 85, totalScore: null, sourceHash: gradingSourceHash(assessment, '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.'), summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
-    return {
+        { status: 'scored', decisionSource: 'teacher', reviewRequired: true, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '관찰 근거', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '구체적입니다.', confidence: .7, sourceRefs: [canonicalGradingSourceRef(elements[0])], teacherConfirmed: false },
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '기능 설명', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '연결했습니다.', confidence: .95, sourceRefs: [canonicalGradingSourceRef(elements[1])], teacherConfirmed: false },
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '수정 과정', reason: '수정 과정의 근거가 드러납니다.', feedback: '과정을 확인했습니다.', confidence: .95, sourceRefs: [canonicalGradingSourceRef(elements[2])], teacherConfirmed: false },
+    ], provisionalTotal: 85, totalScore: null, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.',
+    reviewOrigins: [{ criterionId: 'criterion-1', reviewRequired: true }, { criterionId: 'criterion-2', reviewRequired: false }, { criterionId: 'criterion-3', reviewRequired: false }], originToken: 'a'.repeat(64) };
+    grading.reviewOrigins = grading.criteria.map(canonicalGradingOrigin);
+    const submission = {
         id: 'reviewed', studentName: '김하늘', fileName: '김하늘.pdf', file: new File(['%PDF-review'], '김하늘.pdf', { type: 'application/pdf' }),
         originalAttached: true, originalReviewedAt: null, originalRevision: 1, coverPages: [1], answerPages: [2], status: 'graded',
-        extractedText: '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.',
-        elements: [
-            { id: 'element-1', page: 2, category: 'equation', text: '관찰 근거', confidence: 0.7, coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] },
-            { id: 'element-2', page: 2, category: 'text', text: '기능 설명', confidence: 0.95, coordinates: [{ x: 0.1, y: 0.35 }, { x: 0.8, y: 0.45 }] },
-            { id: 'element-3', page: 2, category: 'text', text: '수정 과정', confidence: 0.95, coordinates: [{ x: 0.1, y: 0.5 }, { x: 0.8, y: 0.6 }] },
-        ],
+        extractedText,
+        elements,
         elementsTruncated: false, grading, approved: false,
-        sourceHash: gradingSourceHash(assessment, '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.'),
     };
+    grading.sourceHash = gradingSourceHash(assessment, extractedText, elements, grading.criteria, submission);
+    submission.sourceHash = grading.sourceHash;
+    return submission;
 }
 
 test('Given linked risky evidence When grading is reviewed Then source and original checks gate approval and mobile review tabs remain accessible', async () => {
@@ -40,7 +47,7 @@ test('Given linked risky evidence When grading is reviewed Then source and origi
     const assessment = makeAssessment();
     const finalized = { ...reviewedSubmission(assessment).grading, totalScore: 85, criteria: reviewedSubmission(assessment).grading.criteria.map(item => ({ ...item, teacherConfirmed: true })) };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ grading: finalized })));
-    render(<Harness initial={[reviewedSubmission(assessment)]} assessment={assessment}/>);
+    render(<StrictMode><Harness initial={[reviewedSubmission(assessment)]} assessment={assessment}/></StrictMode>);
 
     expect(screen.getByRole('tab', { name: '원본 답안' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'OCR 결과' })).toBeInTheDocument();
@@ -82,6 +89,56 @@ test('Given approval is in flight When grading changes Then the stale server res
     expect(await screen.findByText(/채점 내용이 변경되어 승인 결과를 적용하지 않았습니다/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '승인 취소' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('종합 의견')).toHaveValue('근거를 활용했습니다. 교사 수정');
+});
+
+test('Given approval is in flight When the submission is linked to a different student Then the stale response cannot approve it', async () => {
+    const user = userEvent.setup();
+    const assessment = makeAssessment();
+    const students = [
+        { id: 'student-1', grade: '2', className: '3', number: 1, name: '김하늘' },
+        { id: 'student-2', grade: '2', className: '3', number: 2, name: '이바다' },
+    ];
+    const initial = { ...reviewedSubmission(assessment), studentId: 'student-1' };
+    let resolveFinalization;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveFinalization = resolve; })));
+    render(<Harness initial={[initial]} assessment={assessment} students={students}/>);
+    await user.click(screen.getByLabelText('김하늘 element-1 근거 확인 완료'));
+    for (const criterionName of ['관찰 근거', '구조와 기능 설명', '피드백 반영과 수정']) await user.click(screen.getByLabelText(`${criterionName} 근거와 수준 확인 완료`));
+    await user.click(screen.getByLabelText('김하늘 원본 답안 확인 완료'));
+    await user.click(screen.getByRole('button', { name: '김하늘 채점 승인' }));
+
+    await user.selectOptions(screen.getByLabelText('김하늘 명단 연결'), 'student-2');
+    resolveFinalization(Response.json({ grading: { ...reviewedSubmission(assessment).grading, totalScore: 85 } }));
+
+    expect(await screen.findByText(/채점 내용이 변경되어 승인 결과를 적용하지 않았습니다/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '승인 취소' })).not.toBeInTheDocument();
+});
+
+test('Given regrading is in flight When the teacher edits the existing grading Then the stale response cannot overwrite the edit', async () => {
+    const user = userEvent.setup();
+    const previousAssessment = makeAssessment();
+    const currentAssessment = { ...previousAssessment, totalPoints: previousAssessment.totalPoints + 1 };
+    let resolveRegrading;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveRegrading = resolve; })));
+    render(<Harness initial={[reviewedSubmission(previousAssessment)]} assessment={currentAssessment}/>);
+
+    await user.click(screen.getByRole('button', { name: '김하늘 다시 채점하기' }));
+    await user.type(screen.getByLabelText('종합 의견'), ' 교사 수정');
+    resolveRegrading(Response.json({ grading: { ...reviewedSubmission(currentAssessment).grading, summary: '서버의 오래된 재채점 결과' } }));
+
+    expect(await screen.findByText(/채점 중 내용이 변경되어 새 결과를 적용하지 않았습니다/)).toBeInTheDocument();
+    expect(screen.getByLabelText('종합 의견')).toHaveValue('근거를 활용했습니다. 교사 수정');
+    expect(screen.queryByText('루브릭 채점 중…')).not.toBeInTheDocument();
+});
+
+test('Given a high-confidence table OCR element When review controls render Then the shared server risk rule exposes teacher confirmation', () => {
+    const assessment = makeAssessment();
+    const submission = reviewedSubmission(assessment);
+    submission.elements[0] = { ...submission.elements[0], category: 'table', confidence: .97 };
+
+    render(<Harness initial={[submission]} assessment={assessment}/>);
+
+    expect(screen.getByLabelText('김하늘 element-1 근거 확인 완료')).toBeInTheDocument();
 });
 
 test('Given mobile review tabs When arrow keys are pressed Then focus and selection move without a pointer', async () => {

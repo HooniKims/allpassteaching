@@ -34,6 +34,7 @@ function detachRestoredSubmissionFiles(project) {
         ...project,
         submissions: project.submissions.map(submission => ({
             ...submission,
+            status: submission.grading ? 'graded' : submission.extractedText ? 'extracted' : 'pending',
             originalAttached: false,
             originalReviewedAt: null,
             reviewedOriginalRevision: null,

@@ -7,6 +7,7 @@ import { makeGeneratedPlan } from '../tests/fixtures/lesson-plan.mjs';
 import { makeAssessment } from '../tests/fixtures/workflow.mjs';
 import { sourceHash } from '../lib/source-hash.js';
 import { gradingSourceHash } from '../lib/workflow-lineage.js';
+import { canonicalGradingOrigin, canonicalGradingSourceRef } from '../lib/grading-evidence.js';
 
 const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3210';
 const outputDirectory = path.resolve(process.env.VISUAL_QA_OUTPUT_DIR || '.omo/evidence/task-9-visual');
@@ -32,19 +33,24 @@ async function syntheticPacket() {
     return Buffer.from(await document.save());
 }
 
-function grading(assessment, extractedText, elements) {
-    const sourceRef = { elementId: 'visual-1', page: 1, text: '관찰 근거', coordinates: elements[0]?.coordinates ?? [] };
+function grading(input) {
+    const { assessment, extractedText, elements } = input;
+    const refs = new Map(elements.map(element => [element.id, canonicalGradingSourceRef(element)]));
+    const criteria = [
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '관찰 근거', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '근거를 확인했습니다.', confidence: .93, sourceRefs: [refs.get('visual-1')], teacherConfirmed: false },
+        { status: 'teacher_review', reviewRequired: true, criterionId: 'criterion-2', selectedLevelId: null, score: null, evidence: '기능 설명', reviewReason: '수식·도표의 의미를 원본에서 확인해야 합니다.', confidence: .72, sourceRefs: [refs.get('visual-2')], teacherConfirmed: false },
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '수정 과정', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 과정을 확인했습니다.', confidence: .9, sourceRefs: [refs.get('visual-3')], teacherConfirmed: false },
+    ];
+    const reviewOrigins = criteria.map(canonicalGradingOrigin);
     return {
-        criteria: [
-            { status: 'scored', criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '관찰 근거', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '근거를 확인했습니다.', confidence: .93, sourceRefs: [sourceRef], teacherConfirmed: false },
-            { status: 'teacher_review', criterionId: 'criterion-2', selectedLevelId: null, score: null, evidence: '기능 설명', reviewReason: '수식·도표의 의미를 원본에서 확인해야 합니다.', confidence: .72, sourceRefs: [sourceRef], teacherConfirmed: false },
-            { status: 'scored', criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '수정 과정', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 과정을 확인했습니다.', confidence: .9, sourceRefs: [sourceRef], teacherConfirmed: false },
-        ],
+        criteria,
         provisionalTotal: 50,
         totalScore: null,
-        sourceHash: gradingSourceHash(assessment, extractedText),
+        sourceHash: gradingSourceHash(assessment, extractedText, elements, criteria, input),
         summary: '관찰 근거를 활용했습니다.',
         nextSteps: '다른 기관에도 적용합니다.',
+        reviewOrigins,
+        originToken: 'a'.repeat(64),
     };
 }
 
@@ -105,14 +111,18 @@ for (const viewport of viewports) {
         const missingCoordinates = isSecond;
         return route.fulfill({ json: {
             extractedText: '관찰 근거와 기능 설명 및 수정 과정을 충분히 기록한 학생 제출 내용입니다.',
-            elements: [{ id: 'visual-1', category: missingCoordinates ? 'chart' : 'equation', page: 1, text: '관찰 근거', confidence: .72, coordinates: missingCoordinates ? [] : [{ x: .13, y: .28 }, { x: .82, y: .48 }] }],
-            elementsTruncated: false, ocrModel: 'synthetic-qa', ocrMode: 'enhanced', pageCount: 1, requiresVisualReview: true, reviewState: 'teacher_review', autoScoreAllowed: false,
+            elements: [
+                { id: 'visual-1', category: 'text', page: 1, text: '관찰 근거', confidence: .93, coordinates: [{ x: .13, y: .18 }, { x: .82, y: .26 }] },
+                { id: 'visual-2', category: missingCoordinates ? 'chart' : 'equation', page: 1, text: '기능 설명', confidence: .72, coordinates: missingCoordinates ? [] : [{ x: .13, y: .28 }, { x: .82, y: .48 }] },
+                { id: 'visual-3', category: 'text', page: 1, text: '수정 과정', confidence: .9, coordinates: [{ x: .13, y: .56 }, { x: .82, y: .66 }] },
+            ],
+            elementsTruncated: false, ocrModel: 'synthetic-qa', ocrMode: 'enhanced', pageCount: 1, requiresVisualReview: false, visualAnalysisStatus: 'enhanced_used', reviewState: 'teacher_review', autoScoreAllowed: true,
         } });
     });
     await page.route('**/api/grade-submission', route => {
         const body = route.request().postDataJSON();
         if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85 } } });
-        return route.fulfill({ json: { grading: grading(body.assessment, body.extractedText, body.elements) } });
+        return route.fulfill({ json: { grading: grading(body) } });
     });
     await page.goto(baseURL, { waitUntil: 'networkidle' });
     const coverCheckbox = page.getByRole('checkbox', { name: '각 개별 PDF의 첫 페이지가 이 학생의 수행평가 안내 표지' });
@@ -153,6 +163,7 @@ for (const viewport of viewports) {
         levelSelectorCount: await page.getByRole('combobox', { name: /성취 수준/ }).count(),
         arbitraryScoreInputCount: await page.getByRole('spinbutton', { name: /점수/ }).count(),
         provisionalTotalCount: await page.getByText(/임시 합계 50점/).count(),
+        criterionColumnCount: await first.locator('.grading-criterion').first().evaluate(element => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length),
         ...(await diagnostics(page)), consoleErrors: [...consoleErrors],
     });
     const reviewPath = path.join(outputDirectory, `${viewport.name}-grading-review-required.png`);
@@ -183,7 +194,7 @@ for (const viewport of viewports) {
     const highlightClearedAfterNavigation = await first.getByTestId('evidence-highlight').count() === 0;
     if (viewport.width <= 900) await first.getByRole('tab', { name: '채점 결과' }).click();
     await first.getByRole('button', { name: '관찰 근거 원본에서 보기' }).click();
-    await second.getByRole('button', { name: '관찰 근거 원본에서 보기' }).click();
+    await second.getByRole('button', { name: '기능 설명 원본에서 보기' }).click();
     await page.waitForFunction(() => document.activeElement?.classList.contains('pdf-page-viewport') === true);
     const secondFocusMoved = await second.locator('.pdf-page-viewport').evaluate(element => element === document.activeElement);
     await first.getByTestId('evidence-highlight').waitFor();
@@ -224,7 +235,7 @@ for (const viewport of viewports) {
     await first.getByLabel('구조와 기능 설명 평가 이유').fill('원본 시각 증거를 확인해 현재 수준에 부합합니다.');
     await first.getByLabel('구조와 기능 설명 다음 성장 피드백').fill('근거와 설명의 관계를 더 구체적으로 써보세요.');
     if (viewport.width <= 900) await first.getByRole('tab', { name: 'OCR 결과' }).click();
-    await first.getByLabel('김하늘 visual-1 근거 확인 완료').check();
+    await first.getByLabel('김하늘 visual-2 근거 확인 완료').check();
     if (viewport.width <= 900) await first.getByRole('tab', { name: '채점 결과' }).click();
     for (const criterionName of ['관찰 근거', '구조와 기능 설명', '피드백 반영과 수정']) await first.getByLabel(`${criterionName} 근거와 수준 확인 완료`).check();
     await first.getByLabel('김하늘 원본 답안 확인 완료').check();
@@ -246,7 +257,7 @@ for (const viewport of viewports) {
     const refreshPath = path.join(outputDirectory, `${viewport.name}-refresh-reattach.png`);
     await page.getByRole('link', { name: '원본 PDF 다시 연결하기' }).first().evaluate(element => element.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: refreshPath });
-    evidence.push({ viewport, state: 'refresh-reattach', screenshotPath: refreshPath, reattachLinks: await page.getByRole('link', { name: '원본 PDF 다시 연결하기' }).count(), ...(await diagnostics(page)), consoleErrors: [...consoleErrors] });
+    evidence.push({ viewport, state: 'refresh-reattach', screenshotPath: refreshPath, reattachLinks: await page.getByRole('link', { name: '원본 PDF 다시 연결하기' }).count(), approvedClassCount: await page.locator('.submission-item--approved').count(), ...(await diagnostics(page)), consoleErrors: [...consoleErrors] });
     await context.close();
 }
 await browser.close();
@@ -255,13 +266,13 @@ const failures = evidence.filter(item => item.violations.length || item.consoleE
     || item.metrics.loadingStatuses || item.metrics.busyViewports
     || (item.state !== 'cover-checkbox' && item.viewport.width <= 800 && item.metrics.submissionTabsTop !== '0px')
     || (item.state === 'cover-checkbox' && (!item.wrapperPresent || !item.phraseFitsCopy || item.phraseWhiteSpace !== 'nowrap'))
-    || (item.state === 'grading-union' && (item.teacherReviewCount < students.length || item.levelSelectorCount < students.length * 3 || item.arbitraryScoreInputCount !== 0 || item.provisionalTotalCount !== students.length))
+    || (item.state === 'grading-union' && (item.teacherReviewCount < students.length || item.levelSelectorCount < students.length * 3 || item.arbitraryScoreInputCount !== 0 || item.provisionalTotalCount !== students.length || (item.viewport.width <= 760 && item.criterionColumnCount !== 1)))
     || (item.state === 'grading-review-required' && (!item.reviewBadgeVisible || !item.unresolvedScoreVisible))
     || (item.state === 'grading-teacher-selection' && (!item.teacherSelectionVisible || !item.selectedScoreVisible))
     || (item.state === 'grading-finalized' && (item.finalizedTotalCount !== 1 || item.approvalCancelCount !== 1))
     || (item.state === 'source-links' && (!item.highlightVisible || !item.fallbackVisible || !item.firstFocusMoved || !item.secondFocusMoved || !item.highlightClearedAfterNavigation))
     || (item.state === 'low-confidence' && (!item.lowConfidenceCount || !item.teacherReviewCount || (item.fullscreenSupported && !item.fullscreenEntered)))
-    || (item.state === 'refresh-reattach' && item.reattachLinks !== students.length));
+    || (item.state === 'refresh-reattach' && (item.reattachLinks !== students.length || item.approvedClassCount !== 0)));
 const report = { capturedAt: new Date().toISOString(), baseURL, pageCount: evidence.length, failures, evidence };
 await writeFile(path.join(outputDirectory, 'evidence.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ pageCount: report.pageCount, outputDirectory, failures }, null, 2));

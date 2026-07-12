@@ -331,7 +331,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
     .submission-item__head { grid-template-columns: 1fr; gap: 10px; }
     .submission-item__head .text-button { justify-self: start; }
     .student-pdf-upload { padding: 20px 16px; }.student-pdf-upload__heading, .combined-pdf-settings { grid-template-columns: 1fr; flex-direction: column; }.individual-pdf-links label { grid-template-columns: 1fr; }.pdf-upload-modes { display: grid; grid-template-columns: 1fr; }.pdf-upload-panel > button, .ocr-start-actions button { width: 100%; }
-    .grading-criteria fieldset { grid-template-columns: 1fr; }
+    .grading-criteria .grading-criterion { grid-template-columns: 1fr; }
     .record-settings, .record-item__head, .record-item__footer { align-items: stretch; flex-direction: column; }
     .record-settings input { width: 100%; }
     .record-item__head button, .record-item__footer button { width: 100%; }

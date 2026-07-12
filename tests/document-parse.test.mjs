@@ -40,6 +40,16 @@ test('drops invalid pages and coordinates instead of returning non-finite or unb
     expect(JSON.stringify(elements)).not.toMatch(/Infinity|NaN|-0\.1|1\.1/);
 });
 
+test('keeps normalized element ids unique when generated suffixes collide with upstream ids', () => {
+    const elements = normalizeDocumentElements({ elements: [
+        { id: 'a', category: 'text', page: 1, content: { text: '첫째' } },
+        { id: 'a', category: 'text', page: 1, content: { text: '둘째' } },
+        { id: 'a-2', category: 'text', page: 1, content: { text: '셋째' } },
+    ] });
+
+    expect(new Set(elements.map(element => element.id)).size).toBe(3);
+});
+
 test.each([
     ['object', { x: 0.1, y: 0.2 }],
     ['string', '0.1,0.2'],
