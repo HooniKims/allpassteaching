@@ -16,3 +16,24 @@ test('processes at most two items at once and preserves partial failures', async
     expect(results[0].value).toBe(10);
     expect(results[1].reason.message).toBe('실패');
 });
+
+test('Given a queued batch When it is aborted after one completion Then no new item starts and the completed result remains', async () => {
+    // Given
+    const controller = new AbortController();
+    const started = [];
+
+    // When
+    const results = await runWithConcurrency([1, 2, 3], 1, async item => {
+        started.push(item);
+        if (item === 1) controller.abort();
+        return item * 10;
+    }, () => {}, { signal: controller.signal });
+
+    // Then
+    expect(started).toEqual([1]);
+    expect(results[0]).toEqual({ status: 'fulfilled', value: 10 });
+    expect(results.slice(1)).toEqual([
+        { status: 'cancelled' },
+        { status: 'cancelled' },
+    ]);
+});

@@ -12,6 +12,7 @@ import { AssessmentStage } from './AssessmentStage.jsx';
 import { OcrGradingStage } from './OcrGradingStage.jsx';
 import { RecordsStage } from './RecordsStage.jsx';
 import { SubmissionFileProvider, useSubmissionFiles } from './SubmissionFileProvider.jsx';
+import { OperationProvider } from './OperationProvider.jsx';
 
 const prerequisiteContent = {
     worksheet: { title: '먼저 지도안을 완성해주세요', description: '학습지는 지도안의 성취기준, 활동, 수업 모형을 바탕으로 만듭니다.', actionLabel: '지도안으로 이동', target: 'lesson' },
@@ -110,5 +111,5 @@ function TeachingWorkflowContent() {
 }
 
 export function TeachingWorkflow() {
-    return <SubmissionFileProvider><TeachingWorkflowContent/></SubmissionFileProvider>;
+    return <OperationProvider><SubmissionFileProvider><TeachingWorkflowContent/></SubmissionFileProvider></OperationProvider>;
 }

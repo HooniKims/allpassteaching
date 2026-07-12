@@ -4,9 +4,10 @@ import { recommendWorksheetFormat, worksheetFormats } from '@/lib/worksheet-form
 import { worksheetQuestionTypes } from '@/lib/worksheet-schema';
 import { sourceHash } from '@/lib/source-hash';
 import { WorksheetEditor } from './WorksheetEditor.jsx';
+import { useOperation } from './OperationProvider.jsx';
 
-async function downloadWorkflowPdf(kind, value, filename) {
-    const response = await fetch(`/api/export-workflow/${kind}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+async function downloadWorkflowPdf(kind, value, filename, signal) {
+    const response = await fetch(`/api/export-workflow/${kind}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
     const body = response.ok ? await response.blob() : await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.message || 'PDF 저장에 실패했습니다. 편집 내용을 확인해주세요.');
     const url = URL.createObjectURL(body);
@@ -35,6 +36,7 @@ function upgradeWorksheet(value, lessonPlan) {
 }
 
 export function WorksheetStage({ lessonPlan, value, onChange }) {
+    const { runOperation } = useOperation();
     const recommended = recommendWorksheetFormat(lessonPlan.instructionModel);
     const upgradedValue = useMemo(() => upgradeWorksheet(value, lessonPlan), [value, lessonPlan]);
     const [selectedFormatId, setSelectedFormatId] = useState(value?.formatId ?? recommended.id);
@@ -51,17 +53,22 @@ export function WorksheetStage({ lessonPlan, value, onChange }) {
     const generate = async () => {
         setStatus({ type: 'loading', message: '수업 모형, 성취기준, 요청한 문항 유형을 분석해 학습지를 만들고 있습니다.' });
         try {
-            const response = await fetch('/api/generate-worksheet', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lessonPlan, selectedFormatId, generationRequest }),
+            const body = await runOperation({ kind: 'worksheet-generation', label: '학습지 생성', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
+                const response = await fetch('/api/generate-worksheet', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, selectedFormatId, generationRequest }) });
+                const responseBody = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(responseBody.message || '학습지를 생성하지 못했습니다.');
+                return responseBody;
             });
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(body.message || '학습지를 생성하지 못했습니다.');
+            if (!body) { setStatus({ type: 'idle', message: '' }); return; }
             onChange({ ...body.worksheet, sourceHash: currentSourceHash });
             setStatus({ type: 'done', message: '학습지 초안을 만들었습니다. 교사가 내용을 확인하고 수정해주세요.' });
         } catch (error) { setStatus({ type: 'error', message: error.message || '다시 시도해주세요.' }); }
     };
-    const download = (kind, suffix) => downloadWorkflowPdf(kind, upgradedValue, `${upgradedValue.document.title}-${suffix}.pdf`).catch(error => setStatus({ type: 'error', message: error.message }));
+    const download = async (kind, suffix) => {
+        try {
+            await runOperation({ kind: 'worksheet-export', label: `${suffix} 학습지 PDF 저장`, phase: 'serverWaiting', cancelable: true }, ({ signal }) => downloadWorkflowPdf(kind, upgradedValue, `${upgradedValue.document.title}-${suffix}.pdf`, signal));
+        } catch (error) { setStatus({ type: 'error', message: error.message }); }
+    };
     return <section className="workflow-stage workflow-stage--wide">
         <header className="workflow-stage__header"><div><p className="eyebrow">2단계 · 학습지</p><h1>수업 흐름에 맞는 학습지를 만들어요</h1><p>수업 모형의 사고 과정과 성취기준을 학생이 직접 기록할 문항으로 구성합니다.</p></div></header>
         <section className="worksheet-request" aria-label="학습지 생성 설정">

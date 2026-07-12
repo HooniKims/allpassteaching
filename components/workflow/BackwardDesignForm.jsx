@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BACKWARD_DESIGN_QUESTIONS } from '@/lib/assessment-request';
+import { useOperation } from './OperationProvider.jsx';
 
 const examples = {
     desiredResult: '예: 자료를 해석해 자신의 결론을 근거와 함께 설명한다.',
@@ -17,15 +18,20 @@ const questionLabel = (key, label) => {
 };
 
 export function BackwardDesignForm({ lessonPlan, value, onChange }) {
+    const { runOperation } = useOperation();
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const update = patch => onChange({ ...value, ...patch });
     const updateIntent = patch => update({ teacherIntent: { ...value.teacherIntent, ...patch } });
     const suggest = async () => {
         setStatus({ type: 'loading', message: '성취기준과 수업 내용을 바탕으로 관찰 가능한 증거를 제안하고 있습니다.' });
         try {
-            const response = await fetch('/api/suggest-assessment-intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, desiredResult: value.teacherIntent.desiredResult }) });
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(body.message || 'AI 초안을 제안하지 못했습니다.');
+            const body = await runOperation({ kind: 'assessment-suggestion', label: '백워드 설계 초안 제안', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
+                const response = await fetch('/api/suggest-assessment-intent', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, desiredResult: value.teacherIntent.desiredResult }) });
+                const responseBody = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(responseBody.message || 'AI 초안을 제안하지 못했습니다.');
+                return responseBody;
+            });
+            if (!body) { setStatus({ type: 'idle', message: '' }); return; }
             updateIntent(body.suggestion);
             setStatus({ type: 'done', message: '제안 내용을 넣었습니다. 교사의 의도에 맞게 자유롭게 고쳐주세요.' });
         } catch (error) {

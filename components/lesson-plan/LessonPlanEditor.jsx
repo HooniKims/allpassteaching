@@ -7,10 +7,12 @@ import { OverviewTable } from './OverviewTable.jsx';
 import { SessionEditor } from './SessionEditor.jsx';
 import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
 import { lessonPlanClipboardText } from './lesson-plan-clipboard.js';
+import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
 const sharedFieldsNoteId = 'shared-plan-fields-note';
 
 export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
+    const { runOperation } = useOperation();
     const original = useRef(null);
     if (original.current === null) original.current = structuredClone(originalPlan);
     const [value, setValue] = useState(() => structuredClone(plan));
@@ -63,32 +65,33 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
         }
         setExporting(true);
         try {
-            let response;
-            try {
-                response = await fetch(`/api/export/${format}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(checked.data),
-                });
-            } catch {
-                throw new Error('네트워크 오류로 내보내기를 요청하지 못했습니다. 다시 시도해주세요.');
-            }
-            if (!response.ok) {
-                let message = '내보내기 파일을 만들지 못했습니다.';
+            await runOperation({ kind: 'lesson-export', label: `${format.toUpperCase()} 지도안 파일 저장`, phase: 'serverWaiting', cancelable: true }, async ({ signal }) => {
+                let response;
                 try {
-                    const errorBody = await response.json();
-                    if (typeof errorBody?.message === 'string' && errorBody.message) message = errorBody.message;
-                } catch {
-                    // JSON이 아닌 오류 응답은 공통 메시지로 안내한다.
+                    response = await fetch(`/api/export/${format}`, {
+                        method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checked.data),
+                    });
+                } catch (error) {
+                    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+                    throw new Error('네트워크 오류로 내보내기를 요청하지 못했습니다. 다시 시도해주세요.');
                 }
-                throw new Error(message);
-            }
-            const url = URL.createObjectURL(await response.blob());
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = `${value.title}.${format}`;
-            anchor.click();
-            URL.revokeObjectURL(url);
+                if (!response.ok) {
+                    let message = '내보내기 파일을 만들지 못했습니다.';
+                    try {
+                        const errorBody = await response.json();
+                        if (typeof errorBody?.message === 'string' && errorBody.message) message = errorBody.message;
+                    } catch {
+                        // JSON이 아닌 오류 응답은 공통 메시지로 안내한다.
+                    }
+                    throw new Error(message);
+                }
+                const url = URL.createObjectURL(await response.blob());
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `${value.title}.${format}`;
+                anchor.click();
+                URL.revokeObjectURL(url);
+            });
         } catch (error) {
             window.alert(error instanceof Error ? error.message : '내보내기 파일을 만들지 못했습니다.');
         } finally {

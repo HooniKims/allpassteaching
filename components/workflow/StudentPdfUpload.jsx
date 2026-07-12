@@ -7,6 +7,7 @@ import {
     MAX_SUBMISSION_FILES,
     splitCombinedPdf,
 } from '@/lib/pdf/student-packets.js';
+import { useOperation } from './OperationProvider.jsx';
 import { reviseSubmission } from '@/lib/grading-generation.js';
 import { useSubmissionFiles } from './SubmissionFileProvider.jsx';
 
@@ -83,6 +84,7 @@ function AlertMessage({ message }) {
 }
 
 export function StudentPdfUpload({ students, submissions, onChange, onBusyChange = () => {} }) {
+    const { runOperation } = useOperation();
     const files = useSubmissionFiles();
     const [mode, setMode] = useState(MODES.individual);
     const [hasCoverPerStudent, setHasCoverPerStudent] = useState(false);
@@ -130,7 +132,12 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         onBusyChange(true);
         await yieldToStatusPaint();
         try {
-            const pages = await inspectCombinedPdf(selected);
+            const pages = await runOperation({ kind: 'pdf-inspection', label: '합본 PDF 페이지 확인', phase: 'parsing', cancelable: true, pages: 1 }, async ({ signal }) => {
+                const count = await inspectCombinedPdf(selected);
+                if (signal.aborted) throw new DOMException('작업 취소', 'AbortError');
+                return count;
+            });
+            if (pages === undefined) return;
             setCombinedFile(selected);
             setActualPages(pages);
         } catch (error) {
@@ -157,7 +164,12 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         setMessage('');
         await yieldToStatusPaint();
         try {
-            const packets = await attachIndividualFiles(individualDrafts, { students, hasCoverPerStudent });
+            let successItems = 0; let failureItems = 0;
+            const packets = await runOperation({ kind: 'pdf-attach', label: '학생별 PDF 연결', totalItems: individualDrafts.length, phase: 'parsing', cancelable: true, profile: { kind: 'pdf-attach', model: 'pdf-lib', items: individualDrafts.length } }, ({ signal, update }) => attachIndividualFiles(individualDrafts, { students, hasCoverPerStudent }, { signal, onProgress: progress => {
+                if (progress.status === 'running') update({ currentItem: { id: individualDrafts[progress.index].studentId, label: `${progress.index + 1}번째 학생 PDF` } });
+                else { if (progress.status === 'fulfilled') successItems += 1; else failureItems += 1; update({ successItems, failureItems }); }
+            } }));
+            if (!packets) return;
             const accepted = applyPackets(packets, packet => individualDrafts.find(item => item.studentId === packet.studentId).file.name, generationToken);
             if (accepted) setIndividualDrafts([]);
         } catch (error) {
@@ -177,7 +189,12 @@ export function StudentPdfUpload({ students, submissions, onChange, onBusyChange
         setMessage('');
         await yieldToStatusPaint();
         try {
-            const packets = await splitCombinedPdf(combinedFile, { students, answerPagesPerStudent, hasCoverPerStudent });
+            let successItems = 0; let failureItems = 0;
+            const packets = await runOperation({ kind: 'pdf-split', label: '합본 PDF 학생별 분리', totalItems: students.length, phase: 'parsing', cancelable: true, profile: { kind: 'pdf-split', model: 'pdf-lib', pages: actualPages, items: students.length } }, ({ signal, update }) => splitCombinedPdf(combinedFile, { students, answerPagesPerStudent, hasCoverPerStudent }, { signal, onProgress: progress => {
+                if (progress.status === 'running') update({ currentItem: { id: students[progress.index].id, label: students[progress.index].name } });
+                else { if (progress.status === 'fulfilled') successItems += 1; else failureItems += 1; update({ successItems, failureItems }); }
+            } }));
+            if (!packets) return;
             const accepted = applyPackets(packets, () => combinedFile.name, generationToken);
             if (accepted) {
                 setCombinedFile(null);

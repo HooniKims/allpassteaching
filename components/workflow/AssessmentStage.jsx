@@ -6,9 +6,10 @@ import { assessmentOutputSchema, unresolvedBlockingAlignmentIssues } from '@/lib
 import { BackwardDesignForm } from './BackwardDesignForm.jsx';
 import { RubricEditor } from './RubricEditor.jsx';
 import { AssessmentCoverEditor } from './AssessmentCoverEditor.jsx';
+import { useOperation } from './OperationProvider.jsx';
 
-async function downloadAssessment(kind, value) {
-    const response = await fetch(`/api/export-workflow/${kind}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+async function downloadAssessment(kind, value, signal) {
+    const response = await fetch(`/api/export-workflow/${kind}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
     if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.message || 'PDF 저장에 실패했습니다.');
@@ -22,6 +23,7 @@ async function downloadAssessment(kind, value) {
 }
 
 export function AssessmentStage({ lessonPlan, value, request, onRequestChange, onChange }) {
+    const { runOperation } = useOperation();
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const [candidate, setCandidate] = useState(null);
     const currentSourceHash = sourceHash(lessonPlan);
@@ -44,14 +46,23 @@ export function AssessmentStage({ lessonPlan, value, request, onRequestChange, o
     const generate = async () => {
         setStatus({ type: 'loading', message: '성취기준, 도착점, 증거와 수행 과정을 연결해 수행평가를 만들고 있습니다.' });
         try {
-            const response = await fetch('/api/generate-assessment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, assessmentRequest: request }) });
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(body.message || '수행평가를 생성하지 못했습니다.');
+            const body = await runOperation({ kind: 'assessment-generation', label: '수행평가와 루브릭 생성', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
+                const response = await fetch('/api/generate-assessment', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, assessmentRequest: request }) });
+                const responseBody = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(responseBody.message || '수행평가를 생성하지 못했습니다.');
+                return responseBody;
+            });
+            if (!body) { setStatus({ type: 'idle', message: '' }); return; }
             const next = { ...body.assessment, sourceHash: currentSourceHash, approved: false };
             if (value) setCandidate({ assessment: next, requestFingerprint, assessmentFingerprint });
             else onChange(next);
             setStatus({ type: 'done', message: value ? '새 초안을 후보로 만들었습니다. 비교한 뒤 적용하거나 현재안을 유지하세요.' : '수행평가 초안을 만들었습니다. 연결표, 배점, 수준 기술과 표지를 확인해주세요.' });
         } catch (error) { setStatus({ type: 'error', message: error.message || '다시 시도해주세요.' }); }
+    };
+    const exportAssessment = async kind => {
+        const label = kind === 'assessment-cover' ? '수행평가 표지 PDF 저장' : '수행평가 전체 PDF 저장';
+        try { await runOperation({ kind: 'assessment-export', label, phase: 'serverWaiting', cancelable: true }, ({ signal }) => downloadAssessment(kind, value, signal)); }
+        catch (error) { setStatus({ type: 'error', message: error.message }); }
     };
     const applyCandidate = () => {
         if (candidate.requestFingerprint !== requestFingerprint) {
@@ -74,7 +85,7 @@ export function AssessmentStage({ lessonPlan, value, request, onRequestChange, o
         {status.message && <p className={`status-line status-line--${status.type}`} role={status.type === 'error' ? 'alert' : 'status'}>{status.message}</p>}
         {candidate && <aside className="candidate-panel" aria-label="새 수행평가 후보"><span className="status-pill">적용 전 후보</span><h2>{candidate.assessment.task.title}</h2><p>{candidate.assessment.backwardDesign.transferGoal}</p><div className="row-actions"><button type="button" onClick={applyCandidate}>새 후보 적용</button><button type="button" className="secondary-button" onClick={() => setCandidate(null)}>현재안 유지</button></div></aside>}
         {value && <>
-            <div className="stage-document-head"><div><span className="status-pill">{value.approved ? '교사 확인 완료' : 'AI 초안'}</span><strong>{value.task.title || '과제명 확인 필요'}</strong><p>루브릭 배점 합계 {total}점 · {value.rubric.levels.length}수준</p></div><div className="stage-document-actions">{value.includeStudentCover && request.includeStudentCover && <button type="button" className="secondary-button" disabled={!validation?.success || !valueContractMatchesRequest} onClick={() => downloadAssessment('assessment-cover', value).catch(error => setStatus({ type: 'error', message: error.message }))}>표지만 PDF 저장</button>}<button type="button" className="secondary-button" disabled={!validation?.success || !valueContractMatchesRequest} onClick={() => downloadAssessment('assessment', value).catch(error => setStatus({ type: 'error', message: error.message }))}>수행평가 전체 PDF 저장</button><button type="button" disabled={!readyForApproval} onClick={() => onChange({ ...value, approved: !value.approved })}>{value.approved ? '확인 완료 취소' : '수행평가·루브릭 확인 완료'}</button></div></div>
+            <div className="stage-document-head"><div><span className="status-pill">{value.approved ? '교사 확인 완료' : 'AI 초안'}</span><strong>{value.task.title || '과제명 확인 필요'}</strong><p>루브릭 배점 합계 {total}점 · {value.rubric.levels.length}수준</p></div><div className="stage-document-actions">{value.includeStudentCover && request.includeStudentCover && <button type="button" className="secondary-button" disabled={!validation?.success || !valueContractMatchesRequest} onClick={() => exportAssessment('assessment-cover')}>표지만 PDF 저장</button>}<button type="button" className="secondary-button" disabled={!validation?.success || !valueContractMatchesRequest} onClick={() => exportAssessment('assessment')}>수행평가 전체 PDF 저장</button><button type="button" disabled={!readyForApproval} onClick={() => onChange({ ...value, approved: !value.approved })}>{value.approved ? '확인 완료 취소' : '수행평가·루브릭 확인 완료'}</button></div></div>
             {validation && !validation.success && <p className="form-alert" role="alert">{validationMessage}</p>}
             {!valueContractMatchesRequest && <p className="form-alert" role="alert">생성 뒤 평가 설정이 바뀌었습니다. 현재 교사 설정으로 수행평가를 다시 생성해주세요.</p>}
             {blockingIssues.length > 0 && <div className="form-alert" role="alert"><strong>성취기준 연결을 먼저 보완해주세요.</strong>{blockingIssues.map(item => <p key={item.id}>{item.message}</p>)}</div>}

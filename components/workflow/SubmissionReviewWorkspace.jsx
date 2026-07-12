@@ -99,6 +99,7 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
         const assessmentEpoch = assessmentEpochRef.current;
         try {
             const result = await onFinalize(submission);
+            if (!result) return;
             if (!mountedRef.current) return;
             if (approvalEpochRef.current !== requestEpoch || assessmentEpochRef.current !== assessmentEpoch
                 || gradingRevisionOf(submissionRef.current) !== requestRevision || result.gradingRevision !== requestRevision) {

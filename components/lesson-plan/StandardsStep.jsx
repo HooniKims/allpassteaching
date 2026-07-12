@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import catalog from '@/data/curriculum.json';
 import { searchStandards } from '@/lib/curriculum/search';
+import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
 function gradeBand({ schoolLevel, grade }) {
     if (schoolLevel === 'elementary') return Number(grade) <= 2 ? '1-2' : Number(grade) <= 4 ? '3-4' : '5-6';
@@ -8,6 +9,7 @@ function gradeBand({ schoolLevel, grade }) {
 }
 
 export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
+    const { runOperation } = useOperation();
     const [query, setQuery] = useState(basics.intent);
     const [recommendations, setRecommendations] = useState([]);
     const [status, setStatus] = useState('idle');
@@ -29,10 +31,14 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
         activeRecommendation.current = controller;
         setStatus('loading'); setMessage('');
         try {
-            const response = await fetch('/api/recommend-standards', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scope) });
-            const body = await response.json();
+            const result = await runOperation({ kind: 'standards-recommendation', label: '성취기준 추천 분석', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
+                const response = await fetch('/api/recommend-standards', { method: 'POST', signal: AbortSignal.any([controller.signal, signal]), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scope) });
+                return { body: await response.json(), ok: response.ok };
+            });
+            if (!result) { setStatus('idle'); return; }
+            const { body, ok } = result;
             if (activeRecommendation.current !== controller) return;
-            if (!response.ok) { setStatus('error'); setMessage(body.message || 'AI 추천을 불러오지 못했습니다. 직접 검색은 계속 사용할 수 있어요.'); return; }
+            if (!ok) { setStatus('error'); setMessage(body.message || 'AI 추천을 불러오지 못했습니다. 직접 검색은 계속 사용할 수 있어요.'); return; }
             setRecommendations(body.recommendations); setStatus('done');
         } catch {
             if (activeRecommendation.current !== controller) return;

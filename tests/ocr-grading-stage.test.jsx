@@ -6,6 +6,7 @@ import { PDFDocument } from 'pdf-lib';
 import { OcrGradingStage } from '@/components/workflow/OcrGradingStage.jsx';
 import { SubmissionReviewWorkspace } from '@/components/workflow/SubmissionReviewWorkspace.jsx';
 import { SubmissionFileProvider } from '@/components/workflow/SubmissionFileProvider.jsx';
+import { OperationProvider } from '@/components/workflow/OperationProvider.jsx';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { gradingSourceHash } from '@/lib/workflow-lineage';
 import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
@@ -78,6 +79,33 @@ function reviewedSubmission(assessment = makeAssessment()) {
 }
 
 const requestedGradingRevision = () => JSON.parse(fetch.mock.calls.at(-1)[1].body).gradingRevision;
+
+test('Given two extracted answers When batch grading starts Then the real provider grades both without a busy collision', async () => {
+    // Given
+    const assessment = makeAssessment();
+    const source = reviewedSubmission(assessment);
+    const initial = ['김하늘', '이바다'].map((studentName, index) => ({
+        ...source, id: `batch-${index + 1}`, studentName, fileName: `${studentName}.pdf`, status: 'extracted', grading: null, sourceHash: '', approved: false,
+    }));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url, options) => {
+        const request = JSON.parse(options.body);
+        return Response.json({ grading: source.grading, gradingRevision: request.gradingRevision + 1 });
+    }));
+    function BatchHarness() {
+        const [submissions, setSubmissions] = useState(initial);
+        return <OperationProvider><SubmissionFileProvider><OcrGradingStage assessment={assessment} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider></OperationProvider>;
+    }
+    const user = userEvent.setup();
+    render(<BatchHarness/>);
+
+    // When
+    await user.click(screen.getByRole('button', { name: '채점 가능한 답안 일괄 채점' }));
+
+    // Then
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(await screen.findAllByRole('button', { name: /채점 승인/ })).toHaveLength(2);
+    expect(screen.queryByText(/다른 작업이 진행 중입니다/)).not.toBeInTheDocument();
+});
 
 test('Given linked risky evidence When grading is reviewed Then source and original checks gate approval and mobile review tabs remain accessible', async () => {
     const user = userEvent.setup();

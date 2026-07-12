@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { deriveLevelScores } from '@/lib/rubric-score';
 import { sourceHash } from '@/lib/source-hash';
+import { useOperation } from './OperationProvider.jsx';
 
 const splitLines = value => value.split('\n').map(item => item.trim()).filter(Boolean);
 const uid = prefix => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? Date.now().toString(36)}`;
@@ -55,6 +56,7 @@ function percentForPoints(totalPoints, processPoints, preferred) {
 }
 
 export function RubricEditor({ value, request, onRequestChange, onChange }) {
+    const { runOperation } = useOperation();
     const [criterionCandidate, setCriterionCandidate] = useState(null);
     const [error, setError] = useState('');
     const [totalDraft, setTotalDraft] = useState(String(value.totalPoints));
@@ -175,9 +177,13 @@ export function RubricEditor({ value, request, onRequestChange, onChange }) {
     const regenerate = async criterionId => {
         setError('');
         try {
-            const response = await fetch('/api/regenerate-assessment-criterion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assessment: value, criterionId }) });
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(body.message || '평가영역을 다시 만들지 못했습니다.');
+            const body = await runOperation({ kind: 'criterion-regeneration', label: '선택 평가영역 다시 생성', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
+                const response = await fetch('/api/regenerate-assessment-criterion', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assessment: value, criterionId }) });
+                const responseBody = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(responseBody.message || '평가영역을 다시 만들지 못했습니다.');
+                return responseBody;
+            });
+            if (!body) return;
             const original = structuredClone(value.rubric.criteria.find(item => item.id === criterionId));
             setCriterionCandidate({ criterionId, value: body.criterion, original, sourceFingerprint: sourceHash(original) });
         } catch (cause) { setError(cause.message); }

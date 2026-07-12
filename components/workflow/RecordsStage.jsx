@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { runWithConcurrency } from '@/lib/batch-queue';
 import { recordSourceHash, submissionIsApprovedFor } from '@/lib/workflow-lineage';
 import { RecordDraftComparison } from './RecordDraftComparison.jsx';
 import { RecordEvidencePanel } from './RecordEvidencePanel.jsx';
+import { useOperation } from './OperationProvider.jsx';
 
 function upsert(collection, value) {
     return collection.some(item => item.submissionId === value.submissionId)
@@ -28,6 +28,7 @@ function candidateIssueFor(record, currentSourceHash, targetLength) {
 }
 
 export function RecordsStage({ lessonPlan, assessment, students = [], submissions, records, onChange }) {
+    const { cancelActive, runBatchOperation } = useOperation();
     const rosterById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
     const approved = submissions.filter(item => rosterById.has(item.studentId) && submissionIsApprovedFor(assessment, item));
     const [targetLength, setTargetLength] = useState(500);
@@ -64,8 +65,9 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
             });
         };
         try {
-            await runWithConcurrency(targets, 2, async submission => {
-                if (controller.signal.aborted) return;
+            await runBatchOperation({ kind: 'records', label: '과목별 세부능력 및 특기사항 생성', items: targets, itemLabel: submission => rosterById.get(submission.studentId)?.name ?? '학생', concurrency: 2, phase: 'upstageWaiting', profile: { model: 'configured-generation-model' } }, async (submission, _index, { signal }) => {
+                const combinedSignal = AbortSignal.any([controller.signal, signal]);
+                if (combinedSignal.aborted) throw new DOMException('작업 취소', 'AbortError');
                 const student = rosterById.get(submission.studentId);
                 if (!student) return;
                 const nextSourceHash = recordSourceHash(assessment, submission);
@@ -76,7 +78,7 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
                     : { sourceHash: nextSourceHash, status: 'generating', regenerationStatus: '', text: '', error: '', approved: false });
                 try {
                     const authorizationResponse = await fetch('/api/authorize-record-generation', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: combinedSignal,
                         body: JSON.stringify({ lessonPlan, assessment, students, submissions: approved }),
                     });
                     const authorizationBody = await authorizationResponse.json().catch(() => ({}));
@@ -86,9 +88,9 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
                         failure.code = authorizationBody.code;
                         throw failure;
                     }
-                    if (controller.signal.aborted) return;
+                    if (combinedSignal.aborted) throw new DOMException('작업 취소', 'AbortError');
                     const response = await fetch('/api/generate-record', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: combinedSignal,
                         body: JSON.stringify({ lessonPlan, assessment, roster: students, recordContext, student, submission, targetLength }),
                     });
                     const body = await response.json().catch(() => ({}));
@@ -107,6 +109,7 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
                         ? { status: 'done', regenerationStatus: cancelled ? '' : 'error', candidateInvalidCode: cancelled ? current?.candidateInvalidCode ?? '' : candidateInvalidCode, candidateInvalidMessage: cancelled ? current?.candidateInvalidMessage ?? '' : candidateInvalidCode ? error.message : '', error: cancelled ? '' : error instanceof Error ? error.message : '세특 초안을 만들지 못했습니다.', approved: current?.approved ?? false }
                         : { sourceHash: current?.sourceHash ?? nextSourceHash, status: 'error', regenerationStatus: '', text: current?.text ?? '', error: cancelled ? '작업을 취소했습니다.' : error instanceof Error ? error.message : '세특 초안을 만들지 못했습니다.', approved: current?.approved ?? false });
                     if (mounted.current && !cancelled) setBatchMessage(`${student.name} 세특 생성에 실패했습니다.`);
+                    throw error;
                 }
             });
         } catch (error) {
@@ -119,6 +122,7 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
 
     const cancelBatch = () => {
         abortController.current?.abort();
+        cancelActive();
         setBatchMessage('세특 생성 작업을 취소했습니다. 완료된 결과와 기존 문장은 유지됩니다.');
     };
 

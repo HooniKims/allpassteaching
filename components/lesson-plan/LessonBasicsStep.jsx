@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { normalizeLessonMetadata } from '@/lib/lesson-input';
 import { CUSTOM_SUBJECT_VALUE, catalogSubjectsFor, subjectGroupsFor } from '@/lib/subject-options';
+import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
 const gradeOptions = { elementary: ['1','2','3','4','5','6'], middle: ['1','2','3'], high: ['1','2','3'] };
 
 export function LessonBasicsStep({ value, onChange, onNext }) {
+    const { runOperation } = useOperation();
     const subjectGroups = subjectGroupsFor(value.schoolLevel, value.grade);
     const officialValues = subjectGroups.flatMap(group => group.options.map(item => item.value));
     const storedSubject = value.displaySubject || value.subject || '';
@@ -43,8 +45,10 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
         setMappingStatus('loading');
         setMappingMessage('');
         try {
+            const result = await runOperation({ kind: 'subject-mapping', label: '관련 공식 과목 찾기', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
             const response = await fetch('/api/map-subject', {
                 method: 'POST',
+                signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     schoolLevel: value.schoolLevel,
@@ -54,7 +58,11 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
                 }),
             });
             const body = await response.json();
-            if (!response.ok) {
+            return { body, ok: response.ok };
+            });
+            if (!result) { setMappingStatus('idle'); return; }
+            const { body, ok } = result;
+            if (!ok) {
                 const fallback = (body.directCandidates ?? []).map(subject => ({ subject, reason: '공식 과목에서 직접 선택할 수 있습니다.' }));
                 setMappingOptions(fallback);
                 setMappingStatus('error');

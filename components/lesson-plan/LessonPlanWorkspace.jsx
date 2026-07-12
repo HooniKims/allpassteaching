@@ -9,11 +9,13 @@ import { GenerationStatus } from './GenerationStatus.jsx';
 import { LessonPlanEditor } from './LessonPlanEditor.jsx';
 import { GenerationSummary } from './GenerationSummary.jsx';
 import { createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
+import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
 const emptyBasics = { schoolLevel: '', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
 const emptyDraft = { step: 1, maxReached: 1, basics: emptyBasics, standards: [] };
 
 export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
+    const { runOperation } = useOperation();
     const [ready, setReady] = useState(false);
     const [draft, setDraft] = useState(emptyDraft);
     const [generation, setGeneration] = useState({ status: 'idle', message: '' });
@@ -47,17 +49,25 @@ export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
         activeGeneration.current = controller;
         setGeneration({ status: 'loading', message: '' });
         try {
-            const response = await fetch('/api/generate-plan', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestDraft) });
-            const body = await response.json();
+            const body = await runOperation({ kind: 'lesson-generation', label: '수업 지도안 생성', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
+                const combinedSignal = AbortSignal.any([controller.signal, signal]);
+                const response = await fetch('/api/generate-plan', { method: 'POST', signal: combinedSignal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestDraft) });
+                const responseBody = await response.json();
+                if (!response.ok) throw new Error(responseBody?.message || '다시 시도해주세요.');
+                return responseBody;
+            });
+            if (!body) { setGeneration({ status: 'idle', message: '' }); return; }
             if (activeGeneration.current !== controller) return;
-            if (!response.ok) return setGeneration({ status: 'error', message: body?.message || '다시 시도해주세요.' });
             setDraft(current => current.step === 4 && !hasGenerationInputChanged(current, requestedSnapshot)
                 ? { ...current, maxReached: 4, plan: body.plan, originalPlan: structuredClone(body.plan), generatedFrom: requestedSnapshot }
                 : current);
             setGeneration({ status: 'done', message: '' });
-        } catch {
+        } catch (error) {
             if (activeGeneration.current !== controller) return;
-            setGeneration({ status: 'error', message: '네트워크 또는 응답 형식을 확인할 수 없습니다. 다시 시도해주세요.' });
+            const message = error instanceof SyntaxError || error instanceof TypeError
+                ? '네트워크 또는 응답 형식을 확인할 수 없습니다. 다시 시도해주세요.'
+                : error instanceof Error ? error.message : '네트워크 또는 응답 형식을 확인할 수 없습니다. 다시 시도해주세요.';
+            setGeneration({ status: 'error', message });
         } finally {
             if (activeGeneration.current === controller) activeGeneration.current = null;
         }

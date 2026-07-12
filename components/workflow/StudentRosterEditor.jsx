@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createStudent, MAX_STUDENTS, validateRoster } from '@/lib/student-roster.js';
 import { createRosterTemplate, parseRosterWorkbook } from '@/lib/student-roster-excel.js';
+import { useOperation } from './OperationProvider.jsx';
 
 const EMPTY_COLLECTION = Object.freeze([]);
 
@@ -33,6 +34,7 @@ function move(collection, index, offset) {
 }
 
 export function StudentRosterEditor({ students, submissions = EMPTY_COLLECTION, records = EMPTY_COLLECTION, onChange, onDeleteStudent }) {
+    const { runOperation } = useOperation();
     const [importIssues, setImportIssues] = useState([]);
     const [draftStudents, setDraftStudents] = useState(students);
     const [editIssues, setEditIssues] = useState([]);
@@ -83,7 +85,14 @@ export function StudentRosterEditor({ students, submissions = EMPTY_COLLECTION, 
         setStatus('');
         setImportIssues([]);
         try {
-            const result = await parseRosterWorkbook(await readFile(file));
+            const result = await runOperation({ kind: 'roster-import', label: 'Excel 학생 명단 불러오기', phase: 'parsing', cancelable: true }, async ({ signal }) => {
+                const bytes = await readFile(file);
+                if (signal.aborted) throw new DOMException('작업 취소', 'AbortError');
+                const parsed = await parseRosterWorkbook(bytes);
+                if (signal.aborted) throw new DOMException('작업 취소', 'AbortError');
+                return parsed;
+            });
+            if (!result) return;
             if (result.issues.length) {
                 setImportIssues(result.issues);
                 return;
@@ -102,7 +111,11 @@ export function StudentRosterEditor({ students, submissions = EMPTY_COLLECTION, 
         setBusy(true);
         setStatus('');
         try {
-            downloadBytes(await createRosterTemplate());
+            await runOperation({ kind: 'roster-template-export', label: '학생 명단 입력 양식 만들기', phase: 'preparing', cancelable: true }, async ({ signal }) => {
+                const bytes = await createRosterTemplate();
+                if (signal.aborted) throw new DOMException('작업 취소', 'AbortError');
+                downloadBytes(bytes);
+            });
             setStatus('학생 명단 입력 양식을 내려받았습니다.');
         } finally {
             setBusy(false);
