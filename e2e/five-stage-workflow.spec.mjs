@@ -12,7 +12,7 @@ function grading(input) {
     const criteria = [
         { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털이 있다', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거를 구체적으로 기록했습니다.', confidence: .96, sourceRefs: [refs.get('root-evidence')], teacherConfirmed: false },
         { status: 'teacher_review', reviewRequired: true, criterionId: 'criterion-2', selectedLevelId: null, score: null, evidence: 'x² = 4', reviewReason: '수식의 핵심 기호를 원본에서 확인해야 합니다.', confidence: .66, sourceRefs: [refs.get('equation-evidence')], teacherConfirmed: false },
-        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '피드백을 반영해 설명을 고쳤다', reason: '피드백 반영 과정의 근거가 드러납니다.', feedback: '피드백 반영과 수정 이유를 확인했습니다.', confidence: .91, sourceRefs: [refs.get('revision-evidence')], teacherConfirmed: false },
+        { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '피드백을 반영해 설명을 고쳤다', reason: '피드백 반영 과정의 근거가 드러납니다.', feedback: '피드백 반영과 수정 이유를 확인했습니다.', confidence: .91, sourceRefs: [refs.get('revision-evidence')], teacherConfirmed: false, revisionEvidence: { checkpointId: 'checkpoint-2', beforeEvidence: '뿌리에 가는 털이 있다', beforeSourceRef: refs.get('root-evidence'), afterEvidence: '피드백을 반영해 설명을 고쳤다', afterSourceRef: refs.get('revision-evidence'), changeReason: '관찰 근거를 더 분명히 설명하기 위해 수정함.', teacherConfirmed: true } },
     ];
     const reviewOrigins = criteria.map(canonicalGradingOrigin);
     return {
@@ -29,6 +29,7 @@ function grading(input) {
     };
 }
 const recordText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 가는 털과 물 흡수 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러났으며 다른 기관에도 같은 설명 방식을 적용하려는 학습 방향을 보임.';
+const candidateSuffix = { 'student-a': ' 문장을 보완함.', 'student-b': ' 근거를 보완함.' };
 const studentRoster = [
     { id: 'student-a', grade: '2', className: '3', number: 1, name: '김학생' },
     { id: 'student-b', grade: '2', className: '3', number: 2, name: '이학생' },
@@ -84,6 +85,9 @@ test.beforeEach(async ({ page }) => {
 
 test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }, testInfo) => {
     let ocrCalls = 0;
+    const recordCalls = new Map();
+    const consoleErrors = [];
+    page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     const uploadedPageCounts = [];
     const uploadedVisualModes = [];
     await page.route('**/api/generate-worksheet', route => route.fulfill({ json: { worksheet: makeWorksheet() } }));
@@ -104,7 +108,16 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
         if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: body.gradingRevision } });
         return route.fulfill({ json: { grading: grading(body), gradingRevision: body.gradingRevision + 1 } });
     });
-    await page.route('**/api/generate-record', route => route.fulfill({ json: { record: { text: recordText } } }));
+    await page.route('**/api/authorize-record-generation', route => route.fulfill({ json: { context: { payload: { version: 1 }, token: 'a'.repeat(64) } } }));
+    await page.route('**/api/generate-record', route => {
+        const body = route.request().postDataJSON();
+        const studentId = body.student.id;
+        const call = (recordCalls.get(studentId) ?? 0) + 1;
+        recordCalls.set(studentId, call);
+        if (studentId === 'student-b' && call === 2) return route.fulfill({ status: 503, json: { message: '이학생 새 초안 생성 실패' } });
+        const suffix = call === 1 ? '' : candidateSuffix[studentId];
+        return route.fulfill({ json: { record: { text: `${recordText}${suffix}`, evidenceCriterionIds: ['criterion-1'], claims: [{ text: `${recordText}${suffix}`, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '뿌리에 가는 털이 있다' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'root-evidence', page: 1 }] }] } } });
+    });
 
     await page.goto('/');
     await page.getByRole('tab', { name: /학습지/ }).click();
@@ -159,9 +172,37 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
 
     await page.getByRole('tab', { name: /세특/ }).click();
     await page.getByRole('button', { name: '미생성 학생 전체 생성' }).click();
-    await expect(page.getByLabel('세특 초안')).toHaveCount(2);
+    await expect(page.getByRole('textbox', { name: /세특 초안/ })).toHaveCount(2);
     await expect(page.getByText(`${recordText.length}자 / 500자`)).toHaveCount(2);
+    await expect(page.getByRole('region', { name: '김학생 기록 근거' })).toContainText('6과11-02');
+    await expect(page.getByRole('region', { name: '김학생 기록 근거' })).toContainText('피드백 반영 과정의 근거가 드러납니다.');
+
+    await page.getByRole('button', { name: '전체 다시 생성' }).click();
+    await expect(page.getByText('이학생 새 초안 생성 실패')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(recordText);
+    await expect(page.getByRole('textbox', { name: '이학생 세특 초안' })).toHaveValue(recordText);
+    await expect(page.getByText(`${recordText}${candidateSuffix['student-a']}`)).toBeVisible();
+    await page.getByRole('button', { name: '실패 학생만 다시 시도' }).click();
+    await expect(page.getByText(`${recordText}${candidateSuffix['student-b']}`)).toBeVisible();
+    for (const width of [375, 768, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        const responsiveAxe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+        expect(responsiveAxe.violations.map(item => item.id)).toEqual([]);
+        await page.evaluate(() => document.querySelectorAll('nextjs-portal').forEach(element => element.remove()));
+        await page.screenshot({ path: width === 375 ? '.omo/evidence/task-11-records.png' : `.omo/evidence/task-11-records-${width}.png`, fullPage: true });
+    }
+    await page.getByRole('button', { name: '김학생 새 초안 적용' }).click();
+    await page.getByRole('button', { name: '이학생 기존 문장 유지' }).click();
+    await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(`${recordText}${candidateSuffix['student-a']}`);
+    await expect(page.getByRole('textbox', { name: '이학생 세특 초안' })).toHaveValue(recordText);
+    await page.getByRole('textbox', { name: '김학생 세특 초안' }).fill(`${recordText} 교사 보완`);
+    await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(`${recordText} 교사 보완`);
+
+    await page.evaluate(() => document.querySelectorAll('nextjs-portal').forEach(element => element.remove()));
+    await page.screenshot({ path: '.omo/evidence/task-11-records-final.png', fullPage: true });
 
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
     expect(axe.violations.map(item => item.id)).toEqual([]);
+    expect(consoleErrors.filter(message => !/status of (422|503)/.test(message))).toEqual([]);
 });

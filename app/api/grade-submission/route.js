@@ -146,6 +146,20 @@ function finalizeGrading(input) {
     const criteria = input.grading.criteria.map((criterion, index) => {
         const rubricCriterion = expected[index];
         const refs = canonicalSourceRefs(criterion.sourceRefs, input.elements, ['grading', 'criteria', index, 'sourceRefs'], issues, true);
+        let revisionEvidence = criterion.revisionEvidence;
+        if (revisionEvidence) {
+            const beforeRef = canonicalSourceRefs([revisionEvidence.beforeSourceRef], input.elements, ['grading', 'criteria', index, 'revisionEvidence', 'beforeSourceRef'], issues, true)[0];
+            const afterRef = canonicalSourceRefs([revisionEvidence.afterSourceRef], input.elements, ['grading', 'criteria', index, 'revisionEvidence', 'afterSourceRef'], issues, true)[0];
+            if (rubricCriterion?.kind !== 'process'
+                || !input.assessment.backwardDesign.checkpoints.some(checkpoint => checkpoint.phase === 'revision' && checkpoint.id === revisionEvidence.checkpointId)) {
+                issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'checkpointId'], '현재 수정 체크포인트와 과정 평가영역만 연결할 수 있습니다.'));
+            }
+            if (!revisionEvidence.teacherConfirmed) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'teacherConfirmed'], '수정 전후 원본과 수정 이유를 교사가 확인해야 합니다.'));
+            if (!beforeRef || !afterRef || beforeRef.elementId === afterRef.elementId) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence'], '서로 다른 수정 전·후 원본 근거가 필요합니다.'));
+            if (beforeRef && !gradingEvidenceMatchesElements(revisionEvidence.beforeEvidence, [elementById.get(beforeRef.elementId)])) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'beforeEvidence'], '수정 전 근거는 연결한 현재 OCR 원문에 있어야 합니다.'));
+            if (afterRef && !gradingEvidenceMatchesElements(revisionEvidence.afterEvidence, [elementById.get(afterRef.elementId)])) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'afterEvidence'], '수정 후 근거는 연결한 현재 OCR 원문에 있어야 합니다.'));
+            if (beforeRef && afterRef) revisionEvidence = { ...revisionEvidence, beforeSourceRef: beforeRef, afterSourceRef: afterRef };
+        }
         if (!rubricCriterion || criterion.criterionId !== rubricCriterion.id) issues.push(issue(['grading', 'criteria', index, 'criterionId'], '현재 루브릭 평가영역 id와 순서를 보존해야 합니다.'));
         const origin = originByCriterionId.get(criterion.criterionId);
         if (!origin || input.grading.reviewOrigins[index]?.criterionId !== criterion.criterionId) issues.push(issue(['grading', 'reviewOrigins', index], '서버가 발급한 평가영역 출처 순서를 보존해야 합니다.'));
@@ -171,7 +185,7 @@ function finalizeGrading(input) {
         if (criterion.reviewRequired !== reviewRequired) issues.push(issue(['grading', 'criteria', index, 'reviewRequired'], '서버가 보존한 교사 확인 출처와 현재 결정 출처가 일치해야 합니다.'));
         if (reviewRequired && criterion.decisionSource !== 'teacher') issues.push(issue(['grading', 'criteria', index, 'decisionSource'], 'AI 추천에서 변경하거나 교사 확인으로 해소한 수준은 교사 선택으로만 확정할 수 있습니다.'));
         total += level?.score ?? 0;
-        return { ...criterion, sourceRefs: refs };
+        return { ...criterion, sourceRefs: refs, ...(revisionEvidence ? { revisionEvidence } : {}) };
     });
     const requiredIds = gradingEvidenceRiskIds(input, input.elements);
     for (const id of new Set(requiredIds)) if (!input.confirmedElementIds.includes(id)) issues.push(issue(['confirmedElementIds'], `${id} 원본 근거를 확인해야 합니다.`));

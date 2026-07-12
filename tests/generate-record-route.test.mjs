@@ -7,6 +7,7 @@ import { gradingSourceHash } from '@/lib/workflow-lineage';
 import { sourceHash } from '@/lib/source-hash';
 import { canonicalGradingOrigin, canonicalGradingProvenance, canonicalGradingSourceRef } from '@/lib/grading-evidence';
 import { createGradingApprovalToken, createGradingOriginToken } from '@/lib/grading-origin-token';
+import { createRecordContext } from '@/lib/record-context-token';
 
 afterEach(() => { vi.restoreAllMocks(); delete process.env.UPSTAGE_API_KEY; });
 const integritySecret = randomBytes(32).toString('hex');
@@ -27,19 +28,43 @@ const currentGradingHash = gradingSourceHash(assessment, submissionBase.extracte
 const finalizedGrading = { ...submissionBase.grading, sourceHash: currentGradingHash };
 finalizedGrading.approvalToken = createGradingApprovalToken(assessment, submissionBase.extractedText, recordElements, canonicalGradingProvenance(submissionBase), finalizedGrading, submissionBase);
 const submission = { ...submissionBase, grading: finalizedGrading, sourceHash: currentGradingHash };
+const student = { id: 'student-1', grade: '6', className: '1', number: 1, name: '김학생' };
 const request = body => new Request('http://localhost/api/generate-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const completion = value => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) } }] }), { status: 200 });
+const claims = value => ({ claims: [{ text: value, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] });
+const input = ({ currentLessonPlan = lessonPlan, currentAssessment = assessment, currentStudent = student, currentSubmission = submission, roster = [currentStudent], targetLength = 500 } = {}) => ({
+    lessonPlan: currentLessonPlan,
+    assessment: currentAssessment,
+    student: currentStudent,
+    submission: currentSubmission,
+    roster,
+    recordContext: createRecordContext({ lessonPlan: currentLessonPlan, assessment: currentAssessment, students: roster, submissions: [currentSubmission] }),
+    targetLength,
+});
 
 test('generates only from a teacher-approved grading result', async () => {
-    process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion({ text })));
-    const response = await POST(request({ lessonPlan, assessment, submission, targetLength: 500 }));
+    process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(claims(text))));
+    const response = await POST(request(input()));
 
     expect(response.status).toBe(200);
     expect((await response.json()).record.text).toBe(text);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+});
+
+test('rejects a submission that is not linked to the current roster student id', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const changedStudent = { ...student, id: 'student-2' };
+    const response = await POST(request(input({ currentStudent: changedStudent, roster: [changedStudent] })));
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('stale_context');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(fetch).not.toHaveBeenCalled();
 });
 
 test('rejects an unapproved submission before calling the model', async () => {
-    const response = await POST(request({ lessonPlan, assessment, submission: { ...submission, approved: false }, targetLength: 500 }));
+    const response = await POST(request({ ...input(), submission: { ...submission, approved: false } }));
     expect(response.status).toBe(400);
 });
 
@@ -48,7 +73,7 @@ test('rejects a fabricated approval token before generating a student record', a
     vi.stubGlobal('fetch', vi.fn());
     const forged = { ...submission, grading: { ...submission.grading, approvalToken: '0'.repeat(64) } };
 
-    const response = await POST(request({ lessonPlan, assessment, submission: forged, targetLength: 500 }));
+    const response = await POST(request(input({ currentSubmission: forged })));
 
     expect(response.status).toBe(409);
     expect(fetch).not.toHaveBeenCalled();
@@ -58,27 +83,85 @@ test('rejects replaying a finalized token after the grading generation changes',
     vi.stubGlobal('fetch', vi.fn());
     const replayed = { ...submission, gradingRevision: submission.gradingRevision + 1 };
 
-    const response = await POST(request({ lessonPlan, assessment, submission: replayed, targetLength: 500 }));
+    const response = await POST(request(input({ currentSubmission: replayed })));
 
     expect(response.status).toBe(409);
     expect(fetch).not.toHaveBeenCalled();
 });
 
 test('repairs score-list language in the generated record', async () => {
-    process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion({ text: `${text} 총점 85점.` })).mockResolvedValueOnce(completion({ text })));
-    const response = await POST(request({ lessonPlan, assessment, submission, targetLength: 500 }));
+    process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(claims(`${text} 총점 85점.`))).mockResolvedValueOnce(completion(claims(text))));
+    const response = await POST(request(input()));
     expect(response.status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 test('rejects grading created for an older rubric', async () => {
-    const response = await POST(request({ lessonPlan, assessment: { ...assessment, task: { ...assessment.task, title: '바뀐 과제' } }, submission, targetLength: 500 }));
+    const changedAssessment = { ...assessment, task: { ...assessment.task, title: '바뀐 과제' } };
+    const response = await POST(request(input({ currentAssessment: changedAssessment })));
     expect(response.status).toBe(409);
     expect((await response.json()).code).toBe('stale_grading');
 });
 
 test('rejects an assessment created for a different lesson plan', async () => {
-    const response = await POST(request({ lessonPlan: { ...lessonPlan, title: '다른 지도안' }, assessment, submission, targetLength: 500 }));
+    const response = await POST(request(input({ currentLessonPlan: { ...lessonPlan, title: '다른 지도안' } })));
     expect(response.status).toBe(409);
     expect((await response.json()).code).toBe('stale_assessment');
+});
+
+test('rejects a stale roster context before calling the model', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const recordContext = createRecordContext({ lessonPlan, assessment, students: [student], submissions: [submission] });
+    const roster = [{ ...student, name: '변경된 이름' }];
+
+    const response = await POST(request({ lessonPlan, assessment, student: roster[0], roster, submission, recordContext, targetLength: 500 }));
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('stale_context');
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+test('repairs a revision claim that is not linked to approved revision evidence', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const invalid = { claims: [{ text: '이전보다 설명이 정교해짐.', kind: 'revision', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(invalid)).mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input()));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('repairs a claim whose quote and source reference are not in approved evidence', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const fabricated = { claims: [{ text, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '제출물에 없는 문장' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'fake', page: 1 }] }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(fabricated)).mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input()));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('rejects an expired record context before calling the model', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const recordContext = createRecordContext({ lessonPlan, assessment, students: [student], submissions: [submission] }, Date.now() - 5 * 60_000 - 1);
+
+    const response = await POST(request({ lessonPlan, assessment, student, roster: [student], submission, recordContext, targetLength: 500 }));
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('stale_context');
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+test('rejects a deleted student absent from the signed current roster before calling the model', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const otherStudent = { ...student, id: 'student-2', number: 2, name: '이학생' };
+    const recordContext = createRecordContext({ lessonPlan, assessment, students: [otherStudent], submissions: [submission] });
+
+    const response = await POST(request({ lessonPlan, assessment, student, roster: [otherStudent], submission, recordContext, targetLength: 500 }));
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('stale_context');
+    expect(fetch).not.toHaveBeenCalled();
 });

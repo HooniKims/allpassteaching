@@ -104,3 +104,16 @@ test('marks the lesson and all downstream stages stale when generation inputs ch
     project.lessonSnapshot = { ...project.lessonSnapshot, basics: { ...project.lessonSnapshot.basics, intent: '바뀐 수업 내용' } };
     expect(workflowProcessStatuses(project)).toMatchObject({ lesson: 'review', worksheet: 'review', assessment: 'review', grading: 'prerequisite', records: 'prerequisite' });
 });
+
+test('Given a record source When approval lineage reason or process evidence changes Then the record hash changes', () => {
+    const project = projectFixture();
+    const submission = project.submissions[0];
+    const original = recordSourceHash(project.assessment, submission);
+    const changedApproval = { ...submission, grading: { ...submission.grading, approvalToken: 'c'.repeat(64) } };
+    const changedReason = { ...submission, grading: { ...submission.grading, approvalToken: 'd'.repeat(64), criteria: submission.grading.criteria.map((criterion, index) => index === 0 ? { ...criterion, reason: `${criterion.reason} 수정` } : criterion) } };
+    const changedGrowthEvidence = { ...submission, grading: { ...submission.grading, approvalToken: 'e'.repeat(64), criteria: submission.grading.criteria.map(criterion => criterion.criterionId === 'criterion-3' ? { ...criterion, evidence: `${criterion.evidence} 수정` } : criterion) } };
+
+    expect(recordSourceHash(project.assessment, changedApproval)).not.toBe(original);
+    expect(recordSourceHash(project.assessment, changedReason)).not.toBe(original);
+    expect(recordSourceHash(project.assessment, changedGrowthEvidence)).not.toBe(original);
+});

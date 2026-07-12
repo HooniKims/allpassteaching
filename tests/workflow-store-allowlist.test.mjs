@@ -109,6 +109,21 @@ test('allowlisted ordinary ASCII and base64-like educational text round-trips ex
     expect(loadWorkflow()).toEqual(project);
 });
 
+test('Given a pending record comparison When refreshing the tab Then current previous and candidate drafts remain separate', () => {
+    const project = fullWorkflow();
+    project.records[0] = {
+        ...project.records[0], text: '현재 교사 문장', previousText: '재생성 전 문장',
+        candidateText: '새 AI 후보', candidateSourceHash: 'candidate-source', approved: false,
+    };
+
+    saveWorkflow(project);
+
+    expect(loadWorkflow().records[0]).toMatchObject({
+        text: '현재 교사 문장', previousText: '재생성 전 문장',
+        candidateText: '새 AI 후보', candidateSourceHash: 'candidate-source', approved: false,
+    });
+});
+
 test('renamed sensitive fields and runtime-like objects are dropped at arbitrary nesting depths', () => {
     const project = fullWorkflow();
     const expected = structuredClone(project);
@@ -196,4 +211,31 @@ test('forbidden values are dropped even when injected into every allowed value c
     const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
 
     for (const forbidden of ['assessment.pdf', 'cHJpdmF0ZQ==', 'AbortController', 'ArrayBuffer', '"0":60']) expect(raw).not.toContain(forbidden);
+});
+
+test('comparison lineage is stored only while a candidate draft exists', () => {
+    const project = fullWorkflow();
+    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '', candidateSourceHash: 'stale', candidateTargetLength: 500, regenerationStatus: 'done' };
+
+    saveWorkflow(project);
+    expect(loadWorkflow().records[0]).not.toHaveProperty('previousText');
+    expect(loadWorkflow().records[0]).not.toHaveProperty('candidateSourceHash');
+
+    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500, regenerationStatus: 'done' };
+    saveWorkflow(project);
+    expect(loadWorkflow().records[0]).toMatchObject({ previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500 });
+});
+
+test('interrupted generation states recover as retryable records after reload', () => {
+    const project = fullWorkflow();
+    project.records = [
+        { ...project.records[0], status: 'generating', text: '' },
+        { ...project.records[0], submissionId: 'submission-b', status: 'done', regenerationStatus: 'generating', text: '보존할 현재 문장' },
+    ];
+
+    saveWorkflow(project);
+    const [initial, regeneration] = loadWorkflow().records;
+
+    expect(initial).toMatchObject({ status: 'error', text: '', error: '이전 생성 작업이 중단되었습니다. 다시 시도해주세요.' });
+    expect(regeneration).toMatchObject({ status: 'done', regenerationStatus: 'error', text: '보존할 현재 문장', error: '이전 재생성 작업이 중단되었습니다. 다시 시도해주세요.' });
 });

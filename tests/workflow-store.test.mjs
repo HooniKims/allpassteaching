@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { createEmptyWorkflow, loadWorkflow, saveWorkflow, WORKFLOW_KEY, WORKFLOW_VERSION } from '@/lib/workflow-store';
-import { sourceHash } from '@/lib/source-hash';
+import { canonicalJson, sourceHash } from '@/lib/source-hash';
 
 beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -19,6 +20,13 @@ function failSessionWrites() {
 test('stable source hashes ignore object key order and change with source content', () => {
     expect(sourceHash({ lesson: { subject: '과학', grade: '5' } })).toBe(sourceHash({ lesson: { grade: '5', subject: '과학' } }));
     expect(sourceHash({ subject: '과학' })).not.toBe(sourceHash({ subject: '수학' }));
+});
+
+test('source hashes use the full canonical SHA-256 digest', () => {
+    const value = { lesson: { subject: '과학', grade: '5' } };
+    const expected = createHash('sha256').update(canonicalJson(value)).digest('hex');
+
+    expect(sourceHash(value)).toBe(`src-${expected}`);
 });
 
 test('current-tab persistence keeps structured results for refresh but never selected PDF objects', () => {

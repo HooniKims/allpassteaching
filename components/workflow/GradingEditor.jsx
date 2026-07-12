@@ -41,10 +41,12 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
             feedback: criterion.status === 'scored' ? criterion.feedback : '', confidence: criterion.confidence,
             sourceRefs: criterion.sourceRefs ?? [], teacherConfirmed: false,
             reviewRequired,
+            ...(criterion.revisionEvidence ? { revisionEvidence: { ...criterion.revisionEvidence, teacherConfirmed: false } } : {}),
         };
         applyGrading({ ...submission.grading, criteria: submission.grading.criteria.map((item, itemIndex) => itemIndex === index ? next : item) });
     };
     const availableElements = (submission.elements ?? []).filter(element => element?.id && Number.isInteger(element.page));
+    const revisionCheckpoint = assessment.backwardDesign.checkpoints.find(checkpoint => checkpoint.phase === 'revision');
     const totalLabel = submission.grading.totalScore == null
         ? `임시 합계 ${submission.grading.provisionalTotal ?? 0}점`
         : `확정 총점 ${submission.grading.totalScore}점`;
@@ -68,6 +70,20 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
                     : <span>원본 위치 연결 안 됨</span>}
                     {availableElements.length > 0 && <label className="grading-source-picker">원본 근거 위치<select aria-label={`${rubric.name} 원본 근거 위치 연결`} value="" onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) { const reviewRequired = criterion.reviewRequired === true || gradingEvidenceRiskIds(submission, [element]).length > 0; updateCriterion(index, { sourceRefs: [canonicalGradingSourceRef(element)], reviewRequired, ...(reviewRequired && criterion.status === 'scored' ? { decisionSource: 'teacher' } : {}) }); } }}><option value="">OCR 요소 선택</option>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50) || element.category}</option>)}</select></label>}
                 </div>
+                {rubric.kind === 'process' && revisionCheckpoint && <div className="grading-revision-evidence">
+                    <strong>실제 수정 전후 근거</strong>
+                    {!criterion.revisionEvidence
+                        ? <button type="button" className="secondary-button" disabled={availableElements.length < 2} onClick={() => updateCriterion(index, { revisionEvidence: {
+                            checkpointId: revisionCheckpoint.id,
+                            beforeEvidence: availableElements[0].text,
+                            beforeSourceRef: canonicalGradingSourceRef(availableElements[0]),
+                            afterEvidence: availableElements[1].text,
+                            afterSourceRef: canonicalGradingSourceRef(availableElements[1]),
+                            changeReason: '피드백을 반영해 수정한 이유를 확인함.',
+                            teacherConfirmed: false,
+                        } })}>수정 전후 원본 연결</button>
+                        : <><label>수정 전 원본<select aria-label={`${rubric.name} 수정 전 원본`} value={criterion.revisionEvidence.beforeSourceRef.elementId} onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, beforeEvidence: element.text, beforeSourceRef: canonicalGradingSourceRef(element), teacherConfirmed: false } }); }}>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50)}</option>)}</select></label><label>수정 후 원본<select aria-label={`${rubric.name} 수정 후 원본`} value={criterion.revisionEvidence.afterSourceRef.elementId} onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, afterEvidence: element.text, afterSourceRef: canonicalGradingSourceRef(element), teacherConfirmed: false } }); }}>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50)}</option>)}</select></label><label>수정 이유<textarea aria-label={`${rubric.name} 수정 이유`} rows="2" value={criterion.revisionEvidence.changeReason} onChange={event => updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, changeReason: event.target.value, teacherConfirmed: false } })}/></label><label className="grading-confirm"><input type="checkbox" aria-label={`${rubric.name} 수정 전후 근거 확인 완료`} checked={criterion.revisionEvidence.teacherConfirmed} disabled={criterion.revisionEvidence.beforeSourceRef.elementId === criterion.revisionEvidence.afterSourceRef.elementId || !criterion.revisionEvidence.changeReason.trim()} onChange={event => updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, teacherConfirmed: event.target.checked } })}/><span>수정 전후 원본과 수정 이유를 확인했습니다.</span></label></>}
+                </div>}
                 <label className="grading-confirm"><input type="checkbox" aria-label={`${rubric.name} 근거와 수준 확인 완료`} checked={criterion.teacherConfirmed === true} disabled={!criterionIsConfirmable(criterion)} onChange={event => updateCriterion(index, { teacherConfirmed: event.target.checked })}/><span>원본 근거와 선택 수준을 확인했습니다.</span></label>
             </fieldset>;
         })}</div>
