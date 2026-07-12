@@ -15,6 +15,13 @@ async function pageTexts(bytes) {
     return pages;
 }
 
+function expectResponseBoxGap(events, questionId, promptText) {
+    const box = events.find(event => event.kind === 'worksheet-response-box' && event.questionId === questionId);
+    const prompt = events.find(event => event.text === promptText);
+    expect(box.pageIndex).toBe(prompt.pageIndex);
+    expect(box.y - prompt.y, `${questionId} 응답 상자와 다음 제목 사이 기준선 간격`).toBeGreaterThanOrEqual(14);
+}
+
 test('renders a Korean worksheet and separate teacher key without clipping below the page margin', async () => {
     const events = [];
     const bytes = await buildWorkflowPdf('worksheet', makeWorksheet(), { onDraw: event => events.push(event) });
@@ -148,8 +155,9 @@ test('Given a full mixed worksheet When PDF pages break Then no page contains on
         answer: index === 9 ? '마지막 문항의 상세한 예시 답안과 채점 근거를 이어서 설명합니다. '.repeat(90) : `${question.type} 교사용 예시 답안`,
     }));
 
+    const studentEvents = [];
     const [studentPages, teacherPages] = await Promise.all([
-        buildWorkflowPdf('worksheet-student', worksheet).then(pageTexts),
+        buildWorkflowPdf('worksheet-student', worksheet, { onDraw: event => studentEvents.push(event) }).then(pageTexts),
         buildWorkflowPdf('worksheet-teacher', worksheet).then(pageTexts),
     ]);
     const teacherStart = teacherPages.findIndex(page => page.includes('교사용 예시 답안'));
@@ -159,6 +167,8 @@ test('Given a full mixed worksheet When PDF pages break Then no page contains on
     expect(teacherPages.slice(0, teacherStart).every(page => page.trim().length > 0)).toBe(true);
     expect(teacherPages.slice(teacherStart).every(page => /번 문항/.test(page))).toBe(true);
     expect(studentPages.join('\n')).not.toContain('교사용 예시 답안');
+    expectResponseBoxGap(studentEvents, 'q-7', '8. drawing-diagram 문항에 답하세요.');
+    expectResponseBoxGap(studentEvents, 'q-8', '9. experiment-record 문항에 답하세요.');
 });
 
 test('Given an oversized teacher answer near a page boundary When the next answer starts Then its heading keeps answer text on the same page', async () => {
@@ -202,8 +212,8 @@ test('Given a response that exactly fits When a question renders Then its stem a
         ...worksheet.document.sections[0],
         questions: [
             { id: 'q-1', type: 'descriptive', prompt: '첫 페이지 채우기', responseLines: 16, standardCodes: ['6과11-02'] },
-            { id: 'q-2', type: 'table-chart', prompt: '둘째 페이지 첫 상자', responseAreaHeight: 258, standardCodes: ['6과11-02'] },
-            { id: 'q-3', type: 'drawing-diagram', prompt: '둘째 페이지 둘째 상자', responseAreaHeight: 293, standardCodes: ['6과11-02'] },
+            { id: 'q-2', type: 'table-chart', prompt: '둘째 페이지 첫 상자', responseAreaHeight: 252, standardCodes: ['6과11-02'] },
+            { id: 'q-3', type: 'drawing-diagram', prompt: '둘째 페이지 둘째 상자', responseAreaHeight: 287, standardCodes: ['6과11-02'] },
             { id: 'q-4', type: 'descriptive', prompt: '정확히 맞는 네 줄 응답', responseLines: 4, standardCodes: ['6과11-02'] },
         ],
     }];
@@ -217,6 +227,8 @@ test('Given a response that exactly fits When a question renders Then its stem a
     expect(exactPrompt.y).toBeCloseTo(159, 5);
     expect(exactPrompt.pageIndex).toBe(precedingBox.pageIndex);
     expect(events.some(event => event.text === '4번 문항 응답 (계속)')).toBe(false);
+    expectResponseBoxGap(events, 'q-2', '3. 둘째 페이지 둘째 상자');
+    expectResponseBoxGap(events, 'q-3', '4. 정확히 맞는 네 줄 응답');
 });
 
 test('Given maximum student fields When instructions render Then the instruction block starts on a page with safe margin', async () => {
