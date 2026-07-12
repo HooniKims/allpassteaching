@@ -12,13 +12,18 @@ const statusLabels = { complete: '완료', review: '검토 필요', prerequisite
 
 export function ProcessTabs({ activeProcess, statuses, onChange }) {
     const tabsRef = useRef([]);
+    const railRef = useRef(null);
     useEffect(() => {
         const activeIndex = teachingProcesses.findIndex(process => process.id === activeProcess);
         const activeTab = tabsRef.current[activeIndex];
-        const rail = activeTab?.parentElement;
+        const rail = railRef.current;
         if (!activeTab || !rail?.scrollTo) return;
-        const centeredLeft = activeTab.offsetLeft - (rail.clientWidth - activeTab.offsetWidth) / 2;
-        rail.scrollTo({ left: Math.max(0, centeredLeft), behavior: 'auto' });
+        const tabBounds = activeTab.getBoundingClientRect();
+        const railBounds = rail.getBoundingClientRect();
+        const leftOverflow = tabBounds.left - railBounds.left;
+        const rightOverflow = tabBounds.right - railBounds.right;
+        const delta = leftOverflow < 0 ? leftOverflow : rightOverflow > 0 ? rightOverflow : 0;
+        if (delta !== 0) rail.scrollTo({ left: Math.max(0, rail.scrollLeft + delta), behavior: 'auto' });
     }, [activeProcess]);
     const moveFocus = (event, index) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -30,7 +35,7 @@ export function ProcessTabs({ activeProcess, statuses, onChange }) {
         if (event.key === 'End') nextIndex = teachingProcesses.length - 1;
         tabsRef.current[nextIndex]?.focus();
     };
-    return <nav className="process-rail" aria-label="교수·학습·평가·기록 프로세스">
+    return <nav ref={railRef} className="process-rail" aria-label="교수·학습·평가·기록 프로세스">
         <div className="process-tabs" role="tablist" aria-label="5단계 프로세스">
             {teachingProcesses.map((process, index) => {
                 const status = statuses[process.id] ?? 'prerequisite';

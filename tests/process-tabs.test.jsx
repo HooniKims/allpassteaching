@@ -6,10 +6,16 @@ import { ProcessTabs } from '@/components/workflow/ProcessTabs.jsx';
 const statuses = { lesson: 'complete', worksheet: 'review', assessment: 'prerequisite', grading: 'prerequisite', records: 'prerequisite' };
 const originalScrollIntoView = Element.prototype.scrollIntoView;
 const originalScrollTo = Element.prototype.scrollTo;
+const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+function rect(left, right) {
+    return { x: left, y: 0, left, right, top: 0, bottom: 54, width: right - left, height: 54, toJSON: () => ({}) };
+}
 
 afterEach(() => {
     Element.prototype.scrollIntoView = originalScrollIntoView;
     Element.prototype.scrollTo = originalScrollTo;
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
 });
 
 test('renders all five processes with text statuses and allows blocked tabs to be selected', async () => {
@@ -39,14 +45,35 @@ test('moves tab focus with arrow keys', async () => {
     expect(lessonTab).toHaveFocus();
 });
 
+test('keeps the active grading tab first in the Tab order and preserves arrow navigation', async () => {
+    const user = userEvent.setup();
+    render(<ProcessTabs activeProcess="grading" statuses={statuses} onChange={() => {}}/>);
+    const gradingTab = screen.getByRole('tab', { name: /OCR·채점/ });
+    const recordsTab = screen.getByRole('tab', { name: /세특/ });
+
+    await user.tab();
+    expect(gradingTab).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(recordsTab).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(gradingTab).toHaveFocus();
+});
+
 test('keeps the active process visible without changing the keyboard navigation starting point', () => {
     const scrollIntoView = vi.fn();
     const scrollTo = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     Element.prototype.scrollTo = scrollTo;
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+        if (this.matches('.process-rail')) return rect(0, 375);
+        if (this.matches('#process-tab-grading')) return rect(396, 528);
+        return rect(0, 132);
+    };
 
     render(<ProcessTabs activeProcess="grading" statuses={statuses} onChange={() => {}}/>);
 
-    expect(scrollTo).toHaveBeenCalled();
+    const rail = screen.getByRole('navigation', { name: '교수·학습·평가·기록 프로세스' });
+    expect(scrollTo).toHaveBeenCalledWith({ left: 153, behavior: 'auto' });
+    expect(scrollTo.mock.instances[0]).toBe(rail);
     expect(scrollIntoView).not.toHaveBeenCalled();
 });

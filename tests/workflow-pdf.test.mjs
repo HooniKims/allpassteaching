@@ -1,7 +1,19 @@
 import { expect, test } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { buildWorkflowPdf } from '@/lib/export/workflow-pdf';
 import { makeAssessment, makeWorksheet } from './fixtures/workflow.mjs';
+
+async function pageTexts(bytes) {
+    const document = await getDocument({ data: Uint8Array.from(bytes), disableWorker: true }).promise;
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+        const page = await document.getPage(pageNumber);
+        const content = await page.getTextContent();
+        pages.push(content.items.map(item => item.str).join(' '));
+    }
+    return pages;
+}
 
 test('renders a Korean worksheet and separate teacher key without clipping below the page margin', async () => {
     const events = [];
@@ -10,7 +22,7 @@ test('renders a Korean worksheet and separate teacher key without clipping below
 
     expect(Buffer.from(bytes).subarray(0, 5).toString()).toBe('%PDF-');
     expect(pdf.getPageCount()).toBeGreaterThanOrEqual(2);
-    expect(events.some(event => event.text.includes('교사용 예시 답안'))).toBe(true);
+    expect(events.some(event => event.text?.includes('교사용 예시 답안'))).toBe(true);
     expect(events.every(event => event.y >= 44 && event.y <= 798)).toBe(true);
 });
 
@@ -114,6 +126,115 @@ test('renders separate student and teacher worksheet PDFs with type-specific res
     expect(teacherEvents.some(event => event.text?.includes('교사용 예시 답안'))).toBe(true);
     expect(studentEvents.filter(event => event.kind === 'worksheet-choice')).toHaveLength(5);
     expect(studentEvents.filter(event => event.kind === 'worksheet-response-box').map(event => event.questionType)).toEqual(['table-chart', 'drawing-diagram']);
+});
+
+test('Given a full mixed worksheet When PDF pages break Then no page contains only response lines or answer fragments', async () => {
+    const worksheet = makeWorksheet();
+    const questionTypes = [
+        'blank', 'short-answer', 'descriptive', 'essay', 'true-false',
+        'multiple-choice-5', 'table-chart', 'drawing-diagram', 'experiment-record', 'self-assessment',
+    ];
+    worksheet.document.sections = [{
+        id: 'all-types', title: '열 가지 문항 유형', purpose: '다양한 응답 방식으로 성취기준을 확인합니다.',
+        questions: questionTypes.map((type, index) => {
+            const common = { id: `q-${index + 1}`, type, prompt: `${type} 문항에 답하세요.`, standardCodes: ['6과11-02'] };
+            if (type === 'multiple-choice-5') return { ...common, choices: ['하나', '둘', '셋', '넷', '다섯'], responseLines: 1 };
+            if (type === 'table-chart' || type === 'drawing-diagram') return { ...common, responseAreaHeight: 180 };
+            return { ...common, responseLines: type === 'essay' ? 10 : 4 };
+        }),
+    }];
+    worksheet.teacherKey.answers = worksheet.document.sections[0].questions.map((question, index) => ({
+        questionId: question.id,
+        answer: index === 9 ? '마지막 문항의 상세한 예시 답안과 채점 근거를 이어서 설명합니다. '.repeat(90) : `${question.type} 교사용 예시 답안`,
+    }));
+
+    const [studentPages, teacherPages] = await Promise.all([
+        buildWorkflowPdf('worksheet-student', worksheet).then(pageTexts),
+        buildWorkflowPdf('worksheet-teacher', worksheet).then(pageTexts),
+    ]);
+    const teacherStart = teacherPages.findIndex(page => page.includes('교사용 예시 답안'));
+
+    expect(studentPages.every(page => page.trim().length > 0)).toBe(true);
+    expect(studentPages.at(-1)).toMatch(/10\. self-assessment.*성취기준/s);
+    expect(teacherPages.slice(0, teacherStart).every(page => page.trim().length > 0)).toBe(true);
+    expect(teacherPages.slice(teacherStart).every(page => /번 문항/.test(page))).toBe(true);
+    expect(studentPages.join('\n')).not.toContain('교사용 예시 답안');
+});
+
+test('Given an oversized teacher answer near a page boundary When the next answer starts Then its heading keeps answer text on the same page', async () => {
+    const worksheet = makeWorksheet();
+    const questions = worksheet.document.sections.flatMap(section => section.questions).slice(0, 2);
+    worksheet.document.sections = [{ ...worksheet.document.sections[0], questions }];
+    worksheet.teacherKey.answers = [
+        { questionId: 'q-1', answer: '앞선 답안 문장입니다. '.repeat(232) },
+        { questionId: 'q-2', answer: '아주 긴 두 번째 답안입니다. '.repeat(204) },
+    ];
+    const events = [];
+
+    await buildWorkflowPdf('worksheet-teacher', worksheet, { onDraw: event => events.push(event) });
+
+    const headingIndex = events.findIndex(event => event.text === '2번 문항');
+    const heading = events[headingIndex];
+    const nextEvent = events[headingIndex + 1];
+    const teacherTitle = events.find(event => event.text?.includes('교사용 예시 답안'));
+    const firstHeading = events.find(event => event.text === '1번 문항');
+    expect(firstHeading.pageIndex).toBe(teacherTitle.pageIndex);
+    expect(nextEvent).toMatchObject({ pageIndex: heading.pageIndex });
+    expect(nextEvent.text).not.toMatch(/번 문항/);
+});
+
+test('Given an oversized first teacher answer When the key starts Then the key title is not left on its own page', async () => {
+    const worksheet = makeWorksheet();
+    worksheet.document.sections = [{ ...worksheet.document.sections[0], questions: worksheet.document.sections[0].questions.slice(0, 1) }];
+    worksheet.teacherKey.answers = [{ questionId: 'q-1', answer: '첫 문항 장문 답안입니다. '.repeat(225) }];
+    const events = [];
+
+    await buildWorkflowPdf('worksheet-teacher', worksheet, { onDraw: event => events.push(event) });
+
+    const teacherTitle = events.find(event => event.text?.includes('교사용 예시 답안'));
+    const firstHeading = events.find(event => event.text === '1번 문항');
+    expect(firstHeading.pageIndex).toBe(teacherTitle.pageIndex);
+});
+
+test('Given a response that exactly fits When a question renders Then its stem and response stay on the same page', async () => {
+    const worksheet = makeWorksheet();
+    worksheet.document.sections = [{
+        ...worksheet.document.sections[0],
+        questions: [
+            { id: 'q-1', type: 'descriptive', prompt: '첫 페이지 채우기', responseLines: 16, standardCodes: ['6과11-02'] },
+            { id: 'q-2', type: 'table-chart', prompt: '둘째 페이지 첫 상자', responseAreaHeight: 258, standardCodes: ['6과11-02'] },
+            { id: 'q-3', type: 'drawing-diagram', prompt: '둘째 페이지 둘째 상자', responseAreaHeight: 293, standardCodes: ['6과11-02'] },
+            { id: 'q-4', type: 'descriptive', prompt: '정확히 맞는 네 줄 응답', responseLines: 4, standardCodes: ['6과11-02'] },
+        ],
+    }];
+    worksheet.teacherKey.answers = worksheet.document.sections[0].questions.map(question => ({ questionId: question.id, answer: '예시 답안' }));
+    const events = [];
+
+    await buildWorkflowPdf('worksheet-student', worksheet, { onDraw: event => events.push(event) });
+
+    const precedingBox = events.find(event => event.kind === 'worksheet-response-box' && event.questionId === 'q-3');
+    const exactPrompt = events.find(event => event.text === '4. 정확히 맞는 네 줄 응답');
+    expect(exactPrompt.y).toBeCloseTo(159, 5);
+    expect(exactPrompt.pageIndex).toBe(precedingBox.pageIndex);
+    expect(events.some(event => event.text === '4번 문항 응답 (계속)')).toBe(false);
+});
+
+test('Given maximum student fields When instructions render Then the instruction block starts on a page with safe margin', async () => {
+    const worksheet = makeWorksheet();
+    worksheet.document.studentFields = Array.from({ length: 8 }, (_, index) => `${index + 1}번 학생 정보 ${'가'.repeat(280)}`);
+    worksheet.document.instructions = '관찰한 사실과 생각을 구분하여 기록하세요.';
+    const events = [];
+
+    await buildWorkflowPdf('worksheet-student', worksheet, { onDraw: event => events.push(event) });
+
+    const instructionIndex = events.findIndex(event => event.text === worksheet.document.instructions);
+    const instruction = events[instructionIndex];
+    const box = events.find(event => event.kind === 'worksheet-instructions-box');
+    const firstSectionHeading = events.find(event => event.text === worksheet.document.sections[0].title);
+    expect(box).toMatchObject({ pageIndex: instruction.pageIndex });
+    expect(box.y).toBeGreaterThanOrEqual(48);
+    expect(instruction.y).toBeGreaterThanOrEqual(48);
+    expect(firstSectionHeading.y).toBeLessThan(box.y);
 });
 
 test('학생 표지를 끈 전체본은 표지 없이 과제부터 시작하고 표지만 생성할 수 없다', async () => {

@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { worksheetGenerationRequestSchema, worksheetOutputSchema, worksheetQuestionTypes } from '@/lib/worksheet-schema';
 import { makeWorksheet } from './fixtures/workflow.mjs';
 
+const MAX_WORKSHEET_RENDER_CHARACTERS = 120_000;
 test('accepts an editable worksheet with a separate teacher key', () => {
     expect(worksheetOutputSchema.safeParse(makeWorksheet()).success).toBe(true);
 });
@@ -93,4 +94,77 @@ test('allows teachers to replace an originally requested question type after gen
     }));
 
     expect(worksheetOutputSchema.safeParse(worksheet).success).toBe(true);
+});
+
+function renderedCharacterCount(worksheet) {
+    return [
+        worksheet.document.title, worksheet.document.title,
+        worksheet.document.instructions, ...worksheet.document.studentFields,
+        ...worksheet.document.sections.flatMap(section => [section.title, section.purpose, ...section.questions.flatMap(question => [question.prompt, ...question.standardCodes, ...(question.choices ?? [])])]),
+        ...worksheet.teacherKey.answers.map(answer => answer.answer),
+    ].reduce((sum, value) => sum + value.length, 0);
+}
+
+function makeRenderBudgetWorksheet() {
+    const worksheet = makeWorksheet();
+    const questions = Array.from({ length: 100 }, (_, index) => ({
+        id: `budget-question-${index + 1}`, type: 'descriptive', prompt: `문항 ${index + 1}`,
+        responseLines: 1, standardCodes: ['6과11-02'],
+    }));
+    worksheet.document.sections = Array.from({ length: 5 }, (_, index) => ({
+        id: `budget-section-${index + 1}`, title: `영역 ${index + 1}`, purpose: '렌더링 예산 확인',
+        questions: questions.slice(index * 20, index * 20 + 20),
+    }));
+    worksheet.teacherKey.answers = questions.map(question => ({ questionId: question.id, answer: '답안' }));
+    let remaining = MAX_WORKSHEET_RENDER_CHARACTERS - renderedCharacterCount(worksheet);
+    for (const answer of worksheet.teacherKey.answers) {
+        const added = Math.min(4000 - answer.answer.length, remaining);
+        answer.answer += '나'.repeat(added);
+        remaining -= added;
+        if (remaining === 0) break;
+    }
+    expect(remaining).toBe(0);
+    return worksheet;
+}
+
+test('accepts aggregate worksheet text that exactly fits the 120,000-character rendering budget', () => {
+    const worksheet = makeRenderBudgetWorksheet();
+
+    const result = worksheetOutputSchema.safeParse(worksheet);
+
+    expect(renderedCharacterCount(worksheet)).toBe(MAX_WORKSHEET_RENDER_CHARACTERS);
+    expect(result.success).toBe(true);
+});
+
+test('rejects aggregate worksheet text one character above the 120,000-character rendering budget', () => {
+    const worksheet = makeRenderBudgetWorksheet();
+    const answer = worksheet.teacherKey.answers.find(item => item.answer.length < 4000);
+    answer.answer += '나';
+
+    const result = worksheetOutputSchema.safeParse(worksheet);
+
+    expect(renderedCharacterCount(worksheet)).toBe(MAX_WORKSHEET_RENDER_CHARACTERS + 1);
+    expect(result.success).toBe(false);
+    expect(result.error.issues.some(issue => issue.path.includes('document') && issue.message.includes('전체 글자 수'))).toBe(true);
+});
+
+test('counts standard codes each time a question renders them', () => {
+    const worksheet = makeWorksheet();
+    worksheet.standards = Array.from({ length: 10 }, (_, index) => ({
+        code: `${index}${'가'.repeat(299)}`, text: `성취기준 ${index}`,
+    }));
+    const questions = Array.from({ length: 100 }, (_, index) => ({
+        id: `repeated-standard-${index + 1}`, type: 'descriptive', prompt: `문항 ${index + 1}`,
+        responseLines: 1, standardCodes: worksheet.standards.map(standard => standard.code),
+    }));
+    worksheet.document.sections = Array.from({ length: 5 }, (_, index) => ({
+        id: `standard-section-${index + 1}`, title: `영역 ${index + 1}`, purpose: '반복 렌더링 확인',
+        questions: questions.slice(index * 20, index * 20 + 20),
+    }));
+    worksheet.teacherKey.answers = questions.map(question => ({ questionId: question.id, answer: '예시 답안' }));
+
+    const result = worksheetOutputSchema.safeParse(worksheet);
+
+    expect(renderedCharacterCount(worksheet)).toBeGreaterThan(MAX_WORKSHEET_RENDER_CHARACTERS);
+    expect(result.success).toBe(false);
 });
