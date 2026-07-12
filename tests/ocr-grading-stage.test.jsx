@@ -13,6 +13,15 @@ function Harness({ initial = [] }) {
     return <OcrGradingStage assessment={makeAssessment()} submissions={submissions} onChange={setSubmissions}/>;
 }
 
+function RosterHarness() {
+    const [students, setStudents] = useState([{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }]);
+    const [submissions, setSubmissions] = useState([]);
+    return <>
+        <OcrGradingStage assessment={makeAssessment()} students={students} submissions={submissions} onStudentsChange={setStudents} onDeleteStudent={() => {}} onChange={setSubmissions}/>
+        <output data-testid="submission-state">{JSON.stringify(submissions)}</output>
+    </>;
+}
+
 test('accepts up to ten PDF files and derives editable student names', async () => {
     const user = userEvent.setup();
     render(<Harness/>);
@@ -24,6 +33,20 @@ test('accepts up to ten PDF files and derives editable student names', async () 
 
     expect(screen.getByDisplayValue('김학생')).toBeInTheDocument();
     expect(screen.getByDisplayValue('이학생')).toBeInTheDocument();
+});
+
+test('같은 이름의 명단이 있어도 PDF는 자동 연결하지 않고 교사가 안정적인 학생 ID를 직접 연결한다', async () => {
+    const user = userEvent.setup();
+    render(<RosterHarness/>);
+
+    await user.upload(screen.getByLabelText('학생 PDF 파일'), new File(['%PDF'], '김학생.pdf', { type: 'application/pdf' }));
+    const before = JSON.parse(screen.getByTestId('submission-state').textContent);
+    expect(before[0]).toMatchObject({ studentName: '김학생', studentId: null, needsStudentLink: true });
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '김학생 명단 연결' }), 'student-a');
+
+    const after = JSON.parse(screen.getByTestId('submission-state').textContent);
+    expect(after[0]).toMatchObject({ studentName: '김학생', studentId: 'student-a', needsStudentLink: false });
 });
 
 test('rejects more than ten files without creating partial rows', async () => {

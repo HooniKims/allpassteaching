@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
 import { createEmptyWorkflow, loadWorkflow, saveWorkflow } from '@/lib/workflow-store';
 import { workflowProcessStatuses } from '@/lib/workflow-lineage';
+import { removeStudentFromProject, replaceProjectRoster } from '@/lib/student-roster.js';
 import { ProcessTabs, teachingProcesses } from './ProcessTabs.jsx';
 import { WorkflowPrerequisite } from './WorkflowPrerequisite.jsx';
 import { WorksheetStage } from './WorksheetStage.jsx';
@@ -46,7 +47,7 @@ export function TeachingWorkflow() {
     const activeProcessLabel = teachingProcesses.find(item => item.id === activeProcess)?.label ?? '현재 프로세스';
     const prerequisite = statuses[activeProcess] === 'prerequisite' ? prerequisiteContent[activeProcess] : null;
     const clearStudentData = () => {
-        setProject(current => ({ ...current, submissions: [], records: [] }));
+        setProject(current => ({ ...current, students: [], submissions: [], records: [] }));
         setConfirmClear(false);
     };
     const updateSubmissions = useCallback(updater => setProject(current => {
@@ -55,6 +56,8 @@ export function TeachingWorkflow() {
         return { ...current, submissions, records: current.records.filter(record => submissionIds.has(record.submissionId)) };
     }), []);
     const updateRecords = useCallback(updater => setProject(current => ({ ...current, records: typeof updater === 'function' ? updater(current.records) : updater })), []);
+    const updateStudents = useCallback(updater => setProject(current => replaceProjectRoster(current, typeof updater === 'function' ? updater(current.students) : updater)), []);
+    const deleteStudent = useCallback(studentId => setProject(current => removeStudentFromProject(current, studentId)), []);
     return <div className="teaching-workflow">
         <ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/>
         {activeProcess === 'lesson'
@@ -68,14 +71,14 @@ export function TeachingWorkflow() {
                             : activeProcess === 'assessment'
                                 ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} value={project.assessment} request={project.assessmentRequest} onRequestChange={assessmentRequest => setProject(current => ({ ...current, assessmentRequest }))} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
                                 : activeProcess === 'grading'
-                                    ? <OcrGradingStage assessment={project.assessment} submissions={project.submissions} onChange={updateSubmissions}/>
+                                    ? <OcrGradingStage assessment={project.assessment} students={project.students} submissions={project.submissions} records={project.records} onStudentsChange={updateStudents} onDeleteStudent={deleteStudent} onChange={updateSubmissions}/>
                                     : activeProcess === 'records'
-                                        ? <RecordsStage lessonPlan={project.lessonSnapshot.plan} assessment={project.assessment} submissions={project.submissions} records={project.records} onChange={updateRecords}/>
+                                        ? <RecordsStage lessonPlan={project.lessonSnapshot.plan} assessment={project.assessment} students={project.students} submissions={project.submissions} records={project.records} onChange={updateRecords}/>
                                         : <StagePlaceholder process={activeProcess}/>
                     }
                 </div>
                 {(activeProcess === 'grading' || activeProcess === 'records') && <aside className="privacy-panel" aria-label="학생 자료 보관 안내">
-                    <p><strong>학생 자료 보호</strong><br/>PDF 원본은 저장하지 않습니다. 학생 이름·OCR·채점·세특은 현재 탭에만 임시 보관되어 <span className="nowrap">새로고침 후 복구되고</span>, <span className="nowrap">탭을 닫으면 사라집니다.</span></p>
+                    <p><strong>학생 자료 보호</strong><br/>PDF 원본은 저장하지 않습니다. <span className="nowrap">학생 이름·OCR·채점·세특은</span> 현재 탭에만 임시 보관되어 <span className="nowrap">새로고침 후 복구되고</span>, <span className="nowrap">탭을 닫으면 사라집니다.</span></p>
                     {!confirmClear && <button type="button" className="danger-button" onClick={() => setConfirmClear(true)}>학생 자료 모두 지우기</button>}
                     {confirmClear && <div className="privacy-panel__confirm" role="alert"><span>학생 이름, OCR, 채점, 세특을 모두 삭제할까요?</span><button type="button" className="danger-button" onClick={clearStudentData}>학생 자료 삭제 확인</button><button type="button" className="secondary-button" onClick={() => setConfirmClear(false)}>취소</button></div>}
                 </aside>}

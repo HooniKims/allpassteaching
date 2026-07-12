@@ -31,6 +31,7 @@ A quiet teacher workbench: warm paper canvas, white working sheet, charcoal text
 - Ink `#2f302d`; secondary `#65655f`; border `#d9d8d2`.
 - Action `#176f5b`; hover `#105947`; action tint `#e8f3ef`.
 - Error `#b42318`; warning `#8a5a00`; success uses action green with explicit text.
+- Dialog scrim uses charcoal ink at 48% opacity so destructive confirmation is visually modal without introducing a new hue.
 - Controls radius 7px; panels 10px; status pills only may use full radius.
 - Spacing uses 4, 8, 12, 16, 24, 32, 48px.
 - Shadows are restricted to focus rings and floating dialogs; normal grouping uses borders/dividers.
@@ -44,6 +45,7 @@ Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, butto
 - Desktop: a full-width process rail sits above the existing 220px lesson-step sidebar and a flexible reading column capped near 920px. Later processes use a centered work surface capped near 1120px.
 - Mobile: the process rail scrolls horizontally without truncating labels; the lesson sidebar becomes a top progress summary with previous/next actions.
 - Primitives: Button, Field, ChoiceTile, StatusMessage, StepNavigation, ProcessTabs, GenerationSummary, PrerequisiteNotice, StaleNotice, StructuredEditor, BatchItem, ApprovalState, Dialog, LessonTable.
+- StudentRoster is a bordered project-level editor with an explicit `현재 / 최대` count, direct row controls, private Excel actions, atomic import issues, and a Dialog before deleting linked evidence.
 - GenerationSummary uses a border-only surface, definition-list facts, an explicit warning sentence, and separate edit/regenerate actions. It never hides or replaces the generated document.
 - ChoiceTile is a card only because the full container is selectable; informational sections have no card chrome.
 - ProcessTabs always expose all five processes and pair color with `완료`, `검토 필요`, or `선행 단계 필요` text. Arrow keys move focus; selecting a blocked process shows a prerequisite explanation instead of silently redirecting.

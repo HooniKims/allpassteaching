@@ -1,9 +1,12 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProcessTabs } from '@/components/workflow/ProcessTabs.jsx';
 
 const statuses = { lesson: 'complete', worksheet: 'review', assessment: 'prerequisite', grading: 'prerequisite', records: 'prerequisite' };
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
+afterEach(() => { Element.prototype.scrollIntoView = originalScrollIntoView; });
 
 test('renders all five processes with text statuses and allows blocked tabs to be selected', async () => {
     const user = userEvent.setup();
@@ -30,4 +33,13 @@ test('moves tab focus with arrow keys', async () => {
     expect(worksheetTab).toHaveFocus();
     await user.keyboard('{ArrowLeft}');
     expect(lessonTab).toHaveFocus();
+});
+
+test('keeps the active process visible inside the horizontally scrolling mobile rail', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(<ProcessTabs activeProcess="grading" statuses={statuses} onChange={() => {}}/>);
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'center' });
 });

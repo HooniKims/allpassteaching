@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 export const teachingProcesses = [
     { id: 'lesson', number: '01', label: '지도안' },
@@ -12,6 +12,10 @@ const statusLabels = { complete: '완료', review: '검토 필요', prerequisite
 
 export function ProcessTabs({ activeProcess, statuses, onChange }) {
     const tabsRef = useRef([]);
+    useEffect(() => {
+        const activeIndex = teachingProcesses.findIndex(process => process.id === activeProcess);
+        tabsRef.current[activeIndex]?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+    }, [activeProcess]);
     const moveFocus = (event, index) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();

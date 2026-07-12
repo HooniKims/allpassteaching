@@ -18,7 +18,7 @@ test('opens every process but explains the missing prerequisite in context', asy
 
 test('restores the active process and can clear only student-derived data', async () => {
     const user = userEvent.setup();
-    const project = { ...createEmptyWorkflow(), activeProcess: 'records', submissions: [{ id: 's1', studentName: '김학생', extractedText: '내용' }], records: [{ submissionId: 's1', text: '세특' }] };
+    const project = { ...createEmptyWorkflow(), activeProcess: 'records', students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }], submissions: [{ id: 's1', studentId: 'student-a', studentName: '김학생', extractedText: '내용' }], records: [{ submissionId: 's1', studentId: 'student-a', text: '세특' }] };
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 1, data: project }));
     render(<TeachingWorkflow/>);
 
@@ -28,6 +28,7 @@ test('restores the active process and can clear only student-derived data', asyn
 
     await waitFor(() => {
         const saved = JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data;
+        expect(saved.students).toEqual([]);
         expect(saved.submissions).toEqual([]);
         expect(saved.records).toEqual([]);
         expect(saved.activeProcess).toBe('records');

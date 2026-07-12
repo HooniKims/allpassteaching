@@ -32,6 +32,37 @@ test('current-tab persistence keeps structured results for refresh but never sel
     expect(window.localStorage.getItem(WORKFLOW_KEY)).toBeNull();
 });
 
+test('공용 학생 명단은 안정적인 ID와 순서를 보존하고 File·Blob 값은 저장하지 않는다', () => {
+    const project = createEmptyWorkflow();
+    project.students = [
+        { id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘', privateFile: new File(['x'], '명단.xlsx') },
+        { id: 'student-b', grade: '2', className: '3', number: 8, name: '이바다', privateBlob: new Blob(['x']) },
+    ];
+
+    saveWorkflow(project);
+    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const loaded = loadWorkflow();
+
+    expect(loaded.students).toEqual([
+        { id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘' },
+        { id: 'student-b', grade: '2', className: '3', number: 8, name: '이바다' },
+    ]);
+    expect(raw).not.toContain('privateFile');
+    expect(raw).not.toContain('privateBlob');
+});
+
+test('이름만 있던 이전 제출물은 명단과 같은 이름이어도 자동 연결하지 않는다', () => {
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: {
+        activeProcess: 'grading',
+        students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }],
+        submissions: [{ id: 'submission-a', studentName: '김학생', extractedText: '기존 내용' }],
+    } }));
+
+    const loaded = loadWorkflow();
+
+    expect(loaded.submissions[0]).toMatchObject({ studentName: '김학생', studentId: null, needsStudentLink: true });
+});
+
 test('평가 요청의 세 질문과 생성 옵션을 현재 탭에 보존한다', () => {
     const project = createEmptyWorkflow();
     project.assessmentRequest.teacherIntent.desiredResult = '관찰 근거로 설명한다.';
@@ -60,8 +91,8 @@ test('migrates the earlier activeStage name and supplies empty collections', () 
 
     const loaded = loadWorkflow();
 
-    expect(WORKFLOW_VERSION).toBe(2);
-    expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, submissions: [], records: [] });
+    expect(WORKFLOW_VERSION).toBe(3);
+    expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, students: [], submissions: [], records: [] });
 });
 
 test('moves a legacy persistent workflow into the current tab and removes the permanent copy', () => {

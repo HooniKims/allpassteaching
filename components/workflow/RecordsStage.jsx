@@ -5,26 +5,28 @@ import { recordSourceHash, submissionIsApprovedFor } from '@/lib/workflow-lineag
 
 function upsert(collection, value) { return collection.some(item => item.submissionId === value.submissionId) ? collection.map(item => item.submissionId === value.submissionId ? value : item) : [...collection, value]; }
 
-export function RecordsStage({ lessonPlan, assessment, submissions, records, onChange }) {
+export function RecordsStage({ lessonPlan, assessment, students = [], submissions, records, onChange }) {
     const approved = submissions.filter(item => submissionIsApprovedFor(assessment, item));
     const [targetLength, setTargetLength] = useState(500);
     const [busy, setBusy] = useState(false);
     const [copyMessage, setCopyMessage] = useState('');
     const recordFor = id => records.find(item => item.submissionId === id);
+    const studentNameFor = submission => students.find(student => student.id === submission.studentId)?.name || submission.studentName;
     const mounted = useRef(true);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
     const generateBatch = async targets => {
         setBusy(true);
         const apply = value => { if (mounted.current) onChange(current => upsert(current, value)); };
         await runWithConcurrency(targets, 2, async submission => {
+            const studentName = studentNameFor(submission);
             const sourceHashValue = recordSourceHash(assessment, submission);
-            apply({ ...(recordFor(submission.id) ?? {}), submissionId: submission.id, studentName: submission.studentName, sourceHash: sourceHashValue, status: 'generating', text: recordFor(submission.id)?.text ?? '', error: '', approved: false });
+            apply({ ...(recordFor(submission.id) ?? {}), submissionId: submission.id, studentId: submission.studentId ?? null, studentName, sourceHash: sourceHashValue, status: 'generating', text: recordFor(submission.id)?.text ?? '', error: '', approved: false });
             try {
-                const response = await fetch('/api/generate-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, assessment, submission, targetLength }) });
+                const response = await fetch('/api/generate-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, assessment, submission: { ...submission, studentName }, targetLength }) });
                 const body = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(body.message || '세특 초안을 만들지 못했습니다.');
-                apply({ submissionId: submission.id, studentName: submission.studentName, sourceHash: sourceHashValue, status: 'done', text: body.record.text, error: '', approved: false });
-            } catch (error) { apply({ ...(recordFor(submission.id) ?? {}), submissionId: submission.id, studentName: submission.studentName, sourceHash: sourceHashValue, status: 'error', text: recordFor(submission.id)?.text ?? '', error: error.message || '세특 초안을 만들지 못했습니다.', approved: false }); }
+                apply({ submissionId: submission.id, studentId: submission.studentId ?? null, studentName, sourceHash: sourceHashValue, status: 'done', text: body.record.text, error: '', approved: false });
+            } catch (error) { apply({ ...(recordFor(submission.id) ?? {}), submissionId: submission.id, studentId: submission.studentId ?? null, studentName, sourceHash: sourceHashValue, status: 'error', text: recordFor(submission.id)?.text ?? '', error: error.message || '세특 초안을 만들지 못했습니다.', approved: false }); }
         });
         if (mounted.current) setBusy(false);
     };
@@ -40,9 +42,10 @@ export function RecordsStage({ lessonPlan, assessment, submissions, records, onC
         {copyMessage && <p className="status-line" role="status">{copyMessage}</p>}
         <div className="record-list">{approved.map(submission => {
             const record = recordFor(submission.id);
+            const studentName = studentNameFor(submission);
             const stale = Boolean(record?.text && record.sourceHash !== recordSourceHash(assessment, submission));
             return <article className="record-item" key={submission.id}>
-                <div className="record-item__head"><div><strong>{submission.studentName}</strong><span>승인된 수행평가 · {submission.grading.totalScore}점</span></div>{!record?.text && <button type="button" disabled={busy || record?.status === 'generating'} onClick={() => generateBatch([submission])}>{submission.studentName} 세특 생성</button>}</div>
+                <div className="record-item__head"><div><strong>{studentName}</strong><span>승인된 수행평가 · {submission.grading.totalScore}점</span></div>{!record?.text && <button type="button" disabled={busy || record?.status === 'generating'} onClick={() => generateBatch([submission])}>{studentName} 세특 생성</button>}</div>
                 {stale && <p className="stale-notice"><strong>이전 채점 결과로 생성됨</strong><span>현재 글은 유지되며 다시 생성할 수 있습니다.</span></p>}
                 {record?.error && <p className="item-error" role="alert">{record.error}</p>}
                 {record?.text && <><label className="record-text-field">세특 초안<textarea rows="7" value={record.text} maxLength={targetLength} onChange={event => updateRecord(submission.id, { text: event.target.value, approved: false })}/></label><div className="record-item__footer"><span>{record.text.length}자 / {targetLength}자</span><div><button type="button" className="secondary-button" onClick={() => generateBatch([submission])}>다시 생성</button><button type="button" className="secondary-button" onClick={() => copyRecord(record)}>복사</button><button type="button" onClick={() => updateRecord(submission.id, { approved: !record.approved })}>{record.approved ? '확인 완료 취소' : '교사 확인 완료'}</button></div></div></>}
