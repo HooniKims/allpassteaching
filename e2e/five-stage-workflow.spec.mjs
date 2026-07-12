@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { PDFDocument } from 'pdf-lib';
 import { makeGeneratedPlan } from '../tests/fixtures/lesson-plan.mjs';
 import { makeAssessment, makeWorksheet } from '../tests/fixtures/workflow.mjs';
 
@@ -14,6 +15,25 @@ const grading = {
     nextSteps: '줄기와 잎도 같은 방식으로 설명해보세요.',
 };
 const recordText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 가는 털과 물 흡수 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러났으며 다른 기관에도 같은 설명 방식을 적용하려는 학습 방향을 보임.';
+const studentRoster = [
+    { id: 'student-a', grade: '2', className: '3', number: 1, name: '김학생' },
+    { id: 'student-b', grade: '2', className: '3', number: 2, name: '이학생' },
+];
+
+async function combinedSubmissionPdf() {
+    const document = await PDFDocument.create();
+    for (let index = 0; index < 4; index += 1) document.addPage([300, 400]);
+    return Buffer.from(await document.save());
+}
+
+function uploadedPdf(request) {
+    const body = request.postDataBuffer();
+    const start = body.indexOf(Buffer.from('%PDF-'));
+    const eof = body.indexOf(Buffer.from('%%EOF'), start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(eof).toBeGreaterThan(start);
+    return body.subarray(start, eof + 5);
+}
 
 test.beforeEach(async ({ page }) => {
     const plan = makeGeneratedPlan();
@@ -26,18 +46,20 @@ test.beforeEach(async ({ page }) => {
         stages: assessment.generationSettings.stages, visualAnalysisRequired: assessment.visualAnalysisRequired,
         includeStudentCover: assessment.includeStudentCover, additionalRequirements: assessment.generationSettings.additionalRequirements,
     };
-    await page.addInitScript(({ lessonPlan, storedAssessmentRequest }) => {
+    await page.addInitScript(({ lessonPlan, storedAssessmentRequest, storedStudents }) => {
         sessionStorage.clear();
         sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 4, maxReached: 4, basics: { schoolLevel: lessonPlan.schoolLevel, grade: lessonPlan.grade, subject: lessonPlan.subject, subjectMode: 'official', displaySubject: lessonPlan.subject, mappedSubjects: [lessonPlan.subject], mode: 'single', sessions: 1, intent: lessonPlan.title, studentNeeds: '', metadata: lessonPlan.metadata }, standards: lessonPlan.standards, instructionModel: { ...lessonPlan.instructionModel, stages: [] }, plan: lessonPlan, originalPlan: lessonPlan } }));
-        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: { activeProcess: 'lesson', lessonSnapshot: { plan: lessonPlan }, worksheet: null, assessmentRequest: storedAssessmentRequest, assessment: null, submissions: [], records: [] } }));
-    }, { lessonPlan: plan, storedAssessmentRequest: assessmentRequest });
+        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: { activeProcess: 'lesson', lessonSnapshot: { plan: lessonPlan }, worksheet: null, assessmentRequest: storedAssessmentRequest, assessment: null, students: storedStudents, submissions: [], records: [] } }));
+    }, { lessonPlan: plan, storedAssessmentRequest: assessmentRequest, storedStudents: studentRoster });
 });
 
 test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }) => {
     let ocrCalls = 0;
+    const uploadedPageCounts = [];
     await page.route('**/api/generate-worksheet', route => route.fulfill({ json: { worksheet: makeWorksheet() } }));
     await page.route('**/api/generate-assessment', route => route.fulfill({ json: { assessment: makeAssessment() } }));
-    await page.route('**/api/ocr', route => {
+    await page.route('**/api/ocr', async route => {
+        uploadedPageCounts.push((await PDFDocument.load(uploadedPdf(route.request()))).getPageCount());
         ocrCalls += 1;
         if (ocrCalls === 2) return route.fulfill({ status: 422, json: { message: '첫 시도에서 문서를 읽지 못했습니다.' } });
         return route.fulfill({ json: { extractedText: '관찰 결과 뿌리에 가는 털이 있다. 뿌리는 물을 흡수한다. 줄기는 물질을 운반한다.', ocrModel: 'document-parse', pageCount: 1 } });
@@ -58,14 +80,16 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.getByRole('button', { name: '수행평가·루브릭 확인 완료' }).click();
 
     await page.getByRole('tab', { name: /OCR·채점/ }).click();
-    await page.getByLabel('학생 PDF 파일').setInputFiles([
-        { name: '김학생.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 student 1') },
-        { name: '이학생.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 student 2') },
-    ]);
-    await page.getByRole('button', { name: '선택한 PDF OCR 시작' }).click();
+    await page.getByRole('radio', { name: '명단 순서 합본 PDF' }).click();
+    await page.getByRole('checkbox', { name: '각 학생 묶음 첫 페이지가 수행평가 안내 표지' }).click();
+    await page.getByLabel('명단 순서 합본 PDF 파일').setInputFiles({ name: '2반-수행평가.pdf', mimeType: 'application/pdf', buffer: await combinedSubmissionPdf() });
+    await expect(page.getByText('예상 4쪽 · 실제 4쪽')).toBeVisible();
+    await page.getByRole('button', { name: '학생별 PDF 묶음 만들기' }).click();
+    await page.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }).click();
     await expect(page.getByText('첫 시도에서 문서를 읽지 못했습니다.')).toBeVisible();
     await page.getByRole('button', { name: /OCR 다시 시도/ }).click();
     await expect(page.getByLabel('OCR 추출 원문')).toHaveCount(2);
+    expect(uploadedPageCounts).toEqual([1, 1, 1]);
 
     for (const studentName of ['김학생', '이학생']) {
         await page.getByRole('button', { name: `${studentName} 채점하기` }).click();
