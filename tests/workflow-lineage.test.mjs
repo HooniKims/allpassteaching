@@ -41,6 +41,13 @@ test('marks grading and records incomplete when the approved rubric changes', ()
     expect(workflowProcessStatuses(project)).toMatchObject({ grading: 'review', records: 'prerequisite' });
 });
 
+test('Given a migrated fixed rubric When calculating process status Then assessment and downstream approvals stay blocked until regeneration', () => {
+    const project = projectFixture();
+    project.assessment = { ...project.assessment, requiresAssessmentRegeneration: true };
+
+    expect(workflowProcessStatuses(project)).toMatchObject({ assessment: 'review', grading: 'prerequisite', records: 'prerequisite' });
+});
+
 test('does not count failed or empty record rows as completed', () => {
     const project = projectFixture();
     project.records[0] = { ...project.records[0], status: 'error', text: '' };

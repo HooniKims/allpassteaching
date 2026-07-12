@@ -1,8 +1,20 @@
-import { beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createEmptyWorkflow, loadWorkflow, saveWorkflow, WORKFLOW_KEY, WORKFLOW_VERSION } from '@/lib/workflow-store';
 import { sourceHash } from '@/lib/source-hash';
 
 beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); });
+
+function failSessionWrites() {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+    const storage = window.sessionStorage;
+    Object.defineProperty(window, 'sessionStorage', { configurable: true, value: {
+        getItem: storage.getItem.bind(storage),
+        setItem: () => { throw new DOMException('quota', 'QuotaExceededError'); },
+        removeItem: storage.removeItem.bind(storage),
+    } });
+    return () => Object.defineProperty(window, 'sessionStorage', descriptor);
+}
 
 test('stable source hashes ignore object key order and change with source content', () => {
     expect(sourceHash({ lesson: { subject: '과학', grade: '5' } })).toBe(sourceHash({ lesson: { grade: '5', subject: '과학' } }));
@@ -114,20 +126,89 @@ test('migrates the earlier activeStage name and supplies empty collections', () 
 
     const loaded = loadWorkflow();
 
-    expect(WORKFLOW_VERSION).toBe(2);
+    expect(WORKFLOW_VERSION).toBe(3);
     expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, students: [], submissions: [], records: [] });
 });
 
-test('version 2 roster state remains version 2 without publishing the later evidence migration', () => {
+test('Given a clean version 2 development rubric When loading Then it upgrades to version 3 without data loss or a false regeneration flag', () => {
     const project = { ...createEmptyWorkflow(), students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘' }] };
+    project.assessment = {
+        title: '개발형 수행평가', totalPoints: 10,
+        rubric: {
+            levels: [{ id: 'high', label: '상' }, { id: 'low', label: '하' }],
+            criteria: [{ id: 'criterion-a', name: '설명', description: '근거로 설명한다.', standardCodes: ['9과01-01'], kind: 'outcome', maxPoints: 10, intervalPoints: 5, evidence: '설명문', levels: [
+                { levelId: 'high', score: 10, description: '근거가 충분함' },
+                { levelId: 'low', score: 5, description: '근거가 일부 있음' },
+            ] }],
+        },
+    };
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
 
     const loaded = loadWorkflow();
     const stored = JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY));
 
-    expect(loaded.students).toEqual(project.students);
-    expect(stored.version).toBe(2);
-    expect(loaded.assessment).not.toMatchObject({ needsRegeneration: true });
+    expect(loaded).toEqual(project);
+    expect(stored.version).toBe(3);
+    expect(loaded.assessment).not.toHaveProperty('requiresAssessmentRegeneration');
+});
+
+test('Given a version 2 fixed rubric When loading Then it preserves legacy descriptions and requires assessment regeneration', () => {
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: {
+        activeProcess: 'grading',
+        assessment: {
+            task: { title: '식물 관찰', standards: [{ code: '6과11-02', text: '식물을 관찰한다.' }] },
+            rubric: {
+                levels: [{ id: 'excellent', label: '탁월' }, { id: 'beginning', label: '보완 필요' }],
+                criteria: [{
+                    id: 'criterion-1', name: '관찰 근거', description: '관찰 사실을 기록한다.', maxPoints: 10, evidence: '관찰 기록',
+                    levels: { excellent: '모든 특징을 구체적으로 기록함', beginning: '관찰 기록이 제한적임' },
+                }],
+            },
+            totalPoints: 10, approved: true,
+        },
+        students: [{ id: 'student-a', grade: '5', className: '1', number: 1, name: '김학생' }],
+        submissions: [{ id: 'submission-a', studentName: '김학생', extractedText: '잎을 관찰함', approved: true }],
+    } }));
+
+    const loaded = loadWorkflow();
+
+    expect(loaded.assessment).toMatchObject({
+        requiresAssessmentRegeneration: true,
+        approved: false,
+        rubric: { criteria: [{ levels: [
+            { levelId: 'excellent', description: '모든 특징을 구체적으로 기록함' },
+            { levelId: 'beginning', description: '관찰 기록이 제한적임' },
+        ] }] },
+    });
+    expect(loaded.submissions[0]).toMatchObject({ studentId: null, needsStudentLink: true, approved: false, approvalRevoked: true });
+    expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).version).toBe(3);
+});
+
+test('Given a session write failure When saving Then it reports failure and does not delete the legacy recovery copy', () => {
+    const legacy = JSON.stringify({ version: 2, data: { activeProcess: 'lesson' } });
+    window.localStorage.setItem(WORKFLOW_KEY, legacy);
+    const restore = failSessionWrites();
+
+    const saved = saveWorkflow(createEmptyWorkflow());
+    restore();
+
+    expect(saved).toBe(false);
+    expect(window.localStorage.getItem(WORKFLOW_KEY)).toBe(legacy);
+});
+
+test('Given a valid legacy copy and corrupt session state When loading Then it recovers data even if the clean rewrite fails', () => {
+    window.sessionStorage.setItem(WORKFLOW_KEY, '{corrupt-json');
+    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: {
+        activeProcess: 'grading',
+        students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }],
+    } }));
+    const restore = failSessionWrites();
+
+    const loaded = loadWorkflow();
+    restore();
+
+    expect(loaded).toMatchObject({ activeProcess: 'grading', students: [{ id: 'student-a', name: '김학생' }] });
+    expect(window.localStorage.getItem(WORKFLOW_KEY)).not.toBeNull();
 });
 
 test('moves a legacy persistent workflow into the current tab and removes the permanent copy', () => {

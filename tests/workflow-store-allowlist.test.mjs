@@ -51,14 +51,24 @@ function fullWorkflow() {
     };
 }
 
-test('version 2 allowlist round-trips every workflow subtree the current app consumes', () => {
+test('version 3 allowlist round-trips every workflow subtree the current app consumes', () => {
     const project = fullWorkflow();
 
     saveWorkflow(project);
 
     expect(loadWorkflow()).toEqual(project);
     expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).version).toBe(WORKFLOW_VERSION);
-    expect(WORKFLOW_VERSION).toBe(2);
+    expect(WORKFLOW_VERSION).toBe(3);
+});
+
+test('an already-clean full version 2 project migrates to version 3 without changing any allowed data', () => {
+    const project = fullWorkflow();
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
+
+    const loaded = loadWorkflow();
+
+    expect(loaded).toEqual(project);
+    expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY))).toMatchObject({ version: 3, data: project });
 });
 
 test('worksheet authoring metadata and all ten question variants survive the private workflow allowlist', () => {
@@ -143,4 +153,46 @@ test('object URLs and non-text binary values are rejected under otherwise allowe
     expect(raw).not.toContain('blob:http://localhost/renamed');
     expect(raw).not.toContain('data:application/pdf;base64');
     expect(raw).not.toContain('"0":1');
+});
+
+test('safe student evidence metadata round-trips while runtime document fields remain excluded', () => {
+    const project = fullWorkflow();
+    project.submissions[0] = {
+        ...project.submissions[0],
+        packetPages: [1, 2, 3],
+        answerPages: [2, 3],
+        ocrMode: 'enhanced',
+        elements: [{ id: 'element-1', page: 2, category: 'text', text: '광합성 설명', confidence: 0.98, coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] }],
+        elementsTruncated: false,
+        originalAttached: false,
+        originalReviewedAt: '2026-07-12T12:34:56.000Z',
+        packetFile: new File(['private'], 'packet.pdf', { type: 'application/pdf' }),
+        answerFile: new Blob(['private'], { type: 'application/pdf' }),
+        objectUrl: 'blob:http://localhost/private',
+    };
+
+    saveWorkflow(project);
+    const loaded = loadWorkflow();
+    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+
+    expect(loaded.submissions[0]).toMatchObject({
+        packetPages: [1, 2, 3], answerPages: [2, 3], ocrMode: 'enhanced', elementsTruncated: false,
+        originalAttached: false, originalReviewedAt: '2026-07-12T12:34:56.000Z',
+        elements: [{ id: 'element-1', page: 2, text: '광합성 설명', confidence: 0.98 }],
+    });
+    for (const forbidden of ['packetFile', 'answerFile', 'objectUrl', 'blob:http://localhost/private']) expect(raw).not.toContain(forbidden);
+});
+
+test('forbidden values are dropped even when injected into every allowed value category', () => {
+    const project = fullWorkflow();
+    project.assessment.assessmentName = new File(['private'], 'assessment.pdf', { type: 'application/pdf' });
+    project.assessment.totalPoints = new Uint8Array([60]);
+    project.assessment.approved = new AbortController();
+    project.students[0].name = 'data:application/octet-stream;base64,cHJpdmF0ZQ==';
+    project.submissions[0].elements = [new ArrayBuffer(8)];
+
+    saveWorkflow(project);
+    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+
+    for (const forbidden of ['assessment.pdf', 'cHJpdmF0ZQ==', 'AbortController', 'ArrayBuffer', '"0":60']) expect(raw).not.toContain(forbidden);
 });
