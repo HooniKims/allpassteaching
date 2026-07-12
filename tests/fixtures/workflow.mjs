@@ -3,22 +3,27 @@ export function makeWorksheet() {
         formatId: 'inquiry-experiment',
         formatName: '탐구·실험 기록지',
         selectionReason: '가설을 세우고 관찰 증거로 결론을 내리는 수업 흐름에 맞습니다.',
+        standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.' }],
+        generationRequest: {
+            additionalRequirements: '',
+            questionTypes: ['descriptive'],
+        },
         document: {
             title: '식물의 구조와 기능 탐구 학습지',
             instructions: '관찰한 사실과 생각을 구분하여 기록하세요.',
             studentFields: ['이름', '학년·반', '날짜'],
             sections: [
                 { id: 'section-1', title: '문제와 가설', purpose: '탐구 문제를 이해하고 예상하기', questions: [
-                    { id: 'q-1', prompt: '식물의 각 기관은 어떤 일을 할까요?', responseLines: 4 },
+                    { id: 'q-1', type: 'descriptive', prompt: '식물의 각 기관은 어떤 일을 할까요?', responseLines: 4, standardCodes: ['6과11-02'] },
                 ] },
                 { id: 'section-2', title: '관찰과 결론', purpose: '관찰 증거로 설명하기', questions: [
-                    { id: 'q-2', prompt: '관찰한 특징과 그 기능을 연결해 설명하세요.', responseLines: 6 },
+                    { id: 'q-2', type: 'descriptive', prompt: '관찰한 특징과 그 기능을 연결해 설명하세요.', responseLines: 6, standardCodes: ['6과11-02'] },
                 ] },
             ],
         },
         teacherKey: { answers: [
-            { questionId: 'q-1', answer: '뿌리는 물을 흡수하고 줄기는 물질을 운반한다고 예상할 수 있다.' },
-            { questionId: 'q-2', answer: '기관의 생김새를 실제 관찰 증거와 기능에 연결한다.' },
+            { questionId: 'q-1', answer: '뿌리는 물을 흡수하고 줄기는 물질을 운반한다.' },
+            { questionId: 'q-2', answer: '관찰한 생김새를 기능과 연결한다.' },
         ] },
     };
 }

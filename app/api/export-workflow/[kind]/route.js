@@ -2,7 +2,7 @@ import { worksheetOutputSchema } from '@/lib/worksheet-schema';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
 import { buildWorkflowPdf, CoverPageOverflowError } from '@/lib/export/workflow-pdf';
 
-const schemas = { worksheet: worksheetOutputSchema, assessment: assessmentOutputSchema, 'assessment-cover': assessmentOutputSchema };
+const schemas = { worksheet: worksheetOutputSchema, 'worksheet-student': worksheetOutputSchema, 'worksheet-teacher': worksheetOutputSchema, assessment: assessmentOutputSchema, 'assessment-cover': assessmentOutputSchema };
 
 export async function POST(request, context) {
     const { kind } = await context.params;

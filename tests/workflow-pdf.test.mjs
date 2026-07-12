@@ -92,6 +92,30 @@ test('numbers teacher answers by question id even when answer entries arrive out
     expect(texts.indexOf(worksheet.teacherKey.answers.find(answer => answer.questionId === 'q-1').answer)).toBeLessThan(texts.indexOf(worksheet.teacherKey.answers.find(answer => answer.questionId === 'q-2').answer));
 });
 
+test('renders separate student and teacher worksheet PDFs with type-specific response areas', async () => {
+    const worksheet = makeWorksheet();
+    worksheet.generationRequest.questionTypes = ['multiple-choice-5', 'table-chart', 'drawing-diagram'];
+    worksheet.document.sections[0].questions = [
+        { id: 'q-choice', type: 'multiple-choice-5', prompt: '옳은 설명을 고르세요.', choices: ['하나', '둘', '셋', '넷', '다섯'], responseLines: 1, standardCodes: ['6과11-02'] },
+        { id: 'q-chart', type: 'table-chart', prompt: '관찰 결과를 표로 나타내세요.', responseAreaHeight: 160, standardCodes: ['6과11-02'] },
+        { id: 'q-drawing', type: 'drawing-diagram', prompt: '식물의 구조를 그리고 표시하세요.', responseAreaHeight: 200, standardCodes: ['6과11-02'] },
+    ];
+    worksheet.document.sections = [worksheet.document.sections[0]];
+    worksheet.teacherKey.answers = worksheet.document.sections[0].questions.map(question => ({ questionId: question.id, answer: `${question.type} 예시 답안` }));
+    const studentEvents = [];
+    const teacherEvents = [];
+
+    const studentBytes = await buildWorkflowPdf('worksheet-student', worksheet, { onDraw: event => studentEvents.push(event) });
+    const teacherBytes = await buildWorkflowPdf('worksheet-teacher', worksheet, { onDraw: event => teacherEvents.push(event) });
+
+    expect((await PDFDocument.load(studentBytes)).getPageCount()).toBeGreaterThanOrEqual(1);
+    expect((await PDFDocument.load(teacherBytes)).getPageCount()).toBeGreaterThanOrEqual(2);
+    expect(studentEvents.some(event => event.text?.includes('교사용 예시 답안'))).toBe(false);
+    expect(teacherEvents.some(event => event.text?.includes('교사용 예시 답안'))).toBe(true);
+    expect(studentEvents.filter(event => event.kind === 'worksheet-choice')).toHaveLength(5);
+    expect(studentEvents.filter(event => event.kind === 'worksheet-response-box').map(event => event.questionType)).toEqual(['table-chart', 'drawing-diagram']);
+});
+
 test('학생 표지를 끈 전체본은 표지 없이 과제부터 시작하고 표지만 생성할 수 없다', async () => {
     const assessment = makeAssessment(); assessment.includeStudentCover = false;
     const events = [];

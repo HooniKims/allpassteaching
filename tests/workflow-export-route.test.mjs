@@ -12,6 +12,17 @@ test('exports a validated workflow document as PDF', async () => {
     expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
 });
 
+test('exports separate student and teacher worksheet documents', async () => {
+    const worksheet = makeWorksheet();
+    const student = await POST(request(worksheet), { params: Promise.resolve({ kind: 'worksheet-student' }) });
+    const teacher = await POST(request(worksheet), { params: Promise.resolve({ kind: 'worksheet-teacher' }) });
+
+    expect(student.status).toBe(200);
+    expect(teacher.status).toBe(200);
+    expect(Buffer.from(await student.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(Buffer.from(await teacher.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+});
+
 test('exports cover-only and full assessment documents from the same validated assessment', async () => {
     const assessment = makeAssessment();
     const coverRequest = new Request('http://localhost/api/export-workflow/assessment-cover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment) });
