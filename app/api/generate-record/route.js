@@ -59,7 +59,7 @@ const claimSchema = z.object({
     text: z.string().trim().min(1).max(1000),
     kind: z.enum(['performance', 'revision', 'next_step']),
     criterionIds: z.array(z.string().min(1).max(300)).min(1).max(15),
-    evidenceQuotes: z.array(z.object({ criterionId: z.string().min(1).max(300), quote: z.string().trim().min(1).max(5000) }).strict()).min(1).max(15),
+    evidenceQuotes: z.array(z.object({ criterionId: z.string().min(1).max(300), stage: z.enum(['performance', 'before', 'after']), quote: z.string().trim().min(1).max(5000) }).strict()).min(1).max(15),
     sourceRefs: z.array(z.object({ criterionId: z.string().min(1).max(300), elementId: z.string().min(1).max(300), page: z.number().int().min(1).max(10000) }).strict()).min(1).max(15),
 }).strict();
 
@@ -76,8 +76,8 @@ function parseRecord(content, targetLength, evidence) {
             claim.evidenceQuotes.forEach((citation, citationIndex) => {
                 const criterion = evidence.criteria.find(item => item.criterionId === citation.criterionId);
                 const revision = evidence.growthEvidence.find(item => item.criterionId === citation.criterionId)?.revisionEvidence;
-                const allowedQuotes = [criterion?.evidence, revision?.beforeEvidence, revision?.afterEvidence].filter(Boolean);
-                if (!claim.criterionIds.includes(citation.criterionId) || !allowedQuotes.some(quote => quote.includes(citation.quote))) issues.push({ path: ['claims', index, 'evidenceQuotes', citationIndex], message: '주장에 연결한 직접 인용은 승인된 근거 원문에 있어야 합니다.' });
+                const allowedQuote = citation.stage === 'performance' ? criterion?.evidence : citation.stage === 'before' ? revision?.beforeEvidence : revision?.afterEvidence;
+                if (!claim.criterionIds.includes(citation.criterionId) || allowedQuote !== citation.quote || (claim.kind !== 'revision' && citation.stage !== 'performance')) issues.push({ path: ['claims', index, 'evidenceQuotes', citationIndex], message: '주장에 연결한 직접 인용은 같은 단계의 승인 근거 원문 전체와 일치해야 합니다.' });
             });
             claim.sourceRefs.forEach((citation, citationIndex) => {
                 const criterion = evidence.criteria.find(item => item.criterionId === citation.criterionId);
@@ -86,7 +86,20 @@ function parseRecord(content, targetLength, evidence) {
                 if (!claim.criterionIds.includes(citation.criterionId) || !allowedRefs.some(ref => ref.elementId === citation.elementId && ref.page === citation.page)) issues.push({ path: ['claims', index, 'sourceRefs', citationIndex], message: '주장에 연결한 원본 위치는 승인된 근거와 일치해야 합니다.' });
             });
             const linkedGrowth = claim.criterionIds.some(id => growthIds.has(id));
-            if (claim.kind === 'revision' && !linkedGrowth) issues.push({ path: ['claims', index, 'criterionIds'], message: '수정 주장은 실제 수정 근거 평가영역과 연결해야 합니다.' });
+            if (claim.kind === 'revision') {
+                const unsupportedIds = claim.criterionIds.filter(id => !growthIds.has(id));
+                if (!linkedGrowth || unsupportedIds.length) issues.push({ path: ['claims', index, 'criterionIds'], message: '수정 주장의 모든 평가영역은 구조화된 수정 전후 근거가 있어야 합니다.' });
+                claim.criterionIds.filter(id => growthIds.has(id)).forEach(criterionId => {
+                    const revision = evidence.growthEvidence.find(item => item.criterionId === criterionId)?.revisionEvidence;
+                    const quotes = claim.evidenceQuotes.filter(item => item.criterionId === criterionId);
+                    const refs = claim.sourceRefs.filter(item => item.criterionId === criterionId);
+                    const citesBefore = revision && quotes.some(item => item.stage === 'before' && item.quote === revision.beforeEvidence)
+                        && refs.some(ref => ref.elementId === revision.beforeSourceRef.elementId && ref.page === revision.beforeSourceRef.page);
+                    const citesAfter = revision && quotes.some(item => item.stage === 'after' && item.quote === revision.afterEvidence)
+                        && refs.some(ref => ref.elementId === revision.afterSourceRef.elementId && ref.page === revision.afterSourceRef.page);
+                    if (!revision?.changeReason?.trim() || !citesBefore || !citesAfter) issues.push({ path: ['claims', index], message: `${criterionId} 수정 주장은 같은 평가영역의 수정 전·후 직접 근거와 원본 위치를 모두 연결해야 합니다.` });
+                });
+            }
             if (claim.kind !== 'revision' && hasUnsupportedGrowthInference(claim.text, false)) issues.push({ path: ['claims', index, 'text'], message: '성장 주장은 실제 수정 근거와 revision 유형으로 연결해야 합니다.' });
         });
         if (issues.length) return { success: false, value, issues };
@@ -104,6 +117,7 @@ export async function POST(request) {
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) return json({ code: 'invalid_request', message: '현재 명단과 승인된 채점 결과를 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
     const input = parsed.data;
+    if (input.recordContext.payload.expiresAt <= Date.now()) return json({ code: 'expired_context', message: '생성 권한 확인 시간이 만료되었습니다. 현재 상태를 다시 확인해주세요.' }, { status: 409 });
     if (!verifyRecordContext(input.recordContext, { lessonPlan: input.lessonPlan, assessment: input.assessment, students: input.roster })
         || !recordContextIncludesSubmission(input.recordContext, input.submission)) {
         return json({ code: 'stale_context', message: '학생 명단 또는 승인 결과가 변경되었습니다. 다시 생성해주세요.' }, { status: 409 });

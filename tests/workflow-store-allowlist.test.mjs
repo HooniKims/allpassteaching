@@ -221,9 +221,9 @@ test('comparison lineage is stored only while a candidate draft exists', () => {
     expect(loadWorkflow().records[0]).not.toHaveProperty('previousText');
     expect(loadWorkflow().records[0]).not.toHaveProperty('candidateSourceHash');
 
-    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500, regenerationStatus: 'done' };
+    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500, candidateInvalidCode: 'length_limit', candidateInvalidMessage: '현재 글자 수 제한과 맞지 않습니다.', regenerationStatus: 'done' };
     saveWorkflow(project);
-    expect(loadWorkflow().records[0]).toMatchObject({ previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500 });
+    expect(loadWorkflow().records[0]).toMatchObject({ previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500, candidateInvalidCode: 'length_limit', candidateInvalidMessage: '현재 글자 수 제한과 맞지 않습니다.' });
 });
 
 test('interrupted generation states recover as retryable records after reload', () => {

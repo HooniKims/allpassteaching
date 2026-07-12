@@ -31,7 +31,7 @@ const submission = { ...submissionBase, grading: finalizedGrading, sourceHash: c
 const student = { id: 'student-1', grade: '6', className: '1', number: 1, name: '김학생' };
 const request = body => new Request('http://localhost/api/generate-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const completion = value => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) } }] }), { status: 200 });
-const claims = value => ({ claims: [{ text: value, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] });
+const claims = value => ({ claims: [{ text: value, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] });
 const input = ({ currentLessonPlan = lessonPlan, currentAssessment = assessment, currentStudent = student, currentSubmission = submission, roster = [currentStudent], targetLength = 500 } = {}) => ({
     lessonPlan: currentLessonPlan,
     assessment: currentAssessment,
@@ -41,6 +41,17 @@ const input = ({ currentLessonPlan = lessonPlan, currentAssessment = assessment,
     recordContext: createRecordContext({ lessonPlan: currentLessonPlan, assessment: currentAssessment, students: roster, submissions: [currentSubmission] }),
     targetLength,
 });
+function submissionWithRevisionEvidence() {
+    const criteria = submission.grading.criteria.map(criterion => criterion.criterionId === 'criterion-3' ? { ...criterion, revisionEvidence: {
+        checkpointId: 'checkpoint-2', beforeEvidence: '뿌리에 가는 털', beforeSourceRef: canonicalGradingSourceRef(recordElements[0]),
+        afterEvidence: '관찰 결과', afterSourceRef: canonicalGradingSourceRef(recordElements[2]), changeReason: '피드백을 반영해 설명 근거를 보완함.', teacherConfirmed: true,
+    } } : criterion);
+    const draft = { ...submission, grading: { ...submission.grading, criteria, approvalToken: undefined } };
+    const sourceHashValue = gradingSourceHash(assessment, draft.extractedText, draft.elements, criteria, draft);
+    const grading = { ...draft.grading, sourceHash: sourceHashValue };
+    grading.approvalToken = createGradingApprovalToken(assessment, draft.extractedText, draft.elements, canonicalGradingProvenance(draft), grading, draft);
+    return { ...draft, grading, sourceHash: sourceHashValue };
+}
 
 test('generates only from a teacher-approved grading result', async () => {
     process.env.UPSTAGE_API_KEY = 'test-key'; vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(claims(text))));
@@ -123,7 +134,7 @@ test('rejects a stale roster context before calling the model', async () => {
 
 test('repairs a revision claim that is not linked to approved revision evidence', async () => {
     process.env.UPSTAGE_API_KEY = 'test-key';
-    const invalid = { claims: [{ text: '이전보다 설명이 정교해짐.', kind: 'revision', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] };
+    const invalid = { claims: [{ text: '이전보다 설명이 정교해짐.', kind: 'revision', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(invalid)).mockResolvedValueOnce(completion(claims(text))));
 
     const response = await POST(request(input()));
@@ -134,10 +145,54 @@ test('repairs a revision claim that is not linked to approved revision evidence'
 
 test('repairs a claim whose quote and source reference are not in approved evidence', async () => {
     process.env.UPSTAGE_API_KEY = 'test-key';
-    const fabricated = { claims: [{ text, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '제출물에 없는 문장' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'fake', page: 1 }] }] };
+    const fabricated = { claims: [{ text, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '제출물에 없는 문장' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'fake', page: 1 }] }] };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(fabricated)).mockResolvedValueOnce(completion(claims(text))));
 
     const response = await POST(request(input()));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('rejects a one-character substring instead of the complete approved evidence quote', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const partial = { claims: [{ text, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(partial)).mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input()));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('requires every revision criterion to cite its own before and after evidence and source references', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const revisedSubmission = submissionWithRevisionEvidence();
+    const validRevision = { claims: [{ text, kind: 'revision', criterionIds: ['criterion-3'], evidenceQuotes: [
+        { criterionId: 'criterion-3', stage: 'before', quote: '뿌리에 가는 털' }, { criterionId: 'criterion-3', stage: 'after', quote: '관찰 결과' },
+    ], sourceRefs: [
+        { criterionId: 'criterion-3', elementId: 'e1', page: 1 }, { criterionId: 'criterion-3', elementId: 'e3', page: 1 },
+    ] }] };
+    const missingAfter = { claims: [{ ...validRevision.claims[0], evidenceQuotes: validRevision.claims[0].evidenceQuotes.slice(0, 1), sourceRefs: validRevision.claims[0].sourceRefs.slice(0, 1) }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(missingAfter)).mockResolvedValueOnce(completion(validRevision)));
+
+    const response = await POST(request(input({ currentSubmission: revisedSubmission })));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('rejects mixed revision criterion ids when any id lacks structured revision support', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const revisedSubmission = submissionWithRevisionEvidence();
+    const mixed = { claims: [{ text, kind: 'revision', criterionIds: ['criterion-3', 'criterion-1'], evidenceQuotes: [
+        { criterionId: 'criterion-3', stage: 'before', quote: '뿌리에 가는 털' }, { criterionId: 'criterion-3', stage: 'after', quote: '관찰 결과' }, { criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털' },
+    ], sourceRefs: [
+        { criterionId: 'criterion-3', elementId: 'e1', page: 1 }, { criterionId: 'criterion-3', elementId: 'e3', page: 1 }, { criterionId: 'criterion-1', elementId: 'e1', page: 1 },
+    ] }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(mixed)).mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input({ currentSubmission: revisedSubmission })));
 
     expect(response.status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -150,7 +205,7 @@ test('rejects an expired record context before calling the model', async () => {
     const response = await POST(request({ lessonPlan, assessment, student, roster: [student], submission, recordContext, targetLength: 500 }));
 
     expect(response.status).toBe(409);
-    expect((await response.json()).code).toBe('stale_context');
+    expect((await response.json()).code).toBe('expired_context');
     expect(fetch).not.toHaveBeenCalled();
 });
 

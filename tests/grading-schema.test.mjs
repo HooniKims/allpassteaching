@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { gradingOutputSchema, storedGradingSchema } from '@/lib/grading-schema';
+import { gradingOutputSchema, revisionEvidenceSchema, storedGradingSchema } from '@/lib/grading-schema';
 import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
 
 const sourceRef = canonicalGradingSourceRef({ id: 'element-1', page: 2, category: 'text', text: '뿌리에 가는 털이 있다', confidence: .82, coordinates: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.3 }] });
@@ -37,4 +37,11 @@ test('Given unresolved grading When stored Then provisional total is allowed but
     const stored = { ...output, provisionalTotal: 35, totalScore: null, sourceHash: 'src-current', reviewOrigins: output.criteria.map(canonicalGradingOrigin), originToken: 'a'.repeat(64) };
 
     expect(storedGradingSchema.safeParse(stored).success).toBe(true);
+});
+
+test('rejects revision evidence whose normalized before and after contents are identical', () => {
+    const afterRef = canonicalGradingSourceRef({ id: 'element-3', page: 3, category: 'text', text: '뿌리에 가는 털이 있다', confidence: .9, coordinates: sourceRef.coordinates });
+    const revision = { checkpointId: 'checkpoint-2', beforeEvidence: '뿌리에 가는 털이 있다', beforeSourceRef: sourceRef, afterEvidence: '뿌리에  가는 털이 있다', afterSourceRef: afterRef, changeReason: '표현을 고침', teacherConfirmed: true };
+
+    expect(revisionEvidenceSchema.safeParse(revision).success).toBe(false);
 });

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { RecordsStage } from '@/components/workflow/RecordsStage.jsx';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 import { makeAssessment } from './fixtures/workflow.mjs';
-import { gradingSourceHash } from '@/lib/workflow-lineage';
+import { gradingSourceHash, recordSourceHash } from '@/lib/workflow-lineage';
 import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
 
 afterEach(() => vi.restoreAllMocks());
@@ -31,12 +31,19 @@ const students = [
 ];
 
 const fakeContext = { payload: { version: 1 }, token: 'a'.repeat(64) };
+const candidateClaims = [{ text: generatedText, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }];
 function mockRecordFetch(...generationResponses) {
     let index = 0;
     return vi.fn((url, options) => {
         if (String(url).includes('/api/authorize-record-generation')) return Promise.resolve(Response.json({ context: fakeContext }));
         const response = generationResponses[index++];
-        return typeof response === 'function' ? response(url, options) : Promise.resolve(response);
+        const resolved = typeof response === 'function' ? response(url, options) : Promise.resolve(response);
+        return Promise.resolve(resolved).then(async value => {
+            if (!(value instanceof Response)) return value;
+            const body = await value.clone().json().catch(() => null);
+            if (!body?.record?.text || body.record.claims) return value;
+            return Response.json({ ...body, record: { ...body.record, claims: candidateClaims, evidenceCriterionIds: ['criterion-1'] } }, { status: value.status });
+        });
     });
 }
 
@@ -270,4 +277,29 @@ test('Given a queued class generation When the teacher cancels Then no new stude
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('세특 생성 작업을 취소했습니다.'));
     expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+test('shows typed candidate reasons for stale evidence, length limits, unsupported claims, and expired context', async () => {
+    const currentHash = recordSourceHash(assessment, submissions[0]);
+    const base = { submissionId: 's1', studentId: 'student-1', studentName: '김학생', sourceHash: currentHash, status: 'done', text: '현재 교사 문장', error: '', approved: false, candidateText: generatedText, candidateClaims, candidateEvidenceCriterionIds: ['criterion-1'], candidateSourceHash: currentHash, candidateTargetLength: 500 };
+    function ReasonHarness({ initial }) { const [records, setRecords] = useState([initial]); return <RecordsStage lessonPlan={makeGeneratedPlan()} assessment={assessment} students={students} submissions={[submissions[0]]} records={records} onChange={setRecords}/>; }
+
+    const staleView = render(<ReasonHarness initial={{ ...base, candidateSourceHash: 'record-v2:stale' }}/>);
+    expect(screen.getByText('현재 승인 근거가 후보 생성 시점과 달라졌습니다. 새 근거로 다시 생성해주세요.')).toHaveAttribute('data-reason', 'stale_evidence');
+    staleView.unmount();
+
+    const lengthView = render(<ReasonHarness initial={base}/>);
+    await userEvent.setup().clear(screen.getByLabelText('학생별 최대 글자 수'));
+    await userEvent.setup().type(screen.getByLabelText('학생별 최대 글자 수'), '300');
+    expect(screen.getByText('현재 글자 수 제한과 맞지 않는 후보입니다. 현재 제한으로 다시 생성해주세요.')).toHaveAttribute('data-reason', 'length_limit');
+    lengthView.unmount();
+
+    const unsupportedView = render(<ReasonHarness initial={{ ...base, candidateClaims: [] }}/>);
+    expect(screen.getByText('승인 근거로 확인되지 않은 주장이 있어 이 후보를 적용할 수 없습니다.')).toHaveAttribute('data-reason', 'unsupported_claim');
+    unsupportedView.unmount();
+
+    vi.stubGlobal('fetch', mockRecordFetch(Response.json({ code: 'expired_context', message: '생성 권한 확인 시간이 만료되었습니다. 현재 상태를 다시 확인해주세요.' }, { status: 409 })));
+    render(<ReasonHarness initial={base}/>);
+    await userEvent.setup().click(screen.getByRole('button', { name: '김학생 다시 생성' }));
+    expect(await screen.findByText('생성 권한 확인 시간이 만료되었습니다. 현재 상태를 다시 확인해주세요.', { selector: '[data-reason="expired_context"]' })).toBeInTheDocument();
 });

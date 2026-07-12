@@ -31,3 +31,13 @@ test('detects unsupported student growth claims without rejecting ordinary subje
     expect(hasUnsupportedGrowthInference('꾸준히 관찰한 식물의 성장 조건을 설명함.', false)).toBe(false);
     expect(hasUnsupportedGrowthInference('이전보다 설명이 정교해짐.', true)).toBe(false);
 });
+
+test('blocks normalized Korean rank score superlative comparison and personality claims', () => {
+    const blocked = [
+        '반에서 1등임', '반 에서 １ 등임', '학급에서 가장 높은 점수를 받음', '다른 친구들에 비해 뛰어남',
+        '친구들 중 가장 우수함', '매우 부지런함', '90퍼센트를 달성함', '백 점 만점에 팔십오 점을 받음', '모범적 태도를 보임',
+        '매우 성/실한 태도임', '또래/보다 뛰어남', '책​임감이 있음', '학급에서 1/등임',
+    ];
+    for (const phrase of blocked) expect(recordOutputSchema.safeParse({ text: `${text} ${phrase}.` }).success).toBe(false);
+    expect(recordOutputSchema.safeParse({ text: `${text} 꾸준히 관찰한 식물의 성장 조건을 설명함.` }).success).toBe(true);
+});

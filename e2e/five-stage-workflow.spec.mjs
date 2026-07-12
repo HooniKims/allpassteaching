@@ -116,7 +116,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
         recordCalls.set(studentId, call);
         if (studentId === 'student-b' && call === 2) return route.fulfill({ status: 503, json: { message: '이학생 새 초안 생성 실패' } });
         const suffix = call === 1 ? '' : candidateSuffix[studentId];
-        return route.fulfill({ json: { record: { text: `${recordText}${suffix}`, evidenceCriterionIds: ['criterion-1'], claims: [{ text: `${recordText}${suffix}`, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', quote: '뿌리에 가는 털이 있다' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'root-evidence', page: 1 }] }] } } });
+        return route.fulfill({ json: { record: { text: `${recordText}${suffix}`, evidenceCriterionIds: ['criterion-1'], claims: [{ text: `${recordText}${suffix}`, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털이 있다' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'root-evidence', page: 1 }] }] } } });
     });
 
     await page.goto('/');

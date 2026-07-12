@@ -156,6 +156,7 @@ function finalizeGrading(input) {
             }
             if (!revisionEvidence.teacherConfirmed) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'teacherConfirmed'], '수정 전후 원본과 수정 이유를 교사가 확인해야 합니다.'));
             if (!beforeRef || !afterRef || beforeRef.elementId === afterRef.elementId) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence'], '서로 다른 수정 전·후 원본 근거가 필요합니다.'));
+            if (revisionEvidence.beforeEvidence.normalize('NFKC').replace(/\s+/g, '') === revisionEvidence.afterEvidence.normalize('NFKC').replace(/\s+/g, '')) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence'], '수정 전과 수정 후 내용은 서로 달라야 합니다.'));
             if (beforeRef && !gradingEvidenceMatchesElements(revisionEvidence.beforeEvidence, [elementById.get(beforeRef.elementId)])) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'beforeEvidence'], '수정 전 근거는 연결한 현재 OCR 원문에 있어야 합니다.'));
             if (afterRef && !gradingEvidenceMatchesElements(revisionEvidence.afterEvidence, [elementById.get(afterRef.elementId)])) issues.push(issue(['grading', 'criteria', index, 'revisionEvidence', 'afterEvidence'], '수정 후 근거는 연결한 현재 OCR 원문에 있어야 합니다.'));
             if (beforeRef && afterRef) revisionEvidence = { ...revisionEvidence, beforeSourceRef: beforeRef, afterSourceRef: afterRef };
