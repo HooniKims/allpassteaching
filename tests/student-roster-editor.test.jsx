@@ -38,15 +38,55 @@ test('Given an empty roster When a teacher adds and edits a student Then the gen
     render(<Harness/>);
 
     await user.click(screen.getByRole('button', { name: '학생 직접 추가' }));
-    const initial = JSON.parse(screen.getByTestId('state').textContent);
-    const id = initial.students[0].id;
+    expect(JSON.parse(screen.getByTestId('state').textContent).students).toEqual([]);
+    await user.type(screen.getByRole('textbox', { name: '1번 학생 학년' }), '2');
+    await user.type(screen.getByRole('textbox', { name: '1번 학생 반' }), '3');
     await user.type(screen.getByRole('textbox', { name: '1번 학생 이름' }), '김하늘');
     await user.clear(screen.getByRole('spinbutton', { name: '1번 학생 번호' }));
     await user.type(screen.getByRole('spinbutton', { name: '1번 학생 번호' }), '7');
 
     const edited = JSON.parse(screen.getByTestId('state').textContent);
-    expect(edited.students[0]).toMatchObject({ id, number: 7, name: '김하늘' });
-    expect(id).toMatch(/^student-[0-9a-f-]{36}$/);
+    expect(edited.students[0]).toMatchObject({ grade: '2', className: '3', number: 7, name: '김하늘' });
+    expect(edited.students[0].id).toMatch(/^student-[0-9a-f-]{36}$/);
+});
+
+test.each([
+    ['학년', 'textbox', [
+        { id: 'student-a', grade: '2', className: '1', number: 1, name: '김하늘' },
+        { id: 'student-b', grade: '3', className: '1', number: 1, name: '이바다' },
+    ], '2'],
+    ['반', 'textbox', [
+        { id: 'student-a', grade: '2', className: '1', number: 1, name: '김하늘' },
+        { id: 'student-b', grade: '2', className: '2', number: 1, name: '이바다' },
+    ], '1'],
+    ['번호', 'spinbutton', [
+        { id: 'student-a', grade: '2', className: '1', number: 1, name: '김하늘' },
+        { id: 'student-b', grade: '2', className: '1', number: 2, name: '이바다' },
+    ], '1'],
+])('Given two valid students When a direct %s edit duplicates the academic key Then the project roster remains byte-for-byte unchanged', async (field, role, students, duplicateValue) => {
+    const user = userEvent.setup();
+    render(<Harness initialStudents={students}/>);
+    const before = screen.getByTestId('state').textContent;
+
+    await user.clear(screen.getByRole(role, { name: `2번 학생 ${field}` }));
+    await user.type(screen.getByRole(role, { name: `2번 학생 ${field}` }), duplicateValue);
+
+    expect(screen.getByTestId('state').textContent).toBe(before);
+    const issues = screen.getByText('명단에 적용하지 않았습니다. 입력 중인 셀을 확인해주세요.').closest('.roster-issues');
+    expect(issues).toHaveTextContent('2번 학생 · 번호');
+    expect(issues).toHaveTextContent('1행과 학년·반·번호가 같습니다');
+});
+
+test('Given a valid student When a required direct field is cleared Then malformed draft data is not persisted', async () => {
+    const user = userEvent.setup();
+    const students = [{ id: 'student-a', grade: '2', className: '1', number: 1, name: '김하늘' }];
+    render(<Harness initialStudents={students}/>);
+    const before = screen.getByTestId('state').textContent;
+
+    await user.clear(screen.getByRole('textbox', { name: '1번 학생 이름' }));
+
+    expect(screen.getByTestId('state').textContent).toBe(before);
+    expect(screen.getByText('명단에 적용하지 않았습니다. 입력 중인 셀을 확인해주세요.').closest('.roster-issues')).toHaveTextContent('1번 학생 · 이름');
 });
 
 test('Given two students When the teacher reorders them Then only list order changes', async () => {

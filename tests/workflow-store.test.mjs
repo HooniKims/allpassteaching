@@ -51,6 +51,29 @@ test('공용 학생 명단은 안정적인 ID와 순서를 보존하고 File·Bl
     expect(raw).not.toContain('privateBlob');
 });
 
+test('현재 저장 계약은 파일·객체 URL·원시 OCR payload를 모든 중첩 결과에서 제거한다', () => {
+    const project = createEmptyWorkflow();
+    project.assessment = {
+        title: '보존할 수행평가',
+        answerPdfBase64: 'JVBERi0xLjQ=',
+        objectUrl: 'blob:http://localhost/assessment',
+        answerFile: new File(['pdf'], 'answer.pdf', { type: 'application/pdf' }),
+    };
+    project.records = [{
+        submissionId: 'submission-a', text: '보존할 세특',
+        objectUrl: 'blob:http://localhost/record', rawBase64: 'cmF3', rawUpstage: { pages: ['민감 원문'] },
+        packetFile: new Blob(['pdf'], { type: 'application/pdf' }),
+    }];
+
+    saveWorkflow(project);
+    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const loaded = loadWorkflow();
+
+    for (const forbidden of ['answerPdfBase64', 'objectUrl', 'answerFile', 'rawBase64', 'rawUpstage', 'packetFile']) expect(raw).not.toContain(forbidden);
+    expect(loaded.assessment).toEqual({ title: '보존할 수행평가' });
+    expect(loaded.records).toEqual([{ submissionId: 'submission-a', text: '보존할 세특' }]);
+});
+
 test('이름만 있던 이전 제출물은 명단과 같은 이름이어도 자동 연결하지 않는다', () => {
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: {
         activeProcess: 'grading',
@@ -91,8 +114,20 @@ test('migrates the earlier activeStage name and supplies empty collections', () 
 
     const loaded = loadWorkflow();
 
-    expect(WORKFLOW_VERSION).toBe(3);
+    expect(WORKFLOW_VERSION).toBe(2);
     expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, students: [], submissions: [], records: [] });
+});
+
+test('version 2 roster state remains version 2 without publishing the later evidence migration', () => {
+    const project = { ...createEmptyWorkflow(), students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘' }] };
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
+
+    const loaded = loadWorkflow();
+    const stored = JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY));
+
+    expect(loaded.students).toEqual(project.students);
+    expect(stored.version).toBe(2);
+    expect(loaded.assessment).not.toMatchObject({ needsRegeneration: true });
 });
 
 test('moves a legacy persistent workflow into the current tab and removes the permanent copy', () => {

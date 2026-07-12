@@ -23,12 +23,13 @@ test('restores the active process and can clear only student-derived data', asyn
     render(<TeachingWorkflow/>);
 
     expect(await screen.findByRole('tab', { name: /세특/ })).toHaveAttribute('aria-selected', 'true');
-    await user.click(screen.getByRole('button', { name: '학생 자료 모두 지우기' }));
-    await user.click(screen.getByRole('button', { name: '학생 자료 삭제 확인' }));
+    await user.click(screen.getByRole('button', { name: '학생 제출·채점·세특 모두 지우기' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('공용 학생 명단은 유지됩니다');
+    await user.click(screen.getByRole('button', { name: '제출·채점·세특 삭제 확인' }));
 
     await waitFor(() => {
         const saved = JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data;
-        expect(saved.students).toEqual([]);
+        expect(saved.students).toEqual(project.students);
         expect(saved.submissions).toEqual([]);
         expect(saved.records).toEqual([]);
         expect(saved.activeProcess).toBe('records');

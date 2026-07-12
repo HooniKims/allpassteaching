@@ -45,7 +45,7 @@ for (const viewport of viewports) {
     page.on('pageerror', error => consoleErrors.push(error.message));
     await page.addInitScript(storedWorkflow => {
         if (!sessionStorage.getItem('allpass.teaching-workflow')) {
-            sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 3, data: storedWorkflow }));
+            sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: storedWorkflow }));
         }
     }, workflow);
     await page.goto(baseURL, { waitUntil: 'networkidle' });
@@ -82,7 +82,7 @@ for (const viewport of viewports) {
 
     if (viewport.name === 'desktop') {
         const dialogWorkflow = { ...workflow, submissions: [{ id: 'submission-linked', studentId: 'student-1', needsStudentLink: false, studentName: '김하늘', fileName: '김하늘.pdf', status: 'pending', extractedText: '', grading: null, approved: false, error: '' }] };
-        await page.evaluate(value => sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 3, data: value })), dialogWorkflow);
+        await page.evaluate(value => sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: value })), dialogWorkflow);
         await page.reload({ waitUntil: 'networkidle' });
         await page.locator('.student-roster').getByRole('button', { name: '김하늘 삭제' }).click();
         const dialog = page.getByRole('alertdialog', { name: '학생 삭제 확인' });
@@ -102,7 +102,7 @@ for (const viewport of viewports) {
         await dialog.waitFor({ state: 'hidden' });
         const rosterCountAfterCancel = await page.locator('.student-roster__row').count();
 
-        await page.evaluate(value => sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 3, data: value })), workflow);
+        await page.evaluate(value => sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({ version: 2, data: value })), workflow);
         await page.reload({ waitUntil: 'networkidle' });
         await page.getByLabel('학생 명단 Excel 업로드').setInputFiles(invalidWorkbook);
         await page.getByText('명단을 바꾸지 않았습니다. 아래 셀을 확인해주세요.').waitFor();

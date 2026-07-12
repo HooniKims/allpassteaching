@@ -55,6 +55,50 @@ describe('private roster workbook adapter', () => {
         ]));
     });
 
+    test('Given a fifth or duplicate extra header When parsing Then the exact four-column contract rejects the workbook', async () => {
+        const bytes = await workbookBytes([['2', '3', 7, '김하늘', '메모']], ['학년', '반', '번호', '이름', '이름']);
+
+        const result = await parseRosterWorkbook(bytes);
+
+        expect(result.students).toEqual([]);
+        expect(result.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ row: 1, column: '5열', code: 'extra-column' }),
+        ]));
+    });
+
+    test('Given a padded header When parsing Then the exact header contract rejects the workbook', async () => {
+        const bytes = await workbookBytes([['2', '3', 7, '김하늘']], ['학년 ', '반', '번호', '이름']);
+
+        const result = await parseRosterWorkbook(bytes);
+
+        expect(result.students).toEqual([]);
+        expect(result.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ row: 1, column: '학년', code: 'header' }),
+        ]));
+    });
+
+    test('Given a formula cell anywhere in a candidate row When parsing Then cached formula results are never accepted', async () => {
+        const bytes = await workbookBytes([['2', '3', { formula: '3+4', result: 7 }, '김하늘']]);
+
+        const result = await parseRosterWorkbook(bytes);
+
+        expect(result.students).toEqual([]);
+        expect(result.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ row: 2, column: '번호', code: 'formula' }),
+        ]));
+    });
+
+    test('Given a non-string student name When parsing Then the name cell is rejected instead of coerced', async () => {
+        const bytes = await workbookBytes([['2', '3', 7, 1234]]);
+
+        const result = await parseRosterWorkbook(bytes);
+
+        expect(result.students).toEqual([]);
+        expect(result.issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({ row: 2, column: '이름', code: 'type' }),
+        ]));
+    });
+
     test('Given duplicate and invalid rows When parsing Then every candidate is rejected with spreadsheet row and column details', async () => {
         const bytes = await workbookBytes([
             ['2', '3', 7, '김하늘'],
