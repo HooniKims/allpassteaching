@@ -48,6 +48,11 @@ Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, butto
 - ChoiceTile is a card only because the full container is selectable; informational sections have no card chrome.
 - ProcessTabs always expose all five processes and pair color with `완료`, `검토 필요`, or `선행 단계 필요` text. Arrow keys move focus; selecting a blocked process shows a prerequisite explanation instead of silently redirecting.
 - StructuredEditor uses white document sections separated by rules. Repeated sections have explicit add/remove controls and preserve visible labels; it does not become a dashboard card grid.
+- BackwardDesignForm leads with three full-width plain-language questions, a slim green rule, contextual examples, and a separate compact configuration grid. The first question is visibly required; AI suggestions fill editable fields rather than replacing teacher intent.
+- EvidenceMap is a quiet four-column trace from canonical standard to task evidence, rubric criteria, and score basis. At mobile widths it becomes a single-column reading sequence without hiding any link.
+- RubricCriterion is a bordered fieldset with explicit reorder/duplicate/delete controls, outcome/process identity, total/interval inputs, and responsive level panels. It never encodes quality by color alone.
+- CoverPreview is a live paper-like student page that reads the current task, checkpoints, standards, and rubric. The rubric is a live reference, never duplicated cover state.
+- CandidatePanel preserves the current assessment during AI regeneration and offers two explicit actions: apply the new candidate or keep the current document. A candidate generated from stale inputs cannot be applied.
 - BatchItem is a bordered student row with name, file metadata, current status, progress or error copy, and its next valid action. One failed row never changes successful siblings.
 - ApprovalState distinguishes AI draft, teacher edited, and teacher approved. Editing an approved score removes approval and explains why.
 - StaleNotice preserves an existing downstream document and names which upstream source changed, with a single regenerate action.

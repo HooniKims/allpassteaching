@@ -32,6 +32,16 @@ test('current-tab persistence keeps structured results for refresh but never sel
     expect(window.localStorage.getItem(WORKFLOW_KEY)).toBeNull();
 });
 
+test('평가 요청의 세 질문과 생성 옵션을 현재 탭에 보존한다', () => {
+    const project = createEmptyWorkflow();
+    project.assessmentRequest.teacherIntent.desiredResult = '관찰 근거로 설명한다.';
+    project.assessmentRequest.totalPoints = 60;
+
+    saveWorkflow(project);
+
+    expect(loadWorkflow().assessmentRequest).toMatchObject({ teacherIntent: { desiredResult: '관찰 근거로 설명한다.' }, totalPoints: 60 });
+});
+
 test('migrates the earlier activeStage name and supplies empty collections', () => {
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 0, data: { activeStage: 'worksheet', worksheet: { title: '기존 학습지' } } }));
 

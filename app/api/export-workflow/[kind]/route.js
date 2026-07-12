@@ -2,7 +2,7 @@ import { worksheetOutputSchema } from '@/lib/worksheet-schema';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
 import { buildWorkflowPdf } from '@/lib/export/workflow-pdf';
 
-const schemas = { worksheet: worksheetOutputSchema, assessment: assessmentOutputSchema };
+const schemas = { worksheet: worksheetOutputSchema, assessment: assessmentOutputSchema, 'assessment-cover': assessmentOutputSchema };
 
 export async function POST(request, context) {
     const { kind } = await context.params;

@@ -6,7 +6,8 @@ afterEach(() => { vi.restoreAllMocks(); delete process.env.UPSTAGE_API_KEY; });
 const extractedText = '관찰 결과 뿌리에 가는 털이 있다. 뿌리는 물을 흡수한다. 줄기는 물질을 운반한다.';
 const output = { criteria: [
     { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털이 있다', feedback: '관찰 근거가 구체적입니다.' },
-    { criterionId: 'criterion-2', score: 50, evidence: '뿌리는 물을 흡수한다', feedback: '구조와 기능을 연결했습니다.' },
+    { criterionId: 'criterion-2', score: 35, evidence: '뿌리는 물을 흡수한다', feedback: '구조와 기능을 연결했습니다.' },
+    { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '수정 과정의 근거를 확인했습니다.' },
 ], summary: '관찰 사실을 기능 설명에 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.' };
 const request = body => new Request('http://localhost/api/grade-submission', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const completion = value => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) } }] }), { status: 200 });

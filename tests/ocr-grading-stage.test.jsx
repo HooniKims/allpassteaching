@@ -56,7 +56,8 @@ test('keeps both grading results when two student requests finish in reverse ord
     const base = studentName => ({ id: studentName, studentName, fileName: `${studentName}.pdf`, status: 'extracted', extractedText: `${studentName}의 관찰 기록은 뿌리에 가는 털과 물 흡수 기능을 구체적으로 설명한다.`, grading: null, approved: false });
     const grading = { criteria: [
         { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털', feedback: '구체적입니다.' },
-        { criterionId: 'criterion-2', score: 50, evidence: '물 흡수 기능', feedback: '연결했습니다.' },
+        { criterionId: 'criterion-2', score: 35, evidence: '물 흡수 기능', feedback: '연결했습니다.' },
+        { criterionId: 'criterion-3', score: 15, evidence: '관찰 기록', feedback: '수정 과정의 근거를 확인했습니다.' },
     ], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
     let resolveFirst; let resolveSecond;
     vi.stubGlobal('fetch', vi.fn()
@@ -92,6 +93,7 @@ test('disables approval when a teacher score exceeds the criterion maximum', () 
     const grading = { criteria: [
         { criterionId: 'criterion-1', score: 99, evidence: '관찰 근거', feedback: '피드백' },
         { criterionId: 'criterion-2', score: 1, evidence: '기능 설명', feedback: '피드백' },
+        { criterionId: 'criterion-3', score: 0, evidence: '학생 제출', feedback: '피드백' },
     ], totalScore: 100, summary: '요약', nextSteps: '다음 단계' };
     const submission = { id: 's1', studentName: '김학생', fileName: '김학생.pdf', status: 'graded', extractedText: '관찰 근거와 기능 설명을 충분히 기록한 학생 제출 내용입니다.', grading, approved: false };
     submission.sourceHash = gradingSourceHash(assessment, submission.extractedText);

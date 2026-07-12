@@ -64,7 +64,7 @@ export function TeachingWorkflow() {
                     : activeProcess === 'worksheet'
                         ? <WorksheetStage lessonPlan={project.lessonSnapshot.plan} value={project.worksheet} onChange={worksheet => setProject(current => ({ ...current, worksheet }))}/>
                         : activeProcess === 'assessment'
-                            ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} value={project.assessment} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
+                            ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} value={project.assessment} request={project.assessmentRequest} onRequestChange={assessmentRequest => setProject(current => ({ ...current, assessmentRequest }))} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
                             : activeProcess === 'grading'
                                 ? <OcrGradingStage assessment={project.assessment} submissions={project.submissions} onChange={updateSubmissions}/>
                                 : activeProcess === 'records'

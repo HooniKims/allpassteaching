@@ -10,12 +10,13 @@ import { gradingSourceHash } from '@/lib/workflow-lineage';
 afterEach(() => vi.restoreAllMocks());
 const grading = { criteria: [
     { criterionId: 'criterion-1', score: 35, evidence: '뿌리에 가는 털', feedback: '구체적입니다.' },
-    { criterionId: 'criterion-2', score: 50, evidence: '물을 흡수한다', feedback: '연결했습니다.' },
+    { criterionId: 'criterion-2', score: 35, evidence: '물을 흡수한다', feedback: '연결했습니다.' },
+    { criterionId: 'criterion-3', score: 15, evidence: '관찰 결과', feedback: '수정 과정을 확인했습니다.' },
 ], totalScore: 85, summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.' };
 const assessment = makeAssessment();
 const submissions = [
-    { id: 's1', studentName: '김학생', approved: true, extractedText: '뿌리에 가는 털이 있고 물을 흡수한다.', grading },
-    { id: 's2', studentName: '이학생', approved: false, extractedText: '미승인 내용입니다.', grading },
+    { id: 's1', studentName: '김학생', approved: true, extractedText: '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.', grading },
+    { id: 's2', studentName: '이학생', approved: false, extractedText: '관찰 결과 미승인 내용입니다.', grading },
 ].map(item => ({ ...item, sourceHash: gradingSourceHash(assessment, item.extractedText) }));
 const generatedText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 구조와 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러남.';
 
