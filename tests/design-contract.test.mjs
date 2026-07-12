@@ -41,16 +41,19 @@ test('disabled PDF pickers use muted tokens instead of the active green affordan
 });
 
 test('mobile PDF workflow keeps Korean semantic phrases together', async () => {
-    const [roster, upload, grading, review] = await Promise.all([
+    const [roster, upload, grading, review, css] = await Promise.all([
         readFile('components/workflow/StudentRosterEditor.jsx', 'utf8'),
         readFile('components/workflow/StudentPdfUpload.jsx', 'utf8'),
         readFile('components/workflow/OcrGradingStage.jsx', 'utf8'),
         readFile('components/workflow/SubmissionReviewWorkspace.jsx', 'utf8'),
+        readFile('app/globals.css', 'utf8'),
     ]);
 
     expect(roster).toContain('<span className="nowrap">학년 · 반 · 번호 · 이름</span>');
     expect(upload).toContain('<span className="nowrap">표지를 뺀 답안 PDF만</span>');
     expect(upload).toContain('<span className="nowrap">이 학생의 수행평가 안내 표지</span>');
+    expect(upload).toContain('<span className="pdf-cover-check__copy">각 개별 PDF의 첫 페이지가 <span className="nowrap">이 학생의 수행평가 안내 표지</span></span>');
+    expect(css).toMatch(/\.pdf-cover-check__copy \{[^}]*min-width: 0;[^}]*word-break: keep-all;/);
     expect(grading).toContain('<span className="nowrap">원본을 다시 연결하기 전에는</span>');
     expect(review).toContain('<span className="nowrap">모든 근거를 확인한 뒤</span>');
 });

@@ -62,9 +62,10 @@ async function diagnostics(page) {
             const style = getComputedStyle(element);
             return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
         });
+        const submissionTabs = document.querySelector('.submission-review-tabs');
         return {
             documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-            submissionTabsTop: getComputedStyle(document.querySelector('.submission-review-tabs')).top,
+            submissionTabsTop: submissionTabs ? getComputedStyle(submissionTabs).top : 'not-rendered',
             loadingStatuses: document.querySelectorAll('.pdf-viewer-status').length,
             busyViewports: [...document.querySelectorAll('.pdf-page-viewport')].filter(element => element.getAttribute('aria-busy') !== 'false').length,
             clippedControls: visible.filter(element => {
@@ -106,6 +107,19 @@ for (const viewport of viewports) {
     });
     await page.route('**/api/grade-submission', route => route.fulfill({ json: { grading: grading() } }));
     await page.goto(baseURL, { waitUntil: 'networkidle' });
+    const coverCheckbox = page.getByRole('checkbox', { name: '각 개별 PDF의 첫 페이지가 이 학생의 수행평가 안내 표지' });
+    await coverCheckbox.scrollIntoViewIfNeeded();
+    const coverCopyMetrics = await coverCheckbox.locator('..').evaluate(label => {
+        const copy = label.querySelector('.pdf-cover-check__copy');
+        const phrase = copy?.querySelector('.nowrap');
+        if (!copy || !phrase) return { wrapperPresent: false, phraseFitsCopy: false, phraseWhiteSpace: '' };
+        const copyRect = copy.getBoundingClientRect();
+        const phraseRect = phrase.getBoundingClientRect();
+        return { wrapperPresent: true, phraseFitsCopy: phraseRect.left >= copyRect.left - 1 && phraseRect.right <= copyRect.right + 1, phraseWhiteSpace: getComputedStyle(phrase).whiteSpace };
+    });
+    const coverPath = path.join(outputDirectory, `${viewport.name}-cover-checkbox.png`);
+    await page.screenshot({ path: coverPath, fullPage: true });
+    evidence.push({ viewport, state: 'cover-checkbox', screenshotPath: coverPath, ...coverCopyMetrics, ...(await diagnostics(page)), consoleErrors: [...consoleErrors] });
     await page.getByRole('radio', { name: '명단 순서 합본 PDF' }).click();
     await page.getByRole('checkbox', { name: '각 학생 묶음 첫 페이지가 수행평가 안내 표지' }).click();
     await page.getByLabel('명단 순서 합본 PDF 파일').setInputFiles({ name: 'synthetic-two-students.pdf', mimeType: 'application/pdf', buffer: await syntheticPacket() });
@@ -123,6 +137,12 @@ for (const viewport of viewports) {
     await first.getByRole('button', { name: '관찰 근거 원본에서 보기' }).click();
     await page.waitForFunction(() => document.activeElement?.classList.contains('pdf-page-viewport') === true);
     const firstFocusMoved = await first.locator('.pdf-page-viewport').evaluate(element => element === document.activeElement);
+    await first.getByTestId('evidence-highlight').waitFor();
+    await first.getByRole('button', { name: '이전 페이지' }).click();
+    await first.getByTestId('evidence-highlight').waitFor({ state: 'detached' });
+    const highlightClearedAfterNavigation = await first.getByTestId('evidence-highlight').count() === 0;
+    if (viewport.width <= 900) await first.getByRole('tab', { name: '채점 결과' }).click();
+    await first.getByRole('button', { name: '관찰 근거 원본에서 보기' }).click();
     await second.getByRole('button', { name: '관찰 근거 원본에서 보기' }).click();
     await page.waitForFunction(() => document.activeElement?.classList.contains('pdf-page-viewport') === true);
     const secondFocusMoved = await second.locator('.pdf-page-viewport').evaluate(element => element === document.activeElement);
@@ -135,7 +155,7 @@ for (const viewport of viewports) {
     await waitForViewersSettled(page);
     const sourcePath = path.join(outputDirectory, `${viewport.name}-source-links.png`);
     await page.screenshot({ path: sourcePath, fullPage: true });
-    evidence.push({ viewport, state: 'source-links', screenshotPath: sourcePath, highlightVisible: await first.getByTestId('evidence-highlight').isVisible(), fallbackVisible: await second.locator('.pdf-source-fallback').isVisible(), firstFocusMoved, secondFocusMoved, ...(await diagnostics(page)), consoleErrors: [...consoleErrors] });
+    evidence.push({ viewport, state: 'source-links', screenshotPath: sourcePath, highlightVisible: await first.getByTestId('evidence-highlight').isVisible(), fallbackVisible: await second.locator('.pdf-source-fallback').isVisible(), firstFocusMoved, secondFocusMoved, highlightClearedAfterNavigation, ...(await diagnostics(page)), consoleErrors: [...consoleErrors] });
 
     if (viewport.width <= 900) {
         await first.getByRole('tab', { name: 'OCR 결과' }).click();
@@ -166,8 +186,9 @@ await browser.close();
 
 const failures = evidence.filter(item => item.violations.length || item.consoleErrors.length || item.metrics.documentOverflow > 1 || item.metrics.clippedControls.length
     || item.metrics.loadingStatuses || item.metrics.busyViewports
-    || (item.viewport.width <= 800 && item.metrics.submissionTabsTop !== '0px')
-    || (item.state === 'source-links' && (!item.highlightVisible || !item.fallbackVisible || !item.firstFocusMoved || !item.secondFocusMoved))
+    || (item.state !== 'cover-checkbox' && item.viewport.width <= 800 && item.metrics.submissionTabsTop !== '0px')
+    || (item.state === 'cover-checkbox' && (!item.wrapperPresent || !item.phraseFitsCopy || item.phraseWhiteSpace !== 'nowrap'))
+    || (item.state === 'source-links' && (!item.highlightVisible || !item.fallbackVisible || !item.firstFocusMoved || !item.secondFocusMoved || !item.highlightClearedAfterNavigation))
     || (item.state === 'low-confidence' && (!item.lowConfidenceCount || !item.teacherReviewCount || (item.fullscreenSupported && !item.fullscreenEntered)))
     || (item.state === 'refresh-reattach' && item.reattachLinks !== students.length));
 const report = { capturedAt: new Date().toISOString(), baseURL, pageCount: evidence.length, failures, evidence };

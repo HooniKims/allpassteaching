@@ -1,17 +1,17 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { normalizeEvidenceCoordinates } from '@/lib/evidence-coordinates.js';
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 2.5;
 
 function coordinateBox(coordinates, rotation) {
-    if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
-    if (!coordinates.every(point => Number.isFinite(point?.x) && Number.isFinite(point?.y)
-        && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1)) return null;
-    const xMin = Math.min(...coordinates.map(point => point.x));
-    const xMax = Math.max(...coordinates.map(point => point.x));
-    const yMin = Math.min(...coordinates.map(point => point.y));
-    const yMax = Math.max(...coordinates.map(point => point.y));
+    const points = normalizeEvidenceCoordinates(coordinates);
+    if (!points.length) return null;
+    const xMin = Math.min(...points.map(point => point.x));
+    const xMax = Math.max(...points.map(point => point.x));
+    const yMin = Math.min(...points.map(point => point.y));
+    const yMax = Math.max(...points.map(point => point.y));
     const boxes = {
         0: { left: xMin, top: yMin, width: xMax - xMin, height: yMax - yMin },
         90: { left: 1 - yMax, top: xMin, width: yMax - yMin, height: xMax - xMin },
@@ -25,7 +25,7 @@ function percent(value) {
     return `${Number((value * 100).toFixed(4))}%`;
 }
 
-export function PdfEvidenceViewer({ fileUrl, studentName, coverPages = [], answerPages = [], activeSourceRef = null }) {
+export function PdfEvidenceViewer({ fileUrl, studentName, documentKey = `${studentName}:${fileUrl}`, coverPages = [], answerPages = [], activeSourceRef = null }) {
     const rootRef = useRef(null);
     const viewportRef = useRef(null);
     const canvasRef = useRef(null);
@@ -39,7 +39,14 @@ export function PdfEvidenceViewer({ fileUrl, studentName, coverPages = [], answe
     const [renderRevision, setRenderRevision] = useState(0);
     const [status, setStatus] = useState('PDF 불러오는 중…');
     const [error, setError] = useState('');
-    const highlight = useMemo(() => coordinateBox(activeSourceRef?.coordinates, rotation), [activeSourceRef, rotation]);
+    const [dismissedSourceRef, setDismissedSourceRef] = useState(null);
+    const sourceOwned = activeSourceRef?.ownerKey === documentKey;
+    const sourceActive = sourceOwned && dismissedSourceRef !== activeSourceRef;
+    const sourcePage = Number.isInteger(activeSourceRef?.page) && activeSourceRef.page >= 1 ? coverPages.length + activeSourceRef.page : null;
+    const sourcePageValid = Boolean(pdf) && sourcePage !== null && sourcePage <= pageCount;
+    const sourceBox = useMemo(() => coordinateBox(activeSourceRef?.coordinates, rotation), [activeSourceRef, rotation]);
+    const highlight = sourceActive && sourcePageValid && pageNumber === sourcePage ? sourceBox : null;
+    const sourceFallback = sourceActive && Boolean(pdf) && (!sourcePageValid || !sourceBox);
     const isCover = pageNumber <= coverPages.length;
 
     useEffect(() => {
@@ -47,9 +54,9 @@ export function PdfEvidenceViewer({ fileUrl, studentName, coverPages = [], answe
     }, [coverPages.length, fileUrl, studentName]);
 
     useEffect(() => {
-        if (!activeSourceRef?.page) return;
-        setPageNumber(Math.max(1, coverPages.length + activeSourceRef.page));
-    }, [activeSourceRef, coverPages.length]);
+        if (!sourceActive || !sourcePageValid) return;
+        setPageNumber(sourcePage);
+    }, [activeSourceRef, sourceActive, sourcePage, sourcePageValid]);
 
     useEffect(() => {
         if (!fileUrl || typeof window === 'undefined') return undefined;
@@ -119,7 +126,10 @@ export function PdfEvidenceViewer({ fileUrl, studentName, coverPages = [], answe
         return () => { cancelled = true; renderTask?.cancel(); };
     }, [fitMode, pageNumber, pdf, renderRevision, rotation, scale]);
 
-    const changePage = next => setPageNumber(Math.min(pageCount, Math.max(1, Number(next) || 1)));
+    const changePage = next => {
+        setDismissedSourceRef(activeSourceRef);
+        setPageNumber(Math.min(pageCount, Math.max(1, Number(next) || 1)));
+    };
     const zoom = delta => {
         setFitMode('custom');
         setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number((renderedScale + delta).toFixed(2)))));
@@ -142,7 +152,7 @@ export function PdfEvidenceViewer({ fileUrl, studentName, coverPages = [], answe
             <button type="button" className="secondary-button" aria-label="전체 화면" onClick={toggleFullscreen}>전체</button>
         </div>
         {isCover && <p className="pdf-cover-label">채점 제외 표지</p>}
-        {activeSourceRef && !highlight && <p className="pdf-source-fallback" role="status">원본 위치 연결 안 됨</p>}
+        {sourceFallback && <p className="pdf-source-fallback" role="status">원본 위치 연결 안 됨</p>}
         <div className="pdf-page-viewport" ref={viewportRef} tabIndex="0" aria-label={`${studentName} PDF 페이지 스크롤 영역`} aria-busy={Boolean(status)}>
             <div className="pdf-page-layer">
                 <canvas ref={canvasRef} aria-label={`${studentName} PDF ${pageNumber}쪽`}/>

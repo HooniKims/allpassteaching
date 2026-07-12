@@ -17,3 +17,11 @@ test('Given unmatched evidence When sources are linked Then no invented location
 
     expect(linked.criteria[0].sourceRefs).toEqual([]);
 });
+
+test('Given matched evidence with collapsed coordinates When sources are linked Then the location is explicitly missing', () => {
+    const grading = { criteria: [{ criterionId: 'criterion-1', evidence: '관찰 근거', score: 10, feedback: '확인' }] };
+
+    const linked = linkGradingSources(grading, [{ id: 'element-1', page: 1, text: '관찰 근거', coordinates: [{ x: .2, y: .2 }, { x: .2, y: .2 }] }]);
+
+    expect(linked.criteria[0].sourceRefs).toEqual([{ elementId: 'element-1', page: 1, text: '관찰 근거', coordinates: [] }]);
+});

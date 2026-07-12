@@ -48,6 +48,10 @@ test.each([
     ['too long', Array.from({ length: 17 }, () => ({ x: 0.1, y: 0.2 }))],
     ['nested mixed', [{ x: 0.1, y: 0.2 }, [{ x: 0.3, y: 0.4 }]]],
     ['non-finite', [{ x: 0.1, y: 0.2 }, { x: Number.NaN, y: 0.4 }]],
+    ['identical', [{ x: 0.2, y: 0.2 }, { x: 0.2, y: 0.2 }]],
+    ['zero width', [{ x: 0.2, y: 0.2 }, { x: 0.2, y: 0.5 }]],
+    ['zero height', [{ x: 0.2, y: 0.2 }, { x: 0.5, y: 0.2 }]],
+    ['collapsed polygon', [{ x: 0.2, y: 0.2 }, { x: 0.4, y: 0.4 }, { x: 0.6, y: 0.6 }]],
 ])('forces teacher review when supplied coordinates are %s', async (_label, coordinates) => {
     process.env.UPSTAGE_API_KEY = 'test-key';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
@@ -61,6 +65,20 @@ test.each([
     expect(result.reviewReasons).toContain('invalid_coordinates');
     expect(result.reviewState).toBe('teacher_review');
     expect(result.autoScoreAllowed).toBe(false);
+});
+
+test('drops an element page beyond the reported document page count and requires teacher review', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+        content: { text: 'Synthetic evidence reference' }, usage: { pages: 1 },
+        elements: [{ id: 1, category: 'paragraph', page: 2, coordinates: [{ x: .1, y: .2 }, { x: .4, y: .5 }], content: { text: 'Synthetic evidence' }, confidence: .99 }],
+    })));
+
+    const result = await parseDocument(new File(['%PDF-test'], 'synthetic.pdf', { type: 'application/pdf' }));
+
+    expect(result.elements).toEqual([]);
+    expect(result.reviewReasons).toContain('invalid_page');
+    expect(result.reviewState).toBe('teacher_review');
 });
 
 test('forces teacher review when a source element has no original location', async () => {

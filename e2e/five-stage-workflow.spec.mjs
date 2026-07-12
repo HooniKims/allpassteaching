@@ -79,7 +79,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
         uploadedVisualModes.push(uploadedFormValue(route.request(), 'visualAnalysis'));
         ocrCalls += 1;
         if (ocrCalls === 2) return route.fulfill({ status: 422, json: { message: '첫 시도에서 문서를 읽지 못했습니다.' } });
-        return route.fulfill({ json: { extractedText: '관찰 결과 뿌리에 가는 털이 있다. 뿌리는 물을 흡수한다. 줄기는 물질을 운반한다.', ocrModel: 'document-parse', pageCount: 1 } });
+        return route.fulfill({ json: { extractedText: '관찰 결과 뿌리에 가는 털이 있다. 뿌리는 물을 흡수한다. 줄기는 물질을 운반한다.', elements: [{ id: 'root-evidence', category: 'paragraph', page: 1, text: '뿌리에 가는 털이 있다', confidence: .98, coordinates: [{ x: .12, y: .2 }, { x: .72, y: .35 }] }], ocrModel: 'document-parse', pageCount: 1 } });
     });
     await page.route('**/api/grade-submission', route => route.fulfill({ json: { grading } }));
     await page.route('**/api/generate-record', route => route.fulfill({ json: { record: { text: recordText } } }));
@@ -113,6 +113,13 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
         await page.getByRole('button', { name: `${studentName} 채점하기` }).click();
         const submission = page.locator('.submission-item').filter({ has: page.getByRole('button', { name: `${studentName} 삭제` }) });
         await expect(submission.getByRole('spinbutton', { name: 'PDF 페이지' })).toHaveValue('2');
+        if (testInfo.project.name === 'mobile') await submission.getByRole('tab', { name: '채점 결과' }).click();
+        await submission.getByRole('button', { name: '뿌리에 가는 털이 있다 원본에서 보기' }).click();
+        await expect(submission.getByTestId('evidence-highlight')).toBeVisible();
+        await submission.getByRole('button', { name: '이전 페이지' }).click();
+        await expect(submission.getByTestId('evidence-highlight')).toHaveCount(0);
+        await submission.getByRole('spinbutton', { name: 'PDF 페이지' }).fill('2');
+        await expect(submission.getByTestId('evidence-highlight')).toHaveCount(0);
         if (testInfo.project.name === 'mobile') await submission.getByRole('tab', { name: '채점 결과' }).click();
         await expect(submission.getByRole('button', { name: `${studentName} 채점 승인` })).toBeDisabled();
         await submission.getByLabel(`${studentName} 원본 답안 확인 완료`).check();

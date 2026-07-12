@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useRef, useState } from 'react';
+import { evidenceCoordinatesUsable } from '@/lib/evidence-coordinates.js';
 import { GradingEditor } from './GradingEditor.jsx';
 import { PdfEvidenceViewer } from './PdfEvidenceViewer.jsx';
 
@@ -11,13 +12,8 @@ const TABS = [
 const VISUAL_CATEGORIES = new Set(['equation', 'chart', 'figure']);
 const CATEGORY_LABELS = { equation: '수식', chart: '도표', figure: '그림' };
 
-function coordinatesUsable(value) {
-    return Array.isArray(value) && value.length >= 2 && value.every(point => Number.isFinite(point?.x) && Number.isFinite(point?.y)
-        && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1);
-}
-
 function elementNeedsReview(element) {
-    return VISUAL_CATEGORIES.has(element?.category) || (Number.isFinite(element?.confidence) && element.confidence < 0.85) || !coordinatesUsable(element?.coordinates);
+    return VISUAL_CATEGORIES.has(element?.category) || (Number.isFinite(element?.confidence) && element.confidence < 0.85) || !evidenceCoordinatesUsable(element?.coordinates);
 }
 
 function EvidenceChecks({ submission, studentName, confirmedIds, onToggle, onSourceSelect }) {
@@ -29,7 +25,7 @@ function EvidenceChecks({ submission, studentName, confirmedIds, onToggle, onSou
         {risky.map(element => <article className="evidence-check" key={element.id}>
             <button type="button" className="evidence-check__source" onClick={() => onSourceSelect({ elementId: element.id, page: element.page, text: element.text, coordinates: element.coordinates })}>
                 <strong>{element.text || `${element.page}쪽 OCR 요소`}</strong>
-                <span>{CATEGORY_LABELS[element.category] && <span className="review-badge">{CATEGORY_LABELS[element.category]}</span>}{Number.isFinite(element.confidence) && element.confidence < 0.85 && <span className="review-badge">낮은 신뢰도</span>}{!coordinatesUsable(element.coordinates) && <span className="review-badge">원본 위치 연결 안 됨</span>}<span className="review-badge review-badge--warning">교사 확인 필요</span></span>
+                <span>{CATEGORY_LABELS[element.category] && <span className="review-badge">{CATEGORY_LABELS[element.category]}</span>}{Number.isFinite(element.confidence) && element.confidence < 0.85 && <span className="review-badge">낮은 신뢰도</span>}{!evidenceCoordinatesUsable(element.coordinates) && <span className="review-badge">원본 위치 연결 안 됨</span>}<span className="review-badge review-badge--warning">교사 확인 필요</span></span>
             </button>
             <label><span className="sr-only">{studentName} {element.id} 근거 확인 완료</span><input type="checkbox" aria-label={`${studentName} ${element.id} 근거 확인 완료`} checked={confirmedIds.includes(element.id)} onChange={() => onToggle(element.id)}/></label>
         </article>)}
@@ -48,6 +44,7 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
     const [activeSourceRef, setActiveSourceRef] = useState(null);
     const tabRefs = useRef({});
     const reviewRef = useRef(null);
+    const documentKey = `${submission.id}:${submission.studentId}:${submission.originalRevision}:${fileUrl}`;
     const requiredIds = useMemo(() => requiredEvidenceCheckIds(submission), [submission]);
     const confirmedIds = submission.confirmedElementIds ?? [];
     const sourceChecksComplete = requiredIds.every(id => confirmedIds.includes(id));
@@ -55,7 +52,7 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
     const originalReviewed = originalAvailable && Boolean(submission.originalReviewedAt) && !stale;
     const approvalAllowed = !stale && validGrading && originalAvailable && originalReviewed && sourceChecksComplete;
     const selectSource = sourceRef => {
-        setActiveSourceRef(sourceRef);
+        setActiveSourceRef({ ...sourceRef, ownerKey: documentKey });
         setActiveTab('original');
         requestAnimationFrame(() => {
             const viewport = reviewRef.current?.querySelector('.pdf-page-viewport');
@@ -84,7 +81,7 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
         </div>
         <section id={`${submission.id}-original-panel`} role="tabpanel" aria-labelledby={`${submission.id}-original-tab`} className={`submission-review__panel submission-review__panel--original${activeTab === 'original' ? ' is-active' : ''}`}>
             {fileUrl
-                ? <PdfEvidenceViewer fileUrl={fileUrl} studentName={studentName} answerPages={submission.answerPages} coverPages={submission.coverPages} activeSourceRef={activeSourceRef}/>
+                ? <PdfEvidenceViewer fileUrl={fileUrl} studentName={studentName} documentKey={documentKey} answerPages={submission.answerPages} coverPages={submission.coverPages} activeSourceRef={activeSourceRef}/>
                 : <div className="pdf-reattach"><p>새로고침으로 원본 파일이 사라졌습니다. OCR·채점 초안은 유지됩니다.</p><a href="#student-pdf-upload-title">원본 PDF 다시 연결하기</a></div>}
         </section>
         <section id={`${submission.id}-ocr-panel`} role="tabpanel" aria-labelledby={`${submission.id}-ocr-tab`} className={`submission-review__panel submission-review__panel--ocr${activeTab === 'ocr' ? ' is-active' : ''}`}>
