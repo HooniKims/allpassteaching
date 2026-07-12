@@ -1,6 +1,9 @@
 import { parseDocument, UpstageDocumentError } from '@/lib/upstage/document-parse';
+import { readBoundedRequestBytes } from '@/lib/api-request-boundary';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_MULTIPART_OVERHEAD = 64 * 1024;
+const MAX_MULTIPART_REQUEST_SIZE = MAX_FILE_SIZE + MAX_MULTIPART_OVERHEAD;
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 function json(body, status = 200) {
@@ -17,9 +20,19 @@ function parseBooleanLike(value) {
 }
 
 export async function POST(request) {
+    const read = await readBoundedRequestBytes(request, MAX_MULTIPART_REQUEST_SIZE);
+    if (!read.ok) {
+        const status = read.reason === 'too_large' ? 413 : 400;
+        const code = read.reason === 'too_large' ? 'request_too_large' : 'invalid_form';
+        const message = read.reason === 'too_large' ? '업로드 요청이 너무 큽니다. PDF는 파일당 10MB 이하만 업로드할 수 있습니다.' : '업로드 형식을 확인해주세요.';
+        return json({ code, message }, status);
+    }
+    const headers = new request.headers.constructor(request.headers);
+    headers.delete('content-length');
+    const bufferedRequest = new request.constructor(request.url, { method: 'POST', headers, body: read.bytes });
     let form;
     try {
-        form = await request.formData();
+        form = await bufferedRequest.formData();
     } catch {
         return json({ code: 'invalid_form', message: '업로드 형식을 확인해주세요.' }, 400);
     }

@@ -13,6 +13,7 @@ import { recordEvidenceBundle } from '@/lib/record-evidence';
 import { hasUnsupportedGrowthInference } from '@/lib/record-schema';
 import { recordContextIncludesSubmission, verifyRecordContext } from '@/lib/record-context-token';
 import { canonicalJson } from '@/lib/source-hash';
+import { parseBoundedJsonRequest, publicValidationIssues, requestBoundaryError } from '@/lib/api-request-boundary';
 
 const noStoreHeaders = { 'Cache-Control': 'no-store' };
 const json = (body, init = {}) => Response.json(body, { ...init, headers: { ...init.headers, ...noStoreHeaders } });
@@ -125,10 +126,14 @@ function parseRecord(content, targetLength, evidence) {
 }
 
 export async function POST(request) {
-    let body;
-    try { body = await request.json(); } catch { return json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 }); }
+    const boundary = await parseBoundedJsonRequest(request);
+    if (!boundary.ok) {
+        const error = requestBoundaryError(boundary.reason);
+        return json(error.body, { status: error.status });
+    }
+    const body = boundary.value;
     const parsed = requestSchema.safeParse(body);
-    if (!parsed.success) return json({ code: 'invalid_request', message: '현재 명단과 승인된 채점 결과를 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
+    if (!parsed.success) return json({ code: 'invalid_request', message: '현재 명단과 승인된 채점 결과를 확인해주세요.', issues: publicValidationIssues(parsed.error.issues) }, { status: 400 });
     const input = parsed.data;
     if (input.recordContext.payload.expiresAt <= Date.now()) return json({ code: 'expired_context', message: '생성 권한 확인 시간이 만료되었습니다. 현재 상태를 다시 확인해주세요.' }, { status: 409 });
     if (!verifyRecordContext(input.recordContext, { lessonPlan: input.lessonPlan, assessment: input.assessment, students: input.roster })
@@ -155,7 +160,7 @@ export async function POST(request) {
             const repaired = await chatContent({ messages: repairRecordMessages(input, checked.value, checked.issues), timeoutMs: 60000 });
             checked = parseRecord(repaired, input.targetLength, evidence);
         }
-        if (!checked.success) return json({ code: 'invalid_generation', message: '세특 초안의 길이와 기록 문체를 복구하지 못했습니다.', issues: checked.issues }, { status: 422 });
+        if (!checked.success) return json({ code: 'invalid_generation', message: '세특 초안의 길이와 기록 문체를 복구하지 못했습니다.', issues: publicValidationIssues(checked.issues) }, { status: 422 });
         return json({ record: checked.data });
     } catch (error) {
         if (error instanceof UpstageError) return json({ code: error.code, message: error.message }, { status: error.status });

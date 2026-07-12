@@ -6,6 +6,7 @@ import { aiGradingOutputSchema, gradingSourceRefSchema, MAX_OCR_TEXT_LENGTH, sto
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { gradingSourceHash } from '@/lib/workflow-lineage';
 import { gradingMessages, repairGradingMessages } from '@/lib/workflow-prompts';
+import { parseBoundedJsonRequest, publicValidationIssues, requestBoundaryError } from '@/lib/api-request-boundary';
 
 const shortText = z.string().trim().min(1).max(300);
 const coordinates = z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).max(16).default([]);
@@ -204,7 +205,7 @@ async function generate(input) {
             const repaired = await chatContent({ messages: repairGradingMessages(input, checked.value, checked.issues), timeoutMs: 60000 });
             checked = parseGrading(repaired, input);
         }
-        if (!checked.success) return json({ code: 'invalid_generation', message: '채점 결과의 수준·근거·원본 연결을 복구하지 못했습니다.', issues: checked.issues }, { status: 422 });
+        if (!checked.success) return json({ code: 'invalid_generation', message: '채점 결과의 수준·근거·원본 연결을 복구하지 못했습니다.', issues: publicValidationIssues(checked.issues) }, { status: 422 });
         return json({ grading: checked.data, gradingRevision: input.gradingRevision + 1 });
     } catch (error) {
         if (error instanceof UpstageError) return json({ code: error.code, message: error.message }, { status: error.status });
@@ -213,23 +214,27 @@ async function generate(input) {
 }
 
 export async function POST(request) {
-    let body;
-    try { body = await request.json(); } catch { return json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 }); }
+    const boundary = await parseBoundedJsonRequest(request);
+    if (!boundary.ok) {
+        const error = requestBoundaryError(boundary.reason);
+        return json(error.body, { status: error.status });
+    }
+    const body = boundary.value;
     if (body?.mode === 'finalize') {
         const parsed = finalizeRequestSchema.safeParse(body);
-        if (!parsed.success) return json({ code: 'invalid_request', message: '확정할 채점과 원본 확인 정보를 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
+        if (!parsed.success) return json({ code: 'invalid_request', message: '확정할 채점과 원본 확인 정보를 확인해주세요.', issues: publicValidationIssues(parsed.error.issues) }, { status: 400 });
         const parsedGrading = storedGradingSchema.safeParse(parsed.data.grading);
-        if (!parsedGrading.success) return json({ code: 'approval_blocked', message: '모든 평가영역의 근거·이유·피드백을 입력해야 승인할 수 있습니다.', issues: parsedGrading.error.issues, grading: parsed.data.grading }, { status: 409 });
+        if (!parsedGrading.success) return json({ code: 'approval_blocked', message: '모든 평가영역의 근거·이유·피드백을 입력해야 승인할 수 있습니다.', issues: publicValidationIssues(parsedGrading.error.issues) }, { status: 409 });
         const input = { ...parsed.data, grading: parsedGrading.data };
-        if (hasDuplicateElementIds(input.elements)) return json({ code: 'approval_blocked', message: 'OCR 요소 id가 중복되어 원본 근거를 확정할 수 없습니다.', grading: input.grading }, { status: 409 });
-        if (!gradingIntegrityAvailable()) return json({ code: 'integrity_unavailable', message: '채점 무결성 설정을 확인해주세요.', grading: input.grading }, { status: 503 });
+        if (hasDuplicateElementIds(input.elements)) return json({ code: 'approval_blocked', message: 'OCR 요소 id가 중복되어 원본 근거를 확정할 수 없습니다.' }, { status: 409 });
+        if (!gradingIntegrityAvailable()) return json({ code: 'integrity_unavailable', message: '채점 무결성 설정을 확인해주세요.' }, { status: 503 });
         const checked = finalizeGrading(input);
-        if (!checked.success) return json({ code: 'approval_blocked', message: '현재 원본·루브릭·근거 확인이 모두 끝나야 승인할 수 있습니다.', issues: checked.issues, grading: input.grading }, { status: 409 });
+        if (!checked.success) return json({ code: 'approval_blocked', message: '현재 원본·루브릭·근거 확인이 모두 끝나야 승인할 수 있습니다.', issues: publicValidationIssues(checked.issues) }, { status: 409 });
         const approvalToken = createGradingApprovalToken(input.assessment, input.extractedText, input.elements, gradingProvenance(input), checked.data, input);
         return json({ grading: { ...checked.data, approvalToken }, gradingRevision: input.gradingRevision });
     }
     const parsed = generateRequestSchema.safeParse(body);
-    if (!parsed.success) return json({ code: 'invalid_request', message: '채점할 학생 내용과 루브릭을 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
+    if (!parsed.success) return json({ code: 'invalid_request', message: '채점할 학생 내용과 루브릭을 확인해주세요.', issues: publicValidationIssues(parsed.error.issues) }, { status: 400 });
     if (hasDuplicateElementIds(parsed.data.elements)) return json({ code: 'invalid_request', message: 'OCR 요소 id가 중복되어 채점할 수 없습니다.' }, { status: 400 });
     if (!gradingIntegrityAvailable()) return json({ code: 'integrity_unavailable', message: '채점 무결성 설정을 확인해주세요.' }, { status: 503 });
     return generate(parsed.data);

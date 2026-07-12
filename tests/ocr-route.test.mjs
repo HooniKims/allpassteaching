@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, expect, test, vi } from 'vitest';
 import { POST } from '@/app/api/ocr/route';
 
@@ -10,7 +11,7 @@ function request(file, visualAnalysis) {
     const form = new FormData();
     if (file) form.set('document', file);
     if (visualAnalysis !== undefined) form.set('visualAnalysis', visualAnalysis);
-    return { formData: async () => form };
+    return new Request('http://localhost/api/ocr', { method: 'POST', body: form });
 }
 
 test('rejects non-PDF and oversized submissions before calling Upstage', async () => {

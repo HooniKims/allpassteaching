@@ -333,7 +333,7 @@ test.each([
 
     expect(response.status).toBe(409);
     expect(finalBody.code).toBe('approval_blocked');
-    expect(finalBody.grading).toEqual(grading);
+    expect(finalBody).not.toHaveProperty('grading');
 });
 
 test('Given an assessment not approved by the teacher When grading is requested Then the model is not called', async () => {
