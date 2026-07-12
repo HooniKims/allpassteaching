@@ -61,6 +61,19 @@ test('version 2 allowlist round-trips every workflow subtree the current app con
     expect(WORKFLOW_VERSION).toBe(2);
 });
 
+test('allowlisted ordinary ASCII and base64-like educational text round-trips exactly', () => {
+    const project = fullWorkflow();
+    project.assessment.task.title = 'ChristopherRobin';
+    project.students[0].name = 'electromagnetism';
+    project.worksheet.document.title = 'PhotosynthesisAB';
+    project.worksheet.teacherKey.answers[0].answer = 'ChristopherRobin';
+    project.records[0].text = 'PhotosynthesisAB';
+
+    saveWorkflow(project);
+
+    expect(loadWorkflow()).toEqual(project);
+});
+
 test('renamed sensitive fields and runtime-like objects are dropped at arbitrary nesting depths', () => {
     const project = fullWorkflow();
     const expected = structuredClone(project);
@@ -84,19 +97,20 @@ test('renamed sensitive fields and runtime-like objects are dropped at arbitrary
     const forbiddenValues = ['thumbnailObjectUrl', 'originalBase64', 'previewAsset', 'rawResponse', 'binaryCache', 'unknownBinary', 'runtimeHandle', 'opaqueBuffer', 'secret worksheet payload', 'secret assessment payload', 'secret grading payload', 'secret record payload'];
 
     for (const forbidden of forbiddenValues) expect(raw).not.toContain(forbidden);
+    expect(raw).not.toContain('JVBERi0xLjQ=');
+    expect(raw).not.toContain('cHJpdmF0ZSBzdWJtaXNzaW9u');
     expect(loadWorkflow()).toEqual(expected);
 
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
     expect(loadWorkflow()).toEqual(expected);
-    for (const forbidden of forbiddenValues) expect(window.sessionStorage.getItem(WORKFLOW_KEY)).not.toContain(forbidden);
+    const cleanedRaw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    for (const forbidden of [...forbiddenValues, 'JVBERi0xLjQ=', 'cHJpdmF0ZSBzdWJtaXNzaW9u']) expect(cleanedRaw).not.toContain(forbidden);
 });
 
-test('binary encodings and object URLs are rejected even when placed under otherwise allowed field names', () => {
+test('object URLs and non-text binary values are rejected under otherwise allowed field names', () => {
     const project = fullWorkflow();
     project.assessment.task.title = 'blob:http://localhost/renamed';
     project.worksheet.teacherKey.answers[0].answer = 'data:application/pdf;base64,JVBERi0xLjQ=';
-    project.records[0].text = 'cHJpdmF0ZSBzdWJtaXNzaW9u';
-    project.students[0].name = 'c3R1ZGVudCBwcml2YXRl';
     project.submissions[0].grading.criteria[0].feedback = new Uint8Array([1, 2, 3]);
 
     saveWorkflow(project);
@@ -104,7 +118,5 @@ test('binary encodings and object URLs are rejected even when placed under other
 
     expect(raw).not.toContain('blob:http://localhost/renamed');
     expect(raw).not.toContain('data:application/pdf;base64');
-    expect(raw).not.toContain('cHJpdmF0ZSBzdWJtaXNzaW9u');
-    expect(raw).not.toContain('c3R1ZGVudCBwcml2YXRl');
     expect(raw).not.toContain('"0":1');
 });
