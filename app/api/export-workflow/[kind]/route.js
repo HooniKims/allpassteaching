@@ -1,14 +1,41 @@
 import { worksheetOutputSchema } from '@/lib/worksheet-schema';
-import { assessmentOutputSchema } from '@/lib/assessment-schema';
-import { buildWorkflowPdf, CoverPageOverflowError } from '@/lib/export/workflow-pdf';
+import { assessmentOutputSchema, assessmentRenderBudgetExceeded } from '@/lib/assessment-schema';
+import { buildWorkflowPdf, CoverPageOverflowError, WorkflowPdfLimitError } from '@/lib/export/workflow-pdf';
 
 const schemas = { worksheet: worksheetOutputSchema, 'worksheet-student': worksheetOutputSchema, 'worksheet-teacher': worksheetOutputSchema, assessment: assessmentOutputSchema, 'assessment-cover': assessmentOutputSchema };
 const MAX_WORKFLOW_EXPORT_REQUEST_BYTES = 500_000;
+const MAX_JSON_ARRAY_ITEMS = 100;
+const MAX_JSON_OBJECT_KEYS = 100;
+const MAX_JSON_NODES = 10_000;
+const MAX_VALIDATION_ISSUES = 20;
+
+function jsonStructureTooLarge(value) {
+    const pending = [value];
+    let visited = 0;
+    while (pending.length) {
+        const item = pending.pop();
+        visited += 1;
+        if (visited > MAX_JSON_NODES) return true;
+        if (Array.isArray(item)) {
+            if (item.length > MAX_JSON_ARRAY_ITEMS) return true;
+            for (const child of item) pending.push(child);
+        } else if (item && typeof item === 'object') {
+            const values = Object.values(item);
+            if (values.length > MAX_JSON_OBJECT_KEYS) return true;
+            for (const child of values) pending.push(child);
+        }
+    }
+    return false;
+}
 
 const requestTooLarge = () => Response.json({
     code: 'request_too_large',
     message: 'PDF로 저장할 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.',
 }, { status: 413 });
+const assessmentTooLong = () => Response.json({
+    code: 'document_too_long',
+    message: '수행평가 PDF 내용이 너무 깁니다. 평가영역 또는 설명을 줄인 뒤 다시 시도해주세요.',
+}, { status: 422 });
 
 export async function POST(request, context) {
     const { kind } = await context.params;
@@ -36,14 +63,21 @@ export async function POST(request, context) {
         }
     } catch { return Response.json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 }); }
     try { body = JSON.parse(body); } catch { return Response.json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 }); }
+    if (jsonStructureTooLarge(body)) return Response.json({ code: 'invalid_document', message: 'PDF로 저장할 문서 구조가 너무 큽니다. 항목 수를 줄여주세요.' }, { status: 400 });
     const parsed = schema.safeParse(body);
-    if (!parsed.success) return Response.json({ code: 'invalid_document', message: 'PDF로 저장할 문서 내용을 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
+    if (!parsed.success) {
+        const onlyRenderBudgetIssue = parsed.error.issues.every(issue => issue.path.length === 0 && issue.message.includes('PDF 전체 글자 수'));
+        const renderBudgetIssue = kind.startsWith('assessment') && onlyRenderBudgetIssue && assessmentRenderBudgetExceeded(body);
+        if (renderBudgetIssue) return assessmentTooLong();
+        return Response.json({ code: 'invalid_document', message: 'PDF로 저장할 문서 내용을 확인해주세요.', issues: parsed.error.issues.slice(0, MAX_VALIDATION_ISSUES) }, { status: 400 });
+    }
     if (kind === 'assessment-cover' && !parsed.data.includeStudentCover) return Response.json({ code: 'cover_disabled', message: '학생당 안내 표지를 사용하지 않는 평가입니다.' }, { status: 409 });
     try {
         const bytes = await buildWorkflowPdf(kind, parsed.data);
         return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="allpass-${kind}.pdf"`, 'Cache-Control': 'no-store' } });
     } catch (error) {
         if (error instanceof CoverPageOverflowError) return Response.json({ code: 'cover_overflow', message: error.message }, { status: 422 });
+        if (error instanceof WorkflowPdfLimitError) return assessmentTooLong();
         throw error;
     }
 }

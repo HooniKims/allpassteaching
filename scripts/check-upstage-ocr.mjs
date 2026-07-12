@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { parseDocument } from '../lib/upstage/document-parse.js';
+import { smokeContractsPassed, summarizeSmokeResult } from '../lib/upstage/smoke-contract.js';
 
 if (!process.env.UPSTAGE_API_KEY?.trim()) {
     console.error('UPSTAGE API 키가 없어 OCR 스모크 테스트를 실행할 수 없습니다.');
@@ -19,29 +20,15 @@ page.drawLine({ start: { x: 70, y: 520 }, end: { x: 130, y: 560 }, thickness: 3,
 page.drawLine({ start: { x: 130, y: 560 }, end: { x: 220, y: 605 }, thickness: 3, color: rgb(0.1, 0.4, 0.8) });
 const pdfBytes = await pdf.save();
 const file = new File([pdfBytes], 'allpass-ocr-smoke.pdf', { type: 'application/pdf' });
-const startedAt = performance.now();
-const result = await parseDocument(file);
-const categoryCounts = Object.fromEntries([...new Set(result.elements.map(element => element.category))]
-    .sort()
-    .map(category => [category, result.elements.filter(element => element.category === category).length]));
-const summary = {
-    status: result.extractedText.includes(sentinel) ? 'passed' : 'sentinel_missing',
-    fixture: 'synthetic_non_student',
-    ocrModel: result.ocrModel,
-    ocrMode: result.ocrMode,
-    elapsedMs: Math.round(performance.now() - startedAt),
-    pageCount: result.pageCount,
-    textLength: result.extractedText.length,
-    elementCount: result.elements.length,
-    categoryCounts,
-    coordinateElementCount: result.elements.filter(element => element.coordinates.length > 0).length,
-    confidenceElementCount: result.elements.filter(element => Number.isFinite(element.confidence)).length,
-    elementsTruncated: result.elementsTruncated,
-    requiresVisualReview: result.requiresVisualReview,
-    reviewState: result.reviewState,
-    enhancedConfigured: Boolean(process.env.UPSTAGE_DOCUMENT_PARSE_ENHANCED_MODEL?.trim()),
-    sentinelMatched: result.extractedText.includes(sentinel),
-};
+const standardStartedAt = performance.now();
+const standard = summarizeSmokeResult(await parseDocument(file), { elapsedMs: Math.round(performance.now() - standardStartedAt), sentinel });
+const enhancedModel = process.env.UPSTAGE_DOCUMENT_PARSE_ENHANCED_MODEL?.trim();
+let enhanced = { status: 'not_configured', fixture: 'synthetic_non_student' };
+if (enhancedModel) {
+    const enhancedStartedAt = performance.now();
+    enhanced = summarizeSmokeResult(await parseDocument(file, { visualAnalysis: true }), { elapsedMs: Math.round(performance.now() - enhancedStartedAt), sentinel });
+}
+const summary = { standard, enhancedConfigured: Boolean(enhancedModel), enhanced };
 
 console.log(JSON.stringify(summary));
-if (!summary.sentinelMatched) process.exitCode = 2;
+if (!smokeContractsPassed({ standard, enhancedConfigured: Boolean(enhancedModel), enhanced })) process.exitCode = 2;

@@ -122,3 +122,111 @@ test('allows exactly 500 KB through the byte gate and returns a safe validation 
     expect(payload.code).toBe('invalid_document');
     expect(JSON.stringify(payload)).not.toContain('AAAAAA');
 });
+
+test('rejects a schema-valid assessment whose aggregate render content exceeds the safe PDF budget', async () => {
+    const assessment = makeAssessment();
+    assessment.includeStudentCover = false;
+    assessment.rubric.criteria = Array.from({ length: 15 }, (_, criterionIndex) => ({
+        ...assessment.rubric.criteria[criterionIndex % assessment.rubric.criteria.length],
+        id: `criterion-${criterionIndex + 1}`,
+        name: `평가영역 ${criterionIndex + 1}`,
+        maxPoints: criterionIndex < 10 ? 7 : 6,
+        kind: 'outcome',
+        description: '장시간 렌더링을 유발하는 반복 설명입니다. '.repeat(65),
+        evidence: '관찰 가능한 근거',
+        levels: assessment.rubric.criteria[0].levels.map((level, levelIndex) => ({
+            ...level,
+            score: (criterionIndex < 10 ? 7 : 6) - levelIndex,
+            description: '수준별 관찰 설명입니다. '.repeat(65),
+        })),
+    }));
+    assessment.backwardDesign.evidenceMap[0].criterionIds = assessment.rubric.criteria.map(criterion => criterion.id);
+    assessment.backwardDesign.evidenceMap[0].taskEvidenceTypes = ['관찰 가능한 근거'];
+    assessment.backwardDesign.evidenceMap[0].evidenceTypes = ['결과 증거'];
+    assessment.backwardDesign.evidenceMap[0].scoreBasis = assessment.rubric.criteria.map(criterion => `${criterion.name} ${criterion.maxPoints}점`).join(', ');
+    assessment.scoring = { includeProcessInScore: false, processWeightPercent: 0, processTargetPoints: 0 };
+    const body = JSON.stringify(assessment);
+    expect(new TextEncoder().encode(body).byteLength).toBeLessThan(MAX_WORKFLOW_EXPORT_REQUEST_BYTES);
+
+    const response = await POST(new Request('http://localhost/api/export-workflow/assessment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    }), { params: Promise.resolve({ kind: 'assessment' }) });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+        code: 'document_too_long',
+        message: '수행평가 PDF 내용이 너무 깁니다. 평가영역 또는 설명을 줄인 뒤 다시 시도해주세요.',
+    });
+});
+
+test('returns a safe 400 for deeply nested or structurally invalid assessment JSON before render budgeting', async () => {
+    const nested = `${'{"x":'.repeat(3_000)}null${'}'.repeat(3_000)}`;
+    const nestedResponse = await POST(new Request('http://localhost/api/export-workflow/assessment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: nested,
+    }), { params: Promise.resolve({ kind: 'assessment' }) });
+    const broadArrayResponse = await POST(request({ task: Array.from({ length: 150_000 }, () => 0) }), { params: Promise.resolve({ kind: 'assessment' }) });
+    const invalidResponse = await POST(request({ padding: 'A'.repeat(60_001) }), { params: Promise.resolve({ kind: 'assessment' }) });
+
+    expect(nestedResponse.status).toBe(400);
+    expect((await nestedResponse.json()).code).toBe('invalid_document');
+    expect(broadArrayResponse.status).toBe(400);
+    expect((await broadArrayResponse.json()).code).toBe('invalid_document');
+    expect(invalidResponse.status).toBe(400);
+    expect((await invalidResponse.json()).code).toBe('invalid_document');
+});
+
+test('rejects adversarial array cardinality before Zod issue amplification and caps ordinary issue details', async () => {
+    const amplified = await POST(request({ rubric: { criteria: Array.from({ length: 100_000 }, () => 0) } }), { params: Promise.resolve({ kind: 'assessment' }) });
+    const amplifiedBody = await amplified.json();
+    const ordinary = await POST(request({}), { params: Promise.resolve({ kind: 'assessment' }) });
+    const ordinaryBody = await ordinary.json();
+
+    expect(amplified.status).toBe(400);
+    expect(amplifiedBody).toEqual({ code: 'invalid_document', message: 'PDF로 저장할 문서 구조가 너무 큽니다. 항목 수를 줄여주세요.' });
+    expect(JSON.stringify(amplifiedBody).length).toBeLessThan(500);
+    expect(ordinary.status).toBe(400);
+    expect(ordinaryBody.issues.length).toBeLessThanOrEqual(20);
+});
+
+test('exports the maximum supported assessment structure when its content stays within the aggregate budget', async () => {
+    const assessment = makeAssessment();
+    assessment.includeStudentCover = false;
+    assessment.rubric.levels = Array.from({ length: 6 }, (_, index) => ({ id: `level-${index + 1}`, label: `${index + 1}수준` }));
+    assessment.rubric.criteria = Array.from({ length: 15 }, (_, index) => ({
+        ...assessment.rubric.criteria[0], id: `criterion-${index + 1}`, name: `평가영역 ${index + 1}`,
+        kind: 'outcome', maxPoints: index < 10 ? 7 : 6, intervalPoints: 1,
+        evidence: '학생 답안에서 확인할 수 있는 구체적 근거',
+        levels: assessment.rubric.levels.map((level, levelIndex) => ({ levelId: level.id, score: Math.max(0, (index < 10 ? 7 : 6) - levelIndex), description: `${level.label} 관찰 설명` })),
+    }));
+    assessment.backwardDesign.evidenceMap[0] = {
+        ...assessment.backwardDesign.evidenceMap[0], criterionIds: assessment.rubric.criteria.map(criterion => criterion.id),
+        taskEvidenceTypes: ['학생 답안에서 확인할 수 있는 구체적 근거'], evidenceTypes: ['결과 증거'],
+        scoreBasis: assessment.rubric.criteria.map(criterion => `${criterion.name} ${criterion.maxPoints}점`).join(', '),
+    };
+    assessment.scoring = { includeProcessInScore: false, processWeightPercent: 0, processTargetPoints: 0 };
+
+    const response = await POST(new Request('http://localhost/api/export-workflow/assessment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment),
+    }), { params: Promise.resolve({ kind: 'assessment' }) });
+
+    expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+});
+
+test('does not count non-rendered alignment notes against the assessment PDF budget', async () => {
+    const assessment = makeAssessment();
+    assessment.includeStudentCover = false;
+    assessment.backwardDesign.alignmentIssues = Array.from({ length: 7 }, (_, index) => ({
+        id: `alignment-${index + 1}`, severity: 'warning', code: 'lesson-activity-gap',
+        message: 'PDF에 렌더하지 않는 내부 정합성 설명입니다. '.repeat(180),
+        repairAction: 'PDF에 렌더하지 않는 내부 수정 제안입니다. '.repeat(180),
+        resolved: true,
+    }));
+
+    const response = await POST(new Request('http://localhost/api/export-workflow/assessment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment),
+    }), { params: Promise.resolve({ kind: 'assessment' }) });
+
+    expect(response.status).toBe(200);
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+});

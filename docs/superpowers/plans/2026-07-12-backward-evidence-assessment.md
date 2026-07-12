@@ -864,7 +864,7 @@ Expected: FAIL because storage version 2 does not know the new project shape.
 
 - [ ] **Step 3: Implement version-3 migration**
 
-Set `WORKFLOW_VERSION = 3`. Migrate old submissions to student IDs only when a unique roster match exists; otherwise keep them detached with `needsStudentLink: true`. Mark fixed-rubric assessments `needsRegeneration: true`. Strip `file`, `packetFile`, `answerFile`, `objectUrl`, canvas state, and abort controllers.
+Set `WORKFLOW_VERSION = 3`. Keep every legacy name-only submission detached with `needsStudentLink: true`; never infer a student ID from a name, even when the name is unique. Mark fixed-rubric assessments `needsRegeneration: true`. Strip `file`, `packetFile`, `answerFile`, `objectUrl`, canvas state, and abort controllers.
 
 - [ ] **Step 4: Update lineage rules**
 
@@ -886,7 +886,9 @@ git commit -m "feat: migrate evidence workflow state"
 **Files:**
 - Modify: `e2e/five-stage-workflow.spec.mjs`
 - Modify: `scripts/capture-workflow-visual-qa.mjs`
-- Create: `scripts/check-upstage-multimodal.mjs`
+- Modify: `scripts/check-upstage-ocr.mjs`
+- Create: `lib/upstage/smoke-contract.js`
+- Create: `tests/ocr-smoke-contract.test.mjs`
 - Modify: `docs/upstage-ocr-model-evaluation.md`
 - Modify: `docs/change-log/2026/07/2026-07-12.md`
 - Modify: `DESIGN.md`
@@ -925,16 +927,15 @@ Expected: desktop and mobile Playwright projects pass; no console errors, horizo
 
 - [ ] **Step 5: Run real Upstage smoke comparisons**
 
-`scripts/check-upstage-multimodal.mjs` must print only model/mode, pages, categories, sentinel matches, equation-critical-symbol match, elapsed time, and review-required state. It must not print keys, student names, PDF bytes, or raw OCR.
+`scripts/check-upstage-ocr.mjs` must print only model/mode, pages, categories, sentinel matches, equation-critical-symbol match, elapsed time, and review-required state. It must not print keys, student names, PDF bytes, or raw OCR. Standard always runs. Enhanced runs only when `UPSTAGE_DOCUMENT_PARSE_ENHANCED_MODEL` is configured and must fail the probe if the response falls back to Standard.
 
 Run:
 
 ```bash
 npm run check:upstage-ocr
-node --env-file=.env scripts/check-upstage-multimodal.mjs
 ```
 
-Expected: text sentinel passes; chart/diagram Enhanced output is non-empty; equation fixture remains `reviewRequired=true` unless every critical symbol matches.
+Expected: Standard sentinel and mode contract pass; configured Enhanced must return `enhanced_used`/`enhanced` rather than a Standard fallback; equation fixture remains `teacher_review` unless every critical symbol and the review contract permit otherwise. An unconfigured Enhanced model is reported as unavailable, never simulated.
 
 - [ ] **Step 6: Inspect visual evidence**
 

@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { readFile } from 'node:fs/promises';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { makeGeneratedPlan } from '../tests/fixtures/lesson-plan.mjs';
 import { makeAssessment, makeWorksheet } from '../tests/fixtures/workflow.mjs';
 import { gradingSourceHash } from '../lib/workflow-lineage.js';
@@ -29,7 +33,7 @@ function grading(input) {
     };
 }
 const recordText = '관찰한 식물 기관의 특징을 구체적으로 기록하고 뿌리의 가는 털과 물 흡수 기능을 근거로 연결하여 설명함. 관찰 사실에서 결론을 이끌어내는 교과 탐구 과정이 드러났으며 다른 기관에도 같은 설명 방식을 적용하려는 학습 방향을 보임.';
-const candidateSuffix = { 'student-a': ' 문장을 보완함.', 'student-b': ' 근거를 보완함.' };
+const candidateSuffix = { '김학생': ' 문장을 보완함.', '이학생': ' 근거를 보완함.' };
 const studentRoster = [
     { id: 'student-a', grade: '2', className: '3', number: 1, name: '김학생' },
     { id: 'student-b', grade: '2', className: '3', number: 2, name: '이학생' },
@@ -43,6 +47,61 @@ async function combinedSubmissionPdf() {
     const document = await PDFDocument.create();
     for (let index = 0; index < 4; index += 1) document.addPage([300, 400]);
     return Buffer.from(await document.save());
+}
+
+async function rosterWorkbook() {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('학생 명단');
+    sheet.addRow(['학년', '반', '번호', '이름']);
+    sheet.addRow(['2', '3', 1, '김학생']);
+    sheet.addRow(['2', '3', 2, '이학생']);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+async function downloadBytes(page, action) {
+    const downloadPromise = page.waitForEvent('download');
+    await action();
+    const download = await downloadPromise;
+    return { bytes: await readFile(await download.path()), filename: download.suggestedFilename() };
+}
+
+async function expectPdfDownload(page, action, expectedText) {
+    const { bytes } = await downloadBytes(page, action);
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+    const document = await PDFDocument.load(bytes);
+    expect(document.getPageCount()).toBeGreaterThan(0);
+    expect(bytes.length).toBeGreaterThan(1_000);
+    const parsed = await getDocument({ data: Uint8Array.from(bytes), disableWorker: true }).promise;
+    const pageTexts = [];
+    for (let pageNumber = 1; pageNumber <= parsed.numPages; pageNumber += 1) {
+        const content = await (await parsed.getPage(pageNumber)).getTextContent();
+        pageTexts.push(content.items.map(item => item.str).join(' '));
+    }
+    await parsed.destroy();
+    expect(pageTexts.join('\n')).toContain(expectedText);
+    return document.getPageCount();
+}
+
+async function expectLessonExports(page) {
+    for (const format of ['hwpx', 'docx', 'pdf']) {
+        await page.getByLabel('내보내기 형식').selectOption(format);
+        const { bytes, filename } = await downloadBytes(page, () => page.getByRole('button', { name: '파일로 저장' }).click());
+        expect(filename.endsWith(`.${format}`)).toBe(true);
+        if (format === 'pdf') {
+            expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(0);
+            const parsed = await getDocument({ data: Uint8Array.from(bytes), disableWorker: true }).promise;
+            const content = await (await parsed.getPage(1)).getTextContent();
+            expect(content.items.map(item => item.str).join(' ')).toContain('교수·학습 과정안');
+            await parsed.destroy();
+            continue;
+        }
+        const zip = await JSZip.loadAsync(bytes);
+        const entry = format === 'hwpx' ? 'Contents/section0.xml' : 'word/document.xml';
+        const xml = await zip.file(entry).async('string');
+        expect(xml).toContain(format === 'hwpx' ? '<hs:sec' : '<w:document');
+        expect(xml).toContain(format === 'hwpx' ? '<hp:tbl' : '<w:tbl');
+        expect(xml.replace(/<[^>]*>/g, '')).toContain('식물');
+    }
 }
 
 function uploadedPdf(request) {
@@ -84,6 +143,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다', async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
     let ocrCalls = 0;
     const recordCalls = new Map();
     const consoleErrors = [];
@@ -111,18 +171,21 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.route('**/api/authorize-record-generation', route => route.fulfill({ json: { context: { payload: { version: 1 }, token: 'a'.repeat(64) } } }));
     await page.route('**/api/generate-record', route => {
         const body = route.request().postDataJSON();
-        const studentId = body.student.id;
-        const call = (recordCalls.get(studentId) ?? 0) + 1;
-        recordCalls.set(studentId, call);
-        if (studentId === 'student-b' && call === 2) return route.fulfill({ status: 503, json: { message: '이학생 새 초안 생성 실패' } });
-        const suffix = call === 1 ? '' : candidateSuffix[studentId];
+        const studentName = body.student.name;
+        const call = (recordCalls.get(studentName) ?? 0) + 1;
+        recordCalls.set(studentName, call);
+        if (studentName === '이학생' && call === 2) return route.fulfill({ status: 503, json: { message: '이학생 새 초안 생성 실패' } });
+        const suffix = call === 1 ? '' : candidateSuffix[studentName];
         return route.fulfill({ json: { record: { text: `${recordText}${suffix}`, evidenceCriterionIds: ['criterion-1'], claims: [{ text: `${recordText}${suffix}`, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털이 있다' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'root-evidence', page: 1 }] }] } } });
     });
 
     await page.goto('/');
+    await expectLessonExports(page);
     await page.getByRole('tab', { name: /학습지/ }).click();
     await page.getByRole('button', { name: '학습지 생성하기' }).click();
     await expect(page.getByLabel('학습지 제목')).toHaveValue('식물의 구조와 기능 탐구 학습지');
+    await expectPdfDownload(page, () => page.getByRole('button', { name: '학생용 PDF' }).click(), '식물의 구조와 기능 탐구 학습지');
+    await expectPdfDownload(page, () => page.getByRole('button', { name: '교사용 PDF' }).click(), '교사용 예시 답안');
 
     await page.getByRole('tab', { name: /수행평가/ }).click();
     await page.getByLabel('이 평가를 마친 학생이 무엇을 이해하고, 스스로 해낼 수 있길 바라나요?').fill('식물 기관의 구조와 기능을 관찰 근거로 설명한다.');
@@ -130,8 +193,24 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.getByRole('button', { name: '수행평가 생성하기' }).click();
     await expect(page.getByLabel('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
     await page.getByRole('button', { name: '수행평가·루브릭 확인 완료' }).click();
+    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '표지만 PDF 저장' }).click(), makeVisualAssessment().cover.title)).toBe(1);
+    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '수행평가 전체 PDF 저장' }).click(), makeVisualAssessment().task.title)).toBeGreaterThan(1);
 
     await page.getByRole('tab', { name: /OCR·채점/ }).click();
+    const template = await downloadBytes(page, () => page.getByRole('button', { name: 'Excel 입력 양식 받기' }).click());
+    const templateWorkbook = new ExcelJS.Workbook();
+    await templateWorkbook.xlsx.load(template.bytes);
+    expect(templateWorkbook.worksheets[0].getRow(1).values.slice(1)).toEqual(['학년', '반', '번호', '이름']);
+    const rosterBytes = await rosterWorkbook();
+    const rosterCheck = new ExcelJS.Workbook();
+    await rosterCheck.xlsx.load(rosterBytes);
+    expect(rosterCheck.worksheets[0].getSheetValues().slice(1)).toEqual([
+        [undefined, '학년', '반', '번호', '이름'],
+        [undefined, '2', '3', 1, '김학생'],
+        [undefined, '2', '3', 2, '이학생'],
+    ]);
+    await page.getByLabel('학생 명단 Excel 업로드').setInputFiles({ name: '학생명단.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: rosterBytes });
+    await expect(page.getByText('2명을 불러왔습니다. Excel 행 순서를 그대로 사용합니다.')).toBeVisible();
     await page.getByRole('radio', { name: '명단 순서 합본 PDF' }).click();
     await page.getByRole('checkbox', { name: '각 학생 묶음 첫 페이지가 수행평가 안내 표지' }).click();
     await page.getByLabel('명단 순서 합본 PDF 파일').setInputFiles({ name: '2반-수행평가.pdf', mimeType: 'application/pdf', buffer: await combinedSubmissionPdf() });
@@ -181,9 +260,9 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await expect(page.getByText('이학생 새 초안 생성 실패')).toBeVisible();
     await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(recordText);
     await expect(page.getByRole('textbox', { name: '이학생 세특 초안' })).toHaveValue(recordText);
-    await expect(page.getByText(`${recordText}${candidateSuffix['student-a']}`)).toBeVisible();
+    await expect(page.getByText(`${recordText}${candidateSuffix['김학생']}`)).toBeVisible();
     await page.getByRole('button', { name: '실패 학생만 다시 시도' }).click();
-    await expect(page.getByText(`${recordText}${candidateSuffix['student-b']}`)).toBeVisible();
+    await expect(page.getByText(`${recordText}${candidateSuffix['이학생']}`)).toBeVisible();
     for (const width of [375, 768, 1280]) {
         await page.setViewportSize({ width, height: 900 });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
@@ -194,7 +273,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     }
     await page.getByRole('button', { name: '김학생 새 초안 적용' }).click();
     await page.getByRole('button', { name: '이학생 기존 문장 유지' }).click();
-    await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(`${recordText}${candidateSuffix['student-a']}`);
+    await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(`${recordText}${candidateSuffix['김학생']}`);
     await expect(page.getByRole('textbox', { name: '이학생 세특 초안' })).toHaveValue(recordText);
     await page.getByRole('textbox', { name: '김학생 세특 초안' }).fill(`${recordText} 교사 보완`);
     await expect(page.getByRole('textbox', { name: '김학생 세특 초안' })).toHaveValue(`${recordText} 교사 보완`);

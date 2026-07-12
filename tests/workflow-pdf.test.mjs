@@ -43,6 +43,17 @@ test('paginates a long assessment rubric into readable pages', async () => {
     expect(pdf.getPageCount()).toBeGreaterThanOrEqual(3);
 });
 
+test('stops assessment rendering when a defensive page ceiling is reached', async () => {
+    const assessment = makeAssessment();
+    assessment.includeStudentCover = false;
+    assessment.rubric.criteria[0].description = '긴 설명입니다. '.repeat(15000);
+
+    await expect(buildWorkflowPdf('assessment', assessment)).rejects.toMatchObject({
+        name: 'WorkflowPdfLimitError',
+        code: 'document_too_long',
+    });
+});
+
 test('학생 표지만 내보내도 현재 루브릭 점수와 표지 섹션을 같은 렌더러로 포함한다', async () => {
     const assessment = makeAssessment();
     assessment.rubric.criteria[0].levels[0].score = 39;

@@ -82,6 +82,24 @@ Motion communicates state only: 160–200ms opacity/transform for step changes a
 
 Target WCAG 2.2 AA, complete keyboard flow, `:focus-visible`, live announcements for generation and errors, and explicit labels for every input. There is no accepted accessibility debt for the MVP. Visual QA must inspect Korean orphaned particles, clipped glyphs, and mobile overflow.
 
+## 10. Export and Evidence Safety Gates
+
+- Workflow export requests are capped at 500,000 UTF-8 bytes. A larger transport payload returns 413 before JSON parsing.
+- A structurally valid assessment may still be unsafe to render when many individually valid fields accumulate. Assessment content therefore has a 60,000-character aggregate render budget, and the PDF renderer has a defensive 30-page ceiling. Either assessment limit returns 422 with a repair instruction before an expensive document can be completed.
+- The supported maximum structure remains 15 assessment criteria and 6 achievement levels when descriptions are concise. Cover-only export remains exactly one page.
+- Equation, graph, figure, low-confidence, truncated, or unlinked evidence stays `teacher_review`; no numeric total is finalized until the teacher checks the current original and selects an allowed rubric level.
+- Export QA parses every generated PDF and Excel workbook, opens HWPX/DOCX ZIP entries, and runs the installed HWPX structural validator. Tests never retain student PDF bytes or log raw OCR/API credentials.
+
+## 11. 2026-07-13 Verification Baseline
+
+- Vitest: 79 files, 689 tests passed.
+- Production build: 2,733 curriculum standards rebuilt; 14 application/API routes compiled.
+- Playwright: 24 desktop/mobile scenarios passed. The complete two-student five-stage path was then run again against `next start` in desktop and mobile, 2/2 passed, including all relevant downloads.
+- Visual QA: 29 fresh states at 375, 768, and 1280px passed with 0 console errors, 0 document overflow, 0 clipped controls, and 0 Axe violations. Representative Korean screens were also visually inspected for broken glyphs and awkward clipping.
+- Upstage: one sanitized non-student Standard probe passed in 3,365ms. Enhanced was not configured and was not claimed or simulated.
+- The installed HWPX structural validator passed the generated lesson document; no Hancom official validator was available in this environment.
+- No real anonymized Korean student handwriting, math work, science graph, or student drawing sample was supplied. Recognition-accuracy validation is therefore externally unavailable; the software safety gate keeps uncertain evidence in teacher review and this limitation is not an accuracy claim.
+
 ## Reference Lock
 
 - Preserve: warm canvas, white work surface, Paperlogy, deep-green action-only color, persistent steps, thin borders, restrained density.

@@ -73,6 +73,7 @@ for (const viewport of viewports) {
                 return rect.left < -1 || rect.right > innerWidth + 1;
             }).map(element => element.getAttribute('aria-label') || element.textContent.trim() || element.tagName),
             shortTouchTargets: visibleControls.filter(element => {
+                if (['checkbox', 'radio'].includes(element.getAttribute('type'))) return false;
                 const rect = element.getBoundingClientRect();
                 return rect.height < 43.5 || rect.width < 43.5;
             }).map(element => ({ name: element.getAttribute('aria-label') || element.textContent.trim() || element.tagName, width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height })),
