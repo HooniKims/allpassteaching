@@ -1,8 +1,17 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { POST } from '@/app/api/ocr/route';
 
-afterEach(() => { vi.restoreAllMocks(); delete process.env.UPSTAGE_API_KEY; });
-function request(file) { const form = new FormData(); if (file) form.set('document', file); return { formData: async () => form }; }
+afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.UPSTAGE_API_KEY;
+    delete process.env.UPSTAGE_DOCUMENT_PARSE_ENHANCED_MODEL;
+});
+function request(file, visualAnalysis) {
+    const form = new FormData();
+    if (file) form.set('document', file);
+    if (visualAnalysis !== undefined) form.set('visualAnalysis', visualAnalysis);
+    return { formData: async () => form };
+}
 
 test('rejects non-PDF and oversized submissions before calling Upstage', async () => {
     expect((await POST(request(new File(['text'], '학생.txt', { type: 'text/plain' })))).status).toBe(415);
@@ -24,6 +33,54 @@ test('returns only normalized OCR fields', async () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ extractedText: '관찰한 뿌리에는 가는 털이 있었다.', ocrModel: 'document-parse', pageCount: 1 });
+    expect(body).toMatchObject({
+        extractedText: '관찰한 뿌리에는 가는 털이 있었다.', elements: [], elementsTruncated: false,
+        ocrModel: 'document-parse', ocrMode: 'standard', pageCount: 1,
+        requiresVisualReview: false, reviewState: 'ready_for_rubric_review', autoScoreAllowed: true,
+    });
     expect(body).not.toHaveProperty('secret');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+});
+
+test('accepts boolean-like visual analysis and safely gates missing Enhanced capability', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ content: { text: '표준 참고' }, usage: { pages: 1 }, elements: [] })));
+
+    const response = await POST(request(new File(['%PDF-test'], '합성.pdf', { type: 'application/pdf' }), 'on'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ visualAnalysisStatus: 'enhanced_unavailable', reviewState: 'teacher_review', autoScoreAllowed: false });
+    expect(fetch.mock.calls[0][1].body.get('mode')).toBe('standard');
+});
+
+test('rejects invalid visual analysis flags without calling Upstage', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const response = await POST(request(new File(['%PDF-test'], '합성.pdf', { type: 'application/pdf' }), 'sometimes'));
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+test('never logs or returns API keys, file names, raw response bodies, or upstream messages', async () => {
+    process.env.UPSTAGE_API_KEY = 'private-api-key';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+        error: { code: 'invalid_document', message: '김학생.pdf private-api-key raw-body' },
+        raw: '김학생.pdf private-api-key raw-body',
+    }, { status: 400 })));
+
+    const response = await POST(request(new File(['%PDF-test'], '김학생.pdf', { type: 'application/pdf' })));
+    const body = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(body).not.toMatch(/김학생|private-api-key|raw-body/);
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
 });
