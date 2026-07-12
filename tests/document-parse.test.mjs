@@ -40,6 +40,61 @@ test('drops invalid pages and coordinates instead of returning non-finite or unb
     expect(JSON.stringify(elements)).not.toMatch(/Infinity|NaN|-0\.1|1\.1/);
 });
 
+test.each([
+    ['object', { x: 0.1, y: 0.2 }],
+    ['string', '0.1,0.2'],
+    ['null', null],
+    ['too short', [{ x: 0.1, y: 0.2 }]],
+    ['too long', Array.from({ length: 17 }, () => ({ x: 0.1, y: 0.2 }))],
+    ['nested mixed', [{ x: 0.1, y: 0.2 }, [{ x: 0.3, y: 0.4 }]]],
+    ['non-finite', [{ x: 0.1, y: 0.2 }, { x: Number.NaN, y: 0.4 }]],
+])('forces teacher review when supplied coordinates are %s', async (_label, coordinates) => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+        content: { text: 'Synthetic evidence reference' }, usage: { pages: 1 },
+        elements: [{ id: 1, category: 'paragraph', page: 1, coordinates, content: { text: 'Synthetic evidence' }, confidence: 0.99 }],
+    })));
+
+    const result = await parseDocument(new File(['%PDF-test'], 'synthetic.pdf', { type: 'application/pdf' }));
+
+    expect(result.elements[0].coordinates).toEqual([]);
+    expect(result.reviewReasons).toContain('invalid_coordinates');
+    expect(result.reviewState).toBe('teacher_review');
+    expect(result.autoScoreAllowed).toBe(false);
+});
+
+test('forces teacher review when a source element has no original location', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+        content: { text: 'Synthetic evidence reference' }, usage: { pages: 1 },
+        elements: [{ id: 1, category: 'paragraph', page: 1, content: { text: 'Synthetic evidence' }, confidence: 0.99 }],
+    })));
+
+    const result = await parseDocument(new File(['%PDF-test'], 'synthetic.pdf', { type: 'application/pdf' }));
+
+    expect(result.elements[0].coordinates).toEqual([]);
+    expect(result.reviewReasons).toContain('missing_coordinates');
+    expect(result.reviewState).toBe('teacher_review');
+    expect(result.autoScoreAllowed).toBe(false);
+});
+
+test('keeps a valid two-point source location available for rubric evidence', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const coordinates = [{ x: 0.1, y: 0.2 }, { x: 0.4, y: 0.5 }];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+        content: { text: 'Synthetic evidence reference' }, usage: { pages: 1 },
+        elements: [{ id: 1, category: 'paragraph', page: 1, coordinates, content: { text: 'Synthetic evidence' }, confidence: 0.99 }],
+    })));
+
+    const result = await parseDocument(new File(['%PDF-test'], 'synthetic.pdf', { type: 'application/pdf' }));
+
+    expect(result.elements[0].coordinates).toEqual(coordinates);
+    expect(result.reviewReasons).not.toContain('invalid_coordinates');
+    expect(result.reviewReasons).not.toContain('missing_coordinates');
+    expect(result.reviewState).toBe('ready_for_rubric_review');
+    expect(result.autoScoreAllowed).toBe(true);
+});
+
 test('caps element count and per-element text at the documented boundaries', () => {
     const elements = normalizeDocumentElements({ elements: Array.from({ length: 2001 }, (_, index) => ({
         id: index,
