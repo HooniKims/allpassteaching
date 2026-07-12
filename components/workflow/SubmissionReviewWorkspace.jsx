@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { evidenceCoordinatesUsable } from '@/lib/evidence-coordinates.js';
 import { GLOBAL_GRADING_RISKS, gradingEvidenceRiskIds, ocrElementNeedsTeacherReview } from '@/lib/grading-evidence.js';
+import { gradingRevisionOf } from '@/lib/grading-generation.js';
 import { gradingCanBeFinalized } from '@/lib/workflow-lineage.js';
 import { GradingEditor } from './GradingEditor.jsx';
 import { PdfEvidenceViewer } from './PdfEvidenceViewer.jsx';
@@ -18,27 +19,6 @@ const GLOBAL_RISK_LABELS = {
     [GLOBAL_GRADING_RISKS.visualAnalysisUnavailable]: '시각 분석 확인 필요',
     [GLOBAL_GRADING_RISKS.visualReviewRequired]: '시각 자료 원본 확인',
 };
-
-function approvalFingerprint(assessment, submission) {
-    return JSON.stringify({
-        assessment,
-        id: submission.id,
-        studentId: submission.studentId,
-        studentName: submission.studentName,
-        extractedText: submission.extractedText,
-        elements: submission.elements,
-        elementsTruncated: submission.elementsTruncated,
-        visualAnalysisStatus: submission.visualAnalysisStatus,
-        autoScoreAllowed: submission.autoScoreAllowed,
-        requiresVisualReview: submission.requiresVisualReview,
-        originalAttached: submission.originalAttached,
-        grading: submission.grading,
-        originalReviewedAt: submission.originalReviewedAt,
-        reviewedOriginalRevision: submission.reviewedOriginalRevision,
-        originalRevision: submission.originalRevision,
-        confirmedElementIds: submission.confirmedElementIds,
-    });
-}
 
 function elementNeedsReview(element) {
     return ocrElementNeedsTeacherReview(element);
@@ -66,7 +46,7 @@ export function requiredEvidenceCheckIds(submission) {
     return gradingEvidenceRiskIds(submission, submission.elements ?? []);
 }
 
-export function SubmissionReviewWorkspace({ assessment, submission, studentName, fileUrl, stale, validGrading, onFinalize, onPatch }) {
+export function SubmissionReviewWorkspace({ assessment, submission, studentName, fileUrl, stale, validGrading, onFinalize, onPatch, onApplyApproval = onPatch }) {
     const [activeTab, setActiveTab] = useState('original');
     const [activeSourceRef, setActiveSourceRef] = useState(null);
     const [approvalError, setApprovalError] = useState('');
@@ -74,13 +54,14 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
     const tabRefs = useRef({});
     const reviewRef = useRef(null);
     const submissionRef = useRef(submission);
-    const assessmentRef = useRef(assessment);
     const mountedRef = useRef(true);
+    const approvalEpochRef = useRef(0);
+    const assessmentEpochRef = useRef(0);
     submissionRef.current = submission;
-    assessmentRef.current = assessment;
+    useLayoutEffect(() => { assessmentEpochRef.current += 1; }, [assessment]);
     useEffect(() => {
         mountedRef.current = true;
-        return () => { mountedRef.current = false; };
+        return () => { mountedRef.current = false; approvalEpochRef.current += 1; };
     }, []);
     const documentKey = `${submission.id}:${submission.studentId}:${submission.originalRevision}:${fileUrl}`;
     const requiredIds = useMemo(() => requiredEvidenceCheckIds(submission), [submission]);
@@ -112,15 +93,19 @@ export function SubmissionReviewWorkspace({ assessment, submission, studentName,
             return;
         }
         setFinalizing(true);
-        const requestFingerprint = approvalFingerprint(assessment, submission);
+        const requestRevision = gradingRevisionOf(submission);
+        const requestEpoch = approvalEpochRef.current + 1;
+        approvalEpochRef.current = requestEpoch;
+        const assessmentEpoch = assessmentEpochRef.current;
         try {
-            const grading = await onFinalize(submission);
+            const result = await onFinalize(submission);
             if (!mountedRef.current) return;
-            if (requestFingerprint !== approvalFingerprint(assessmentRef.current, submissionRef.current)) {
+            if (approvalEpochRef.current !== requestEpoch || assessmentEpochRef.current !== assessmentEpoch
+                || gradingRevisionOf(submissionRef.current) !== requestRevision || result.gradingRevision !== requestRevision) {
                 setApprovalError('채점 내용이 변경되어 승인 결과를 적용하지 않았습니다. 현재 내용을 다시 확인해주세요.');
                 return;
             }
-            onPatch({ grading, approved: true, status: 'approved', approvalRevoked: false });
+            onApplyApproval({ grading: result.grading, approved: true, status: 'approved', approvalRevoked: false });
         } catch (error) {
             if (mountedRef.current) setApprovalError(error instanceof Error ? error.message : '채점 승인에 실패했습니다.');
         } finally {

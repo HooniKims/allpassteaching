@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
 import { createEmptyWorkflow, loadWorkflow, saveWorkflow } from '@/lib/workflow-store';
 import { workflowProcessStatuses } from '@/lib/workflow-lineage';
+import { reviseSubmission } from '@/lib/grading-generation.js';
 import { removeStudentFromProject, replaceProjectRoster } from '@/lib/student-roster.js';
 import { ProcessTabs, teachingProcesses } from './ProcessTabs.jsx';
 import { WorkflowPrerequisite } from './WorkflowPrerequisite.jsx';
@@ -32,8 +33,7 @@ function StagePlaceholder({ process }) {
 function detachRestoredSubmissionFiles(project) {
     return {
         ...project,
-        submissions: project.submissions.map(submission => ({
-            ...submission,
+        submissions: project.submissions.map(submission => reviseSubmission(submission, {
             status: submission.grading ? 'graded' : submission.extractedText ? 'extracted' : 'pending',
             originalAttached: false,
             originalReviewedAt: null,

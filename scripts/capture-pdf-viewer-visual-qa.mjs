@@ -121,8 +121,8 @@ for (const viewport of viewports) {
     });
     await page.route('**/api/grade-submission', route => {
         const body = route.request().postDataJSON();
-        if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85 } } });
-        return route.fulfill({ json: { grading: grading(body) } });
+        if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: body.gradingRevision } });
+        return route.fulfill({ json: { grading: grading(body), gradingRevision: body.gradingRevision + 1 } });
     });
     await page.goto(baseURL, { waitUntil: 'networkidle' });
     const coverCheckbox = page.getByRole('checkbox', { name: '각 개별 PDF의 첫 페이지가 이 학생의 수행평가 안내 표지' });

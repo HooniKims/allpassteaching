@@ -16,11 +16,11 @@ const text = '관찰한 식물 기관의 특징을 구체적인 문장으로 기
 const lessonPlan = makeGeneratedPlan();
 const assessment = { ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: true };
 const recordElements = ['뿌리에 가는 털', '물을 흡수한다', '관찰 결과'].map((value, index) => ({ id: `e${index + 1}`, page: 1, category: 'text', text: value, confidence: .9, coordinates: [{ x: .1, y: .1 + index * .2 }, { x: .8, y: .2 + index * .2 }] }));
-const submissionBase = { id: 's1', studentId: 'student-1', studentName: '김학생', originalRevision: 2, elements: recordElements, elementsTruncated: false, visualAnalysisStatus: 'enhanced_used', autoScoreAllowed: true, requiresVisualReview: false, originalAttached: true, originalReviewedAt: '2026-07-12T12:00:00.000Z', reviewedOriginalRevision: 2, confirmedElementIds: [], approved: true, extractedText: '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.', grading: { criteria: [
+const submissionBase = { id: 's1', studentId: 'student-1', studentName: '김학생', originalRevision: 2, gradingRevision: 5, elements: recordElements, elementsTruncated: false, visualAnalysisStatus: 'enhanced_used', autoScoreAllowed: true, requiresVisualReview: false, originalAttached: true, originalReviewedAt: '2026-07-12T12:00:00.000Z', reviewedOriginalRevision: 2, confirmedElementIds: [], approved: true, extractedText: '관찰 결과 뿌리에 가는 털이 있고 물을 흡수한다.', grading: { criteria: [
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거가 구체적입니다.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(recordElements[0])], teacherConfirmed: true },
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '물을 흡수한다', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '구조와 기능을 연결했습니다.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(recordElements[1])], teacherConfirmed: true },
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 과정의 근거를 확인했습니다.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(recordElements[2])], teacherConfirmed: true },
-], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.', reviewOrigins: [], originToken: '' } };
+], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.', reviewOrigins: [], originRevision: 5, originToken: '' } };
 submissionBase.grading.reviewOrigins = submissionBase.grading.criteria.map(canonicalGradingOrigin);
 submissionBase.grading.originToken = createGradingOriginToken(assessment, submissionBase.extractedText, recordElements, canonicalGradingProvenance(submissionBase), submissionBase.grading.reviewOrigins);
 const currentGradingHash = gradingSourceHash(assessment, submissionBase.extractedText, recordElements, submissionBase.grading.criteria, submissionBase);
@@ -49,6 +49,16 @@ test('rejects a fabricated approval token before generating a student record', a
     const forged = { ...submission, grading: { ...submission.grading, approvalToken: '0'.repeat(64) } };
 
     const response = await POST(request({ lessonPlan, assessment, submission: forged, targetLength: 500 }));
+
+    expect(response.status).toBe(409);
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+test('rejects replaying a finalized token after the grading generation changes', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const replayed = { ...submission, gradingRevision: submission.gradingRevision + 1 };
+
+    const response = await POST(request({ lessonPlan, assessment, submission: replayed, targetLength: 500 }));
 
     expect(response.status).toBe(409);
     expect(fetch).not.toHaveBeenCalled();

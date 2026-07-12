@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { generationDraft, makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 import { createGenerationSnapshot } from '@/lib/lesson-input';
-import { gradingCanBeFinalized, gradingContentIsValid, gradingIsCurrent, gradingSourceHash, recordSourceHash, workflowProcessStatuses } from '@/lib/workflow-lineage';
+import { gradingCanBeFinalized, gradingContentIsValid, gradingIsCurrent, gradingSourceHash, recordSourceHash, submissionIsApprovedFor, workflowProcessStatuses } from '@/lib/workflow-lineage';
 import { sourceHash } from '@/lib/source-hash';
 import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
 
@@ -15,7 +15,7 @@ const grading = { criteria: [
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '관찰 근거가 구체적입니다.', confidence: .92, sourceRefs: [canonicalGradingSourceRef(baseElements[0])], teacherConfirmed: true },
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '물을 흡수한다', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '다른 기관도 연결해보세요.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(baseElements[1])], teacherConfirmed: true },
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 이유를 더 설명해보세요.', confidence: .88, sourceRefs: [canonicalGradingSourceRef(baseElements[2])], teacherConfirmed: true },
-], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.', reviewOrigins: [{ criterionId: 'criterion-1', reviewRequired: false }, { criterionId: 'criterion-2', reviewRequired: false }, { criterionId: 'criterion-3', reviewRequired: false }], originToken: 'a'.repeat(64) };
+], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명해보세요.', reviewOrigins: [{ criterionId: 'criterion-1', reviewRequired: false }, { criterionId: 'criterion-2', reviewRequired: false }, { criterionId: 'criterion-3', reviewRequired: false }], originToken: 'a'.repeat(64), approvalToken: 'b'.repeat(64) };
 grading.reviewOrigins = grading.criteria.map(canonicalGradingOrigin);
 
 function projectFixture() {
@@ -75,6 +75,14 @@ test('marks grading and records incomplete when the approved rubric changes', ()
     const project = projectFixture();
     expect(workflowProcessStatuses(project)).toMatchObject({ grading: 'complete', records: 'complete' });
     project.assessment = { ...project.assessment, task: { ...project.assessment.task, title: '바뀐 수행평가' } };
+    expect(workflowProcessStatuses(project)).toMatchObject({ grading: 'review', records: 'prerequisite' });
+});
+
+test('does not treat a client-only approved flag as final without a server approval token', () => {
+    const project = projectFixture();
+    delete project.submissions[0].grading.approvalToken;
+
+    expect(submissionIsApprovedFor(project.assessment, project.submissions[0])).toBe(false);
     expect(workflowProcessStatuses(project)).toMatchObject({ grading: 'review', records: 'prerequisite' });
 });
 

@@ -7,6 +7,7 @@ import {
     MAX_SUBMISSION_FILES,
     splitCombinedPdf,
 } from '@/lib/pdf/student-packets.js';
+import { reviseSubmission } from '@/lib/grading-generation.js';
 import { useSubmissionFiles } from './SubmissionFileProvider.jsx';
 
 const MODES = Object.freeze({ individual: 'individual', combined: 'combined' });
@@ -31,8 +32,7 @@ function nextSubmissionId() {
 }
 
 function submissionForPacket(packet, student, existing, fileName) {
-    return {
-        ...(existing ?? {}),
+    return reviseSubmission(existing ?? {}, {
         id: existing?.id ?? nextSubmissionId(),
         studentId: student.id,
         studentName: student.name,
@@ -54,7 +54,7 @@ function submissionForPacket(packet, student, existing, fileName) {
         approved: false,
         approvalRevoked: Boolean(existing?.approved || existing?.grading),
         error: '',
-    };
+    });
 }
 
 function mergePackets(current, packets, students, fileName) {

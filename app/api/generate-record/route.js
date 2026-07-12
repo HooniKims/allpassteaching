@@ -18,7 +18,7 @@ const submissionSchema = z.object({
         text: z.string().max(5000), coordinates: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).max(16),
         confidence: z.number().min(0).max(1).optional(),
     })).max(2000).default([]),
-    originalRevision: z.number().int().min(1).default(1), elementsTruncated: z.boolean().default(false),
+    originalRevision: z.number().int().min(1).default(1), gradingRevision: z.number().int().min(0).default(0), elementsTruncated: z.boolean().default(false),
     visualAnalysisStatus: z.enum(['not_requested', 'enhanced_used', 'enhanced_unavailable', 'enhanced_failed']).default('not_requested'),
     autoScoreAllowed: z.boolean().default(true), requiresVisualReview: z.boolean().default(false),
     originalAttached: z.literal(true), originalReviewedAt: z.string().datetime(), reviewedOriginalRevision: z.number().int().min(1),
@@ -45,7 +45,8 @@ export async function POST(request) {
     if (input.assessment.sourceHash !== sourceHash(input.lessonPlan)) return Response.json({ code: 'stale_assessment', message: '현재 지도안으로 수행평가를 다시 생성하고 승인해주세요.' }, { status: 409 });
     if (!gradingIntegrityAvailable()) return Response.json({ code: 'integrity_unavailable', message: '채점 무결성 설정을 확인해주세요.' }, { status: 503 });
     const provenance = canonicalGradingProvenance(input.submission);
-    if (!verifyGradingOriginToken(input.submission.grading.originToken, input.assessment, input.submission.extractedText, input.submission.elements, provenance, input.submission.grading.reviewOrigins)
+    const originProvenance = canonicalGradingProvenance({ ...input.submission, gradingRevision: input.submission.grading.originRevision });
+    if (!verifyGradingOriginToken(input.submission.grading.originToken, input.assessment, input.submission.extractedText, input.submission.elements, originProvenance, input.submission.grading.reviewOrigins)
         || !verifyGradingApprovalToken(input.submission.grading.approvalToken, input.assessment, input.submission.extractedText, input.submission.elements, provenance, input.submission.grading, input.submission)) {
         return Response.json({ code: 'stale_grading', message: '서버가 승인한 현재 채점 결과만 세특에 사용할 수 있습니다.' }, { status: 409 });
     }

@@ -19,6 +19,7 @@ const commonSchema = z.object({
     studentId: shortText.nullable().default(null),
     studentName: z.string().trim().min(1).max(100),
     originalRevision: z.number().int().min(1).default(1),
+    gradingRevision: z.number().int().min(0).default(0),
     extractedText: z.string().trim().min(20).max(MAX_OCR_TEXT_LENGTH),
     elements: z.array(documentElementSchema).max(2000).default([]),
     elementsTruncated: z.boolean().default(false),
@@ -109,11 +110,12 @@ function validateAiGrading(value, input) {
     if (issues.length) return { success: false, value, issues };
     const provisionalTotal = criteria.reduce((sum, criterion) => sum + (criterion.status === 'scored' ? criterion.score : 0), 0);
     const reviewOrigins = criteria.map(canonicalGradingOrigin);
-    const provenance = gradingProvenance(input);
+    const originRevision = input.gradingRevision + 1;
+    const provenance = gradingProvenance({ ...input, gradingRevision: originRevision });
     return { success: true, data: {
         ...parsed.data, criteria, provisionalTotal, totalScore: null,
         sourceHash: gradingSourceHash(input.assessment, input.extractedText, input.elements, criteria, provenance),
-        reviewOrigins,
+        reviewOrigins, originRevision,
         originToken: createGradingOriginToken(input.assessment, input.extractedText, input.elements, provenance, reviewOrigins),
     } };
 }
@@ -132,7 +134,8 @@ function finalizeGrading(input) {
     const provenance = gradingProvenance(input);
     const currentHash = gradingSourceHash(input.assessment, input.extractedText, input.elements, input.grading.criteria, provenance);
     if (input.grading.sourceHash !== currentHash) issues.push(issue(['grading', 'sourceHash'], 'OCR 원문 또는 루브릭이 바뀌어 다시 채점해야 합니다.'));
-    if (!verifyGradingOriginToken(input.grading.originToken, input.assessment, input.extractedText, input.elements, provenance, input.grading.reviewOrigins)) issues.push(issue(['grading', 'originToken'], '서버가 확인한 OCR 원본 계보와 일치하지 않아 다시 채점해야 합니다.'));
+    const originProvenance = gradingProvenance({ ...input, gradingRevision: input.grading.originRevision });
+    if (!verifyGradingOriginToken(input.grading.originToken, input.assessment, input.extractedText, input.elements, originProvenance, input.grading.reviewOrigins)) issues.push(issue(['grading', 'originToken'], '서버가 확인한 OCR 원본 계보와 일치하지 않아 다시 채점해야 합니다.'));
     if (input.reviewedOriginalRevision !== input.originalRevision) issues.push(issue(['reviewedOriginalRevision'], '현재 연결된 원본 PDF를 다시 확인해야 합니다.'));
     const expected = input.assessment.rubric.criteria;
     if (input.grading.criteria.length !== expected.length) issues.push(issue(['grading', 'criteria'], '모든 평가영역을 확인해야 합니다.'));
@@ -187,7 +190,7 @@ async function generate(input) {
             checked = parseGrading(repaired, input);
         }
         if (!checked.success) return json({ code: 'invalid_generation', message: '채점 결과의 수준·근거·원본 연결을 복구하지 못했습니다.', issues: checked.issues }, { status: 422 });
-        return json({ grading: checked.data });
+        return json({ grading: checked.data, gradingRevision: input.gradingRevision + 1 });
     } catch (error) {
         if (error instanceof UpstageError) return json({ code: error.code, message: error.message }, { status: error.status });
         throw error;
@@ -208,7 +211,7 @@ export async function POST(request) {
         const checked = finalizeGrading(input);
         if (!checked.success) return json({ code: 'approval_blocked', message: '현재 원본·루브릭·근거 확인이 모두 끝나야 승인할 수 있습니다.', issues: checked.issues, grading: input.grading }, { status: 409 });
         const approvalToken = createGradingApprovalToken(input.assessment, input.extractedText, input.elements, gradingProvenance(input), checked.data, input);
-        return json({ grading: { ...checked.data, approvalToken } });
+        return json({ grading: { ...checked.data, approvalToken }, gradingRevision: input.gradingRevision });
     }
     const parsed = generateRequestSchema.safeParse(body);
     if (!parsed.success) return json({ code: 'invalid_request', message: '채점할 학생 내용과 루브릭을 확인해주세요.', issues: parsed.error.issues }, { status: 400 });

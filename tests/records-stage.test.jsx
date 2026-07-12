@@ -14,7 +14,7 @@ const grading = { criteria: [
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-1', selectedLevelId: 'proficient', score: 35, evidence: '뿌리에 가는 털', reason: '관찰 특징이 수준 설명에 부합합니다.', feedback: '구체적입니다.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(recordElements[0])], teacherConfirmed: true },
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-2', selectedLevelId: 'proficient', score: 35, evidence: '물을 흡수한다', reason: '구조와 기능을 근거로 연결했습니다.', feedback: '연결했습니다.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(recordElements[1])], teacherConfirmed: true },
     { status: 'scored', decisionSource: 'ai', reviewRequired: false, criterionId: 'criterion-3', selectedLevelId: 'proficient', score: 15, evidence: '관찰 결과', reason: '수정 과정의 근거가 드러납니다.', feedback: '수정 과정을 확인했습니다.', confidence: .9, sourceRefs: [canonicalGradingSourceRef(recordElements[2])], teacherConfirmed: true },
-], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.', reviewOrigins: [{ criterionId: 'criterion-1', reviewRequired: false }, { criterionId: 'criterion-2', reviewRequired: false }, { criterionId: 'criterion-3', reviewRequired: false }], originToken: 'a'.repeat(64) };
+], provisionalTotal: 85, totalScore: 85, sourceHash: '', summary: '근거를 활용했습니다.', nextSteps: '다른 기관도 설명합니다.', reviewOrigins: [{ criterionId: 'criterion-1', reviewRequired: false }, { criterionId: 'criterion-2', reviewRequired: false }, { criterionId: 'criterion-3', reviewRequired: false }], originToken: 'a'.repeat(64), approvalToken: 'b'.repeat(64) };
 grading.reviewOrigins = grading.criteria.map(canonicalGradingOrigin);
 const assessment = makeAssessment();
 const submissions = [
@@ -52,4 +52,14 @@ test('batch generation isolates a student failure', async () => {
 
     expect(await screen.findByDisplayValue(generatedText)).toBeInTheDocument();
     expect(await screen.findByText('생성 실패')).toBeInTheDocument();
+});
+
+test('does not expose a client-flagged approval without a finalized server token', () => {
+    const unsigned = submissions.map(item => ({ ...item, grading: { ...item.grading, approvalToken: undefined } }));
+    function UnsignedHarness() { const [records, setRecords] = useState([]); return <RecordsStage lessonPlan={makeGeneratedPlan()} assessment={assessment} submissions={unsigned} records={records} onChange={setRecords}/>; }
+
+    render(<UnsignedHarness/>);
+
+    expect(screen.queryByText('김학생')).not.toBeInTheDocument();
+    expect(screen.getByText('OCR·채점 단계에서 학생별 채점 근거를 확인하고 승인해주세요.')).toBeInTheDocument();
 });

@@ -101,8 +101,8 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     });
     await page.route('**/api/grade-submission', route => {
         const body = route.request().postDataJSON();
-        if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85 } } });
-        return route.fulfill({ json: { grading: grading(body) } });
+        if (body.mode === 'finalize') return route.fulfill({ json: { grading: { ...body.grading, provisionalTotal: 85, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: body.gradingRevision } });
+        return route.fulfill({ json: { grading: grading(body), gradingRevision: body.gradingRevision + 1 } });
     });
     await page.route('**/api/generate-record', route => route.fulfill({ json: { record: { text: recordText } } }));
 

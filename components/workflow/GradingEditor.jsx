@@ -1,4 +1,5 @@
 import { canonicalGradingSourceRef, gradingEvidenceRiskIds } from '@/lib/grading-evidence.js';
+import { nextGradingRevision } from '@/lib/grading-generation.js';
 import { gradingSourceHash } from '@/lib/workflow-lineage.js';
 
 function criterionIsConfirmable(criterion) {
@@ -11,7 +12,8 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
     const rubricById = new Map(assessment.rubric.criteria.map(item => [item.id, item]));
     const applyGrading = grading => {
         const provisionalTotal = grading.criteria.reduce((sum, criterion) => sum + (criterion.status === 'scored' ? criterion.score : 0), 0);
-        const sourceHash = gradingSourceHash(assessment, submission.extractedText ?? '', submission.elements ?? [], grading.criteria, submission);
+        const revisedSubmission = { ...submission, gradingRevision: nextGradingRevision(submission) };
+        const sourceHash = gradingSourceHash(assessment, submission.extractedText ?? '', submission.elements ?? [], grading.criteria, revisedSubmission);
         onChange({
             ...submission,
             grading: { ...grading, provisionalTotal, totalScore: null, sourceHash },

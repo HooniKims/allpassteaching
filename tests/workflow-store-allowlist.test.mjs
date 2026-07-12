@@ -25,6 +25,7 @@ function fullWorkflow() {
     };
     const submission = {
         id: 'submission-a', studentId: 'student-a', needsStudentLink: false, studentName: '김하늘', fileName: '김하늘.pdf',
+        gradingRevision: 7,
         status: 'approved', extractedText: '관찰 결과와 구조·기능 설명을 충분히 기록한 학생 제출 내용입니다.', ocrModel: 'document-parse', pageCount: 2,
         grading, approved: true, approvalRevoked: false, error: '',
     };

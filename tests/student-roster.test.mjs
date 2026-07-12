@@ -143,4 +143,17 @@ describe('student roster domain', () => {
         expect(result.submissions[0]).toMatchObject({ studentId: null, studentName: '김하늘', needsStudentLink: true });
         expect(result.records[0]).toMatchObject({ studentId: null, studentName: '김하늘' });
     });
+
+    test('increments the linked submission generation when roster identity fields change', () => {
+        const project = {
+            students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘' }],
+            submissions: [{ id: 'submission-a', studentId: 'student-a', studentName: '김하늘', gradingRevision: 4, approved: true, grading: { approvalToken: 'b'.repeat(64) } }],
+            records: [],
+        };
+
+        const result = replaceProjectRoster(project, [{ ...project.students[0], name: '김새이름' }]);
+
+        expect(result.submissions[0]).toMatchObject({ studentName: '김새이름', gradingRevision: 5, approved: false });
+        expect(result.submissions[0].grading.approvalToken).toBeUndefined();
+    });
 });

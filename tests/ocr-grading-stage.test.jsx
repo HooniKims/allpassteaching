@@ -1,19 +1,54 @@
 import { StrictMode, useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PDFDocument } from 'pdf-lib';
 import { OcrGradingStage } from '@/components/workflow/OcrGradingStage.jsx';
+import { SubmissionReviewWorkspace } from '@/components/workflow/SubmissionReviewWorkspace.jsx';
 import { SubmissionFileProvider } from '@/components/workflow/SubmissionFileProvider.jsx';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { gradingSourceHash } from '@/lib/workflow-lineage';
 import { canonicalGradingOrigin, canonicalGradingSourceRef } from '@/lib/grading-evidence';
+import { reviseSubmission } from '@/lib/grading-generation';
 
 afterEach(() => vi.restoreAllMocks());
 
 function Harness({ initial = [], assessment = makeAssessment(), students = [] }) {
     const [submissions, setSubmissions] = useState(initial);
     return <SubmissionFileProvider><OcrGradingStage assessment={assessment} students={students} submissions={submissions} onChange={setSubmissions}/></SubmissionFileProvider>;
+}
+
+function AbaHarness({ initial, assessment }) {
+    const [submissions, setSubmissions] = useState(initial);
+    const reviseSummary = summary => setSubmissions(current => current.map(item => reviseSubmission(item, { grading: { ...item.grading, summary } })));
+    return <SubmissionFileProvider>
+        <button type="button" onClick={() => reviseSummary('잠시 바꾼 의견')}>의견 B</button>
+        <button type="button" onClick={() => reviseSummary('근거를 활용했습니다.')}>의견 A 복원</button>
+        <OcrGradingStage assessment={assessment} submissions={submissions} onChange={setSubmissions}/>
+    </SubmissionFileProvider>;
+}
+
+function approvalReadySubmission(assessment = makeAssessment()) {
+    const submission = reviewedSubmission(assessment);
+    submission.grading = { ...submission.grading, criteria: submission.grading.criteria.map(criterion => ({ ...criterion, teacherConfirmed: true })) };
+    submission.confirmedElementIds = ['element-1'];
+    submission.originalReviewedAt = '2026-07-12T12:00:00.000Z';
+    submission.reviewedOriginalRevision = submission.originalRevision;
+    return submission;
+}
+
+function ReplacementHarness({ initial }) {
+    const [submissions, setSubmissions] = useState(initial);
+    const replaceOriginal = () => setSubmissions(current => current.map(item => reviseSubmission(item, {
+        file: new File(['%PDF-new'], 'replacement.pdf', { type: 'application/pdf' }),
+        originalRevision: item.originalRevision + 1,
+        status: 'pending',
+    })));
+    return <SubmissionFileProvider>
+        <button type="button" onClick={replaceOriginal}>원본 교체</button>
+        <OcrGradingStage assessment={makeAssessment()} submissions={submissions} onChange={setSubmissions}/>
+        <output data-testid="replacement-state">{JSON.stringify(submissions)}</output>
+    </SubmissionFileProvider>;
 }
 
 function reviewedSubmission(assessment = makeAssessment()) {
@@ -42,11 +77,13 @@ function reviewedSubmission(assessment = makeAssessment()) {
     return submission;
 }
 
+const requestedGradingRevision = () => JSON.parse(fetch.mock.calls.at(-1)[1].body).gradingRevision;
+
 test('Given linked risky evidence When grading is reviewed Then source and original checks gate approval and mobile review tabs remain accessible', async () => {
     const user = userEvent.setup();
     const assessment = makeAssessment();
-    const finalized = { ...reviewedSubmission(assessment).grading, totalScore: 85, criteria: reviewedSubmission(assessment).grading.criteria.map(item => ({ ...item, teacherConfirmed: true })) };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ grading: finalized })));
+    const finalized = { ...reviewedSubmission(assessment).grading, totalScore: 85, approvalToken: 'b'.repeat(64), criteria: reviewedSubmission(assessment).grading.criteria.map(item => ({ ...item, teacherConfirmed: true })) };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_, options) => Response.json({ grading: finalized, gradingRevision: JSON.parse(options.body).gradingRevision })));
     render(<StrictMode><Harness initial={[reviewedSubmission(assessment)]} assessment={assessment}/></StrictMode>);
 
     expect(screen.getByRole('tab', { name: '원본 답안' })).toBeInTheDocument();
@@ -84,7 +121,7 @@ test('Given approval is in flight When grading changes Then the stale server res
     await user.click(screen.getByLabelText('김하늘 원본 답안 확인 완료'));
     await user.click(screen.getByRole('button', { name: '김하늘 채점 승인' }));
     await user.type(screen.getByLabelText('종합 의견'), ' 교사 수정');
-    resolveFinalization(Response.json({ grading: { ...reviewedSubmission(assessment).grading, totalScore: 85 } }));
+    resolveFinalization(Response.json({ grading: { ...reviewedSubmission(assessment).grading, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: requestedGradingRevision() }));
 
     expect(await screen.findByText(/채점 내용이 변경되어 승인 결과를 적용하지 않았습니다/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '승인 취소' })).not.toBeInTheDocument();
@@ -108,7 +145,7 @@ test('Given approval is in flight When the submission is linked to a different s
     await user.click(screen.getByRole('button', { name: '김하늘 채점 승인' }));
 
     await user.selectOptions(screen.getByLabelText('김하늘 명단 연결'), 'student-2');
-    resolveFinalization(Response.json({ grading: { ...reviewedSubmission(assessment).grading, totalScore: 85 } }));
+    resolveFinalization(Response.json({ grading: { ...reviewedSubmission(assessment).grading, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: requestedGradingRevision() }));
 
     expect(await screen.findByText(/채점 내용이 변경되어 승인 결과를 적용하지 않았습니다/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '승인 취소' })).not.toBeInTheDocument();
@@ -129,6 +166,86 @@ test('Given regrading is in flight When the teacher edits the existing grading T
     expect(await screen.findByText(/채점 중 내용이 변경되어 새 결과를 적용하지 않았습니다/)).toBeInTheDocument();
     expect(screen.getByLabelText('종합 의견')).toHaveValue('근거를 활용했습니다. 교사 수정');
     expect(screen.queryByText('루브릭 채점 중…')).not.toBeInTheDocument();
+});
+
+test('Given regrading is in flight When grading changes A to B to A Then the older response is still discarded by generation', async () => {
+    const user = userEvent.setup();
+    const previousAssessment = makeAssessment();
+    const currentAssessment = { ...previousAssessment, totalPoints: previousAssessment.totalPoints + 1 };
+    const initial = { ...reviewedSubmission(previousAssessment), gradingRevision: 4 };
+    let resolveRegrading;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveRegrading = resolve; })));
+    render(<AbaHarness initial={[initial]} assessment={currentAssessment}/>);
+
+    await user.click(screen.getByRole('button', { name: '김하늘 다시 채점하기' }));
+    await user.click(screen.getByRole('button', { name: '의견 B' }));
+    await user.click(screen.getByRole('button', { name: '의견 A 복원' }));
+    resolveRegrading(Response.json({ grading: { ...reviewedSubmission(currentAssessment).grading, summary: '오래된 서버 결과' }, gradingRevision: 5 }));
+
+    expect(await screen.findByText(/채점 중 내용이 변경되어 새 결과를 적용하지 않았습니다/)).toBeInTheDocument();
+    expect(screen.getByLabelText('종합 의견')).toHaveValue('근거를 활용했습니다.');
+});
+
+test('Given approval is in flight When grading changes A to B to A Then the older approval is still discarded by generation', async () => {
+    const user = userEvent.setup();
+    const assessment = makeAssessment();
+    const initial = { ...approvalReadySubmission(assessment), gradingRevision: 8 };
+    let resolveFinalization;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveFinalization = resolve; })));
+    render(<AbaHarness initial={[initial]} assessment={assessment}/>);
+
+    await user.click(screen.getByRole('button', { name: '김하늘 채점 승인' }));
+    await user.click(screen.getByRole('button', { name: '의견 B' }));
+    await user.click(screen.getByRole('button', { name: '의견 A 복원' }));
+    resolveFinalization(Response.json({ grading: { ...initial.grading, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: 8 }));
+
+    expect(await screen.findByText(/채점 내용이 변경되어 승인 결과를 적용하지 않았습니다/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '승인 취소' })).not.toBeInTheDocument();
+});
+
+test('Given approval is in flight When the review tab unmounts Then the response cannot commit approval', async () => {
+    const user = userEvent.setup();
+    const assessment = makeAssessment();
+    const submission = approvalReadySubmission(assessment);
+    const applyApproval = vi.fn();
+    let resolveFinalization;
+    const onFinalize = vi.fn().mockImplementation(() => new Promise(resolve => { resolveFinalization = resolve; }));
+    const view = render(<SubmissionReviewWorkspace assessment={assessment} submission={submission} studentName={submission.studentName} fileUrl="" stale={false} validGrading onFinalize={onFinalize} onPatch={() => {}} onApplyApproval={applyApproval}/>);
+    await user.click(screen.getByRole('button', { name: '김하늘 채점 승인' }));
+
+    view.unmount();
+    await act(async () => resolveFinalization({ grading: { ...submission.grading, totalScore: 85, approvalToken: 'b'.repeat(64) }, gradingRevision: 0 }));
+
+    expect(applyApproval).not.toHaveBeenCalled();
+});
+
+test('Given approved state lacks a server token When review renders Then it returns to unapproved re-finalization', async () => {
+    const assessment = makeAssessment();
+    const initial = approvalReadySubmission(assessment);
+    initial.approved = true;
+    initial.status = 'approved';
+    initial.grading = { ...initial.grading, totalScore: 85 };
+
+    render(<Harness initial={[initial]} assessment={assessment}/>);
+
+    expect(await screen.findByRole('button', { name: '김하늘 채점 승인' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '승인 취소' })).not.toBeInTheDocument();
+    expect(screen.getByText('채점 검토 필요')).toBeInTheDocument();
+});
+
+test('Given OCR is in flight When the original PDF is replaced Then the older OCR response cannot attach to the replacement', async () => {
+    const user = userEvent.setup();
+    const initial = [{ id: 'replacement', studentName: '김학생', fileName: 'old.pdf', file: new File(['%PDF-old'], 'old.pdf', { type: 'application/pdf' }), originalAttached: true, originalRevision: 1, gradingRevision: 3, status: 'pending', extractedText: '' }];
+    let resolveOcr;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(resolve => { resolveOcr = resolve; })));
+    render(<ReplacementHarness initial={initial}/>);
+
+    await user.click(screen.getByRole('button', { name: '연결한 답안 PDF OCR 시작' }));
+    await user.click(screen.getByRole('button', { name: '원본 교체' }));
+    resolveOcr(Response.json({ extractedText: '이전 PDF에서 늦게 도착한 OCR 결과입니다.', elements: [], pageCount: 1 }));
+
+    const state = JSON.parse(await waitFor(() => screen.getByTestId('replacement-state').textContent));
+    expect(state[0]).toMatchObject({ originalRevision: 2, gradingRevision: 4, extractedText: '' });
 });
 
 test('Given a high-confidence table OCR element When review controls render Then the shared server risk rule exposes teacher confirmation', () => {
@@ -317,9 +434,9 @@ test('keeps both grading results when two student requests finish in reverse ord
 
     await user.click(screen.getByRole('button', { name: '김학생 채점하기' }));
     await user.click(screen.getByRole('button', { name: '이학생 채점하기' }));
-    resolveSecond(Response.json({ grading }));
+    resolveSecond(Response.json({ grading, gradingRevision: 1 }));
     expect(await screen.findByRole('button', { name: '이학생 채점 승인' })).toBeDisabled();
-    resolveFirst(Response.json({ grading }));
+    resolveFirst(Response.json({ grading, gradingRevision: 1 }));
     expect(await screen.findByRole('button', { name: '김학생 채점 승인' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '이학생 채점 승인' })).toBeDisabled();
 });
