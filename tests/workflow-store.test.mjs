@@ -6,15 +6,15 @@ import { canonicalJson, sourceHash } from '@/lib/source-hash';
 beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); });
 
-function failSessionWrites() {
-    const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
-    const storage = window.sessionStorage;
-    Object.defineProperty(window, 'sessionStorage', { configurable: true, value: {
+function failLocalWrites() {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    const storage = window.localStorage;
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: {
         getItem: storage.getItem.bind(storage),
         setItem: () => { throw new DOMException('quota', 'QuotaExceededError'); },
         removeItem: storage.removeItem.bind(storage),
     } });
-    return () => Object.defineProperty(window, 'sessionStorage', descriptor);
+    return () => Object.defineProperty(window, 'localStorage', descriptor);
 }
 
 test('stable source hashes ignore object key order and change with source content', () => {
@@ -29,7 +29,7 @@ test('source hashes use the full canonical SHA-256 digest', () => {
     expect(sourceHash(value)).toBe(`src-${expected}`);
 });
 
-test('current-tab persistence keeps structured results for refresh but never selected PDF objects', () => {
+test('local persistence keeps structured results for refresh but never selected PDF objects', () => {
     const project = {
         ...createEmptyWorkflow(),
         activeProcess: 'grading',
@@ -43,13 +43,13 @@ test('current-tab persistence keeps structured results for refresh but never sel
     };
 
     saveWorkflow(project);
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
     const loaded = loadWorkflow();
 
     expect(raw).not.toContain('"file"');
     expect(loaded).toMatchObject({ activeProcess: 'grading', worksheet: project.worksheet, assessment: project.assessment, submissions: [{ studentName: '김학생', extractedText: '관찰 결과' }], records: [{ studentName: '김학생', text: '세특 문장' }] });
     expect(loaded.submissions[0]).not.toHaveProperty('file');
-    expect(window.localStorage.getItem(WORKFLOW_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).toBeNull();
 });
 
 test('공용 학생 명단은 안정적인 ID와 순서를 보존하고 File·Blob 값은 저장하지 않는다', () => {
@@ -60,7 +60,7 @@ test('공용 학생 명단은 안정적인 ID와 순서를 보존하고 File·Bl
     ];
 
     saveWorkflow(project);
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
     const loaded = loadWorkflow();
 
     expect(loaded.students).toEqual([
@@ -86,7 +86,7 @@ test('현재 저장 계약은 파일·객체 URL·원시 OCR payload를 모든 �
     }];
 
     saveWorkflow(project);
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
     const loaded = loadWorkflow();
 
     for (const forbidden of ['answerPdfBase64', 'objectUrl', 'answerFile', 'rawBase64', 'rawUpstage', 'packetFile']) expect(raw).not.toContain(forbidden);
@@ -134,7 +134,7 @@ test('migrates the earlier activeStage name and supplies empty collections', () 
 
     const loaded = loadWorkflow();
 
-    expect(WORKFLOW_VERSION).toBe(3);
+    expect(WORKFLOW_VERSION).toBe(4);
     expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, students: [], submissions: [], records: [] });
 });
 
@@ -153,10 +153,10 @@ test('Given a clean version 2 development rubric When loading Then it upgrades t
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
 
     const loaded = loadWorkflow();
-    const stored = JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY));
+    const stored = JSON.parse(window.localStorage.getItem(WORKFLOW_KEY));
 
     expect(loaded).toEqual(project);
-    expect(stored.version).toBe(3);
+    expect(stored.version).toBe(4);
     expect(loaded.assessment).not.toHaveProperty('requiresAssessmentRegeneration');
 });
 
@@ -189,39 +189,48 @@ test('Given a version 2 fixed rubric When loading Then it preserves legacy descr
         ] }] },
     });
     expect(loaded.submissions[0]).toMatchObject({ studentId: null, needsStudentLink: true, approved: false, approvalRevoked: true });
-    expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).version).toBe(3);
+    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).version).toBe(4);
 });
 
-test('Given a session write failure When saving Then it reports failure and does not delete the legacy recovery copy', () => {
+test('Given a local write failure When saving Then it reports failure and does not delete the session recovery copy', () => {
     const legacy = JSON.stringify({ version: 2, data: { activeProcess: 'lesson' } });
-    window.localStorage.setItem(WORKFLOW_KEY, legacy);
-    const restore = failSessionWrites();
+    window.sessionStorage.setItem(WORKFLOW_KEY, legacy);
+    const restore = failLocalWrites();
 
     const saved = saveWorkflow(createEmptyWorkflow());
     restore();
 
     expect(saved).toBe(false);
-    expect(window.localStorage.getItem(WORKFLOW_KEY)).toBe(legacy);
+    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).toBe(legacy);
 });
 
-test('Given a valid legacy copy and corrupt session state When loading Then it recovers data even if the clean rewrite fails', () => {
-    window.sessionStorage.setItem(WORKFLOW_KEY, '{corrupt-json');
-    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: {
+test('Given a valid session copy and corrupt local state When loading Then it recovers data even if the clean rewrite fails', () => {
+    window.localStorage.setItem(WORKFLOW_KEY, '{corrupt-json');
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: {
         activeProcess: 'grading',
         students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김학생' }],
     } }));
-    const restore = failSessionWrites();
+    const restore = failLocalWrites();
 
     const loaded = loadWorkflow();
     restore();
 
     expect(loaded).toMatchObject({ activeProcess: 'grading', students: [{ id: 'student-a', name: '김학생' }] });
-    expect(window.localStorage.getItem(WORKFLOW_KEY)).not.toBeNull();
+    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).not.toBeNull();
 });
 
-test('moves a legacy persistent workflow into the current tab and removes the permanent copy', () => {
-    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 1, data: { lessonSnapshot: { basics: { studentNeeds: '김학생 지원 정보' } } } }));
+test('moves a legacy session workflow into local storage', () => {
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 1, data: { lessonSnapshot: { basics: { studentNeeds: '김학생 지원 정보' } } } }));
     expect(loadWorkflow()).toMatchObject({ lessonSnapshot: { basics: { studentNeeds: '김학생 지원 정보' } } });
-    expect(window.localStorage.getItem(WORKFLOW_KEY)).toBeNull();
-    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).toContain('김학생 지원 정보');
+    expect(window.localStorage.getItem(WORKFLOW_KEY)).toContain('김학생 지원 정보');
+    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).toBeNull();
+});
+
+test('prefers the newer session workflow over an older local workflow during migration', () => {
+    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 4, savedAt: '2026-07-12T08:00:00.000Z', data: { activeProcess: 'worksheet' } }));
+    window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 4, savedAt: '2026-07-13T08:00:00.000Z', data: { activeProcess: 'assessment' } }));
+
+    expect(loadWorkflow()).toMatchObject({ activeProcess: 'assessment' });
+    expect(window.localStorage.getItem(WORKFLOW_KEY)).toContain('assessment');
+    expect(window.sessionStorage.getItem(WORKFLOW_KEY)).toBeNull();
 });

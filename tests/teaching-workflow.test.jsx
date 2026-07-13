@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { TeachingWorkflow } from '@/components/workflow/TeachingWorkflow.jsx';
 import { createEmptyWorkflow, WORKFLOW_KEY } from '@/lib/workflow-store';
 
-beforeEach(() => window.sessionStorage.clear());
+beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 
 test('opens every process but explains the missing prerequisite in context', async () => {
     const user = userEvent.setup();
@@ -28,7 +28,7 @@ test('restores the active process and can clear only student-derived data', asyn
     await user.click(screen.getByRole('button', { name: '제출·채점·세특 삭제 확인' }));
 
     await waitFor(() => {
-        const saved = JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data;
+        const saved = JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).data;
         expect(saved.students).toEqual(project.students);
         expect(saved.submissions).toEqual([]);
         expect(saved.records).toEqual([]);
@@ -58,7 +58,7 @@ test('Given persisted PDF metadata When the page refreshes Then files are detach
 
     render(<TeachingWorkflow/>);
 
-    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data.submissions[0]).toMatchObject({
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).data.submissions[0]).toMatchObject({
         packetPages: [1, 2],
         answerPages: [2],
         coverPages: [1],
@@ -87,7 +87,7 @@ test('Given migrated legacy submission metadata without an attachment flag When 
 
     render(<TeachingWorkflow/>);
 
-    await waitFor(() => expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).data.submissions[0]).toMatchObject({
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).data.submissions[0]).toMatchObject({
         originalAttached: false,
         originalReviewedAt: null,
         approved: false,

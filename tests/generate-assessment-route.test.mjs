@@ -72,7 +72,7 @@ test('AI가 덧붙이는 메타데이터보다 교사 평가명·과목·산출�
     generated.task.product = 'AI 임의 보고서';
     const requested = { ...assessmentRequest, assessmentName: '교사 지정 포스터', outputTypes: ['포스터'], answerTypes: ['논술형'], visualAnalysisRequired: true, includeStudentCover: false, additionalRequirements: '도표 포함' };
     process.env.UPSTAGE_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(generated)));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(generated))));
 
     const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest: requested }));
     const body = await response.json();
@@ -80,7 +80,30 @@ test('AI가 덧붙이는 메타데이터보다 교사 평가명·과목·산출�
     expect(response.status).toBe(200);
     expect(body.assessment).toMatchObject({ assessmentName: '교사 지정 포스터', subject: '과학', visualAnalysisRequired: true, includeStudentCover: false });
     expect(body.assessment.task.product).toBe('포스터');
-    expect(body.assessment.generationSettings).toEqual({ outputTypes: ['포스터'], answerTypes: ['논술형'], stages: requested.stages, additionalRequirements: '도표 포함' });
+    expect(body.assessment.generationSettings).toEqual({ outputTypes: ['포스터'], answerTypes: ['논술형'], stages: requested.stages, additionalRequirements: '도표 포함', assessmentApproachId: 'backward-design' });
+});
+
+test('생성 루브릭에서 성취기준 연결표를 다시 만들어 잘못된 AI 참조를 보정한다', async () => {
+    const generated = makeAssessment();
+    generated.backwardDesign.evidenceMap = [{
+        standardCode: '존재하지 않는 성취기준', criterionIds: ['존재하지 않는 평가영역'], taskEvidenceTypes: ['다른 관찰 근거'], evidenceTypes: ['결과 증거'], scoreBasis: '다른 평가영역 10점',
+    }];
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(generated))));
+
+    const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest }));
+    const body = await response.json();
+    const expectedCriteria = generated.rubric.criteria;
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(body.assessment.backwardDesign.evidenceMap).toEqual([{
+        standardCode: '6과11-02',
+        criterionIds: expectedCriteria.map(criterion => criterion.id),
+        taskEvidenceTypes: expectedCriteria.map(criterion => criterion.evidence),
+        evidenceTypes: ['결과 증거', '과정 증거'],
+        scoreBasis: `${expectedCriteria.map(criterion => `${criterion.name} ${criterion.maxPoints}점`).join(', ')} · 수준별 정의 점수`,
+    }]);
 });
 
 test('지원 상한인 15개 평가영역을 실제 생성 API 계약으로 통과시킨다', async () => {

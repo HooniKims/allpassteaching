@@ -104,33 +104,47 @@ test('defaults omitted request metadata before generation', async () => {
     expect(modelDraft.basics.metadata).toEqual({ date: '', period: '', place: '', className: '', teacherName: '' });
 });
 
-test('repairs generated metadata that differs from the request', async () => {
-    const metadata = { date: '2026-07-11', period: '2', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
+test('preserves requested metadata when the generated plan fills an empty date', async () => {
+    const metadata = { date: '', period: '3', place: '과학실', className: '합성 1학년 1반', teacherName: '검증 교사' };
     const draft = { ...generationDraft, basics: { ...generationDraft.basics, metadata } };
-    const changed = makeGeneratedPlan({ metadata: { ...metadata, place: '운동장' } });
-    const repaired = makeGeneratedPlan({ metadata });
+    const generated = makeGeneratedPlan({ metadata: { ...metadata, date: '2026-07-13' } });
     process.env.UPSTAGE_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(changed)).mockResolvedValueOnce(completion(repaired)));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(generated))));
 
     const response = await POST(request(draft));
 
     expect(response.status).toBe(200);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledOnce();
     expect((await response.json()).plan.metadata).toEqual(metadata);
 });
 
-test('returns 422 when generated metadata keys remain missing after repair', async () => {
+test('preserves requested metadata when the generated plan changes populated information', async () => {
+    const metadata = { date: '2026-07-11', period: '2', place: '과학실', className: '5학년 1반', teacherName: '김교사' };
+    const draft = { ...generationDraft, basics: { ...generationDraft.basics, metadata } };
+    const changed = makeGeneratedPlan({ metadata: { ...metadata, place: '운동장' } });
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(changed))));
+
+    const response = await POST(request(draft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await response.json()).plan.metadata).toEqual(metadata);
+});
+
+test('preserves teacher metadata when the generated plan omits the metadata object', async () => {
     const invalid = makeGeneratedPlan({ metadata: {} });
     process.env.UPSTAGE_API_KEY = 'test-key';
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(invalid)));
 
     const response = await POST(request(generationDraft));
 
-    expect(response.status).toBe(422);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await response.json()).plan.metadata).toEqual(generationDraft.basics.metadata);
 });
 
-test.each(['date', 'place', 'className', 'teacherName'])('returns 422 when generated metadata.%s remains missing after repair', async key => {
+test.each(['date', 'place', 'className', 'teacherName'])('preserves teacher metadata when generated metadata.%s is missing', async key => {
     const invalid = structuredClone(makeGeneratedPlan());
     delete invalid.metadata[key];
     process.env.UPSTAGE_API_KEY = 'test-key';
@@ -138,8 +152,9 @@ test.each(['date', 'place', 'className', 'teacherName'])('returns 422 when gener
 
     const response = await POST(request(generationDraft));
 
-    expect(response.status).toBe(422);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await response.json()).plan.metadata).toEqual(generationDraft.basics.metadata);
 });
 
 test('repairs a fresh response that omits a defaulted stage field', async () => {

@@ -114,6 +114,6 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
         </div>
         <label>수업할 개념 및 내용<textarea aria-label="수업할 개념 및 내용" rows="5" value={value.intent} onChange={event => update('intent', event.target.value)} placeholder="예: 식물이 자라는 데 필요한 조건을 예상하고 실험으로 확인한다."/></label>
         <label>학생 특성 또는 지원 필요 사항 <span className="optional">선택</span><textarea rows="3" value={value.studentNeeds} onChange={event => update('studentNeeds', event.target.value)} placeholder="예: 관찰 기록에 어려움이 있는 학생에게 문장 틀을 제공해요."/></label>
-        <footer><span>입력 내용은 이 기기에 임시 저장됩니다.</span><button type="submit">성취기준 찾기 <span aria-hidden="true">→</span></button></footer>
+        <footer><span>입력 내용은 이 브라우저에 저장됩니다.</span><button type="submit">성취기준 찾기 <span aria-hidden="true">→</span></button></footer>
     </form>;
 }

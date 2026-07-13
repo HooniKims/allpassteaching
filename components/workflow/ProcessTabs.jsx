@@ -8,7 +8,12 @@ export const teachingProcesses = [
     { id: 'records', number: '05', label: '세특' },
 ];
 
-const statusLabels = { complete: '완료', review: '검토 필요', prerequisite: '선행 단계 필요' };
+const statusLabels = { complete: '완료', review: '검토·재생성 필요', prerequisite: '선행 단계 필요' };
+const statusDescriptions = {
+    complete: '현재 단계의 결과가 최신 상태입니다.',
+    review: '해당 단계의 결과가 아직 없거나, 앞 단계 변경으로 다시 생성 또는 교사 확인이 필요합니다.',
+    prerequisite: '이 단계를 시작하려면 앞 단계의 결과가 필요합니다.',
+};
 
 export function ProcessTabs({ activeProcess, statuses, onChange }) {
     const tabsRef = useRef([]);
@@ -39,6 +44,7 @@ export function ProcessTabs({ activeProcess, statuses, onChange }) {
         <div className="process-tabs" role="tablist" aria-label="5단계 프로세스">
             {teachingProcesses.map((process, index) => {
                 const status = statuses[process.id] ?? 'prerequisite';
+                const statusDescriptionId = `process-tab-${process.id}-status-help`;
                 return <button
                     key={process.id}
                     ref={element => { tabsRef.current[index] = element; }}
@@ -48,12 +54,14 @@ export function ProcessTabs({ activeProcess, statuses, onChange }) {
                     role="tab"
                     aria-selected={activeProcess === process.id}
                     aria-controls={`process-panel-${process.id}`}
+                    aria-describedby={statusDescriptionId}
                     tabIndex={activeProcess === process.id ? 0 : -1}
                     onKeyDown={event => moveFocus(event, index)}
                     onClick={() => onChange(process.id)}
                 >
                     <span className="process-tab__number" aria-hidden="true">{process.number}</span>
-                    <span className="process-tab__copy"><strong>{process.label}</strong><small>{statusLabels[status]}</small></span>
+                    <span className="process-tab__copy"><strong>{process.label}</strong><small title={statusDescriptions[status]}>{statusLabels[status]}</small></span>
+                    <span id={statusDescriptionId} className="sr-only">{statusDescriptions[status]}</span>
                 </button>;
             })}
         </div>

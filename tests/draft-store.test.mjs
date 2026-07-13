@@ -69,9 +69,25 @@ test('migrates a version-one generated draft with date normalization and a gener
     expect(loaded.maxReached).toBe(4);
 });
 test('clears a saved draft', () => { saveDraft({ step: 1 }); clearDraft(); expect(loadDraft()).toBeNull(); });
-test('moves a legacy persistent draft into the current tab before removing the permanent copy', () => {
-    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 1, basics: { studentNeeds: '김학생 지원 정보' } } }));
+test('moves a legacy session draft into local storage', () => {
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 1, basics: { studentNeeds: '김학생 지원 정보' } } }));
     expect(loadDraft()).toMatchObject({ step: 1, basics: { studentNeeds: '김학생 지원 정보' } });
-    expect(window.localStorage.getItem('allpass.lesson-plan')).toBeNull();
-    expect(window.sessionStorage.getItem('allpass.lesson-plan')).toContain('김학생 지원 정보');
+    expect(window.localStorage.getItem('allpass.lesson-plan')).toContain('김학생 지원 정보');
+    expect(window.sessionStorage.getItem('allpass.lesson-plan')).toBeNull();
+});
+
+test('recovers a valid session draft when the local draft is corrupt', () => {
+    window.localStorage.setItem('allpass.lesson-plan', '{corrupt-json');
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 1, basics: { intent: '복구할 세션 수업' } } }));
+
+    expect(loadDraft()).toMatchObject({ basics: { intent: '복구할 세션 수업' } });
+});
+
+test('prefers the newer session draft over an older local draft during migration', () => {
+    window.localStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, savedAt: '2026-07-12T08:00:00.000Z', data: { step: 1, basics: { intent: '이전 로컬 수업' } } }));
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, savedAt: '2026-07-13T08:00:00.000Z', data: { step: 1, basics: { intent: '계속 작성 중인 수업' } } }));
+
+    expect(loadDraft()).toMatchObject({ basics: { intent: '계속 작성 중인 수업' } });
+    expect(window.localStorage.getItem('allpass.lesson-plan')).toContain('계속 작성 중인 수업');
+    expect(window.sessionStorage.getItem('allpass.lesson-plan')).toBeNull();
 });

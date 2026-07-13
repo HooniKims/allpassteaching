@@ -13,6 +13,38 @@ test('exports a validated workflow document as PDF', async () => {
     expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
 });
 
+test('exports a validated student worksheet as HWPX when the format is requested', async () => {
+    // Given a teacher-ready worksheet and an HWPX export request
+    const worksheet = makeWorksheet();
+    const hwpxRequest = new Request('http://localhost/api/export-workflow/worksheet-student?format=hwpx', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(worksheet),
+    });
+
+    // When the route exports the document
+    const response = await POST(hwpxRequest, { params: Promise.resolve({ kind: 'worksheet-student' }) });
+
+    // Then it returns a real HWPX package instead of falling back to PDF
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/hwp+zip');
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 4).toString()).toBe('PK\x03\x04');
+});
+
+test('exports a student assessment cover as HWPX when the format is requested', async () => {
+    // Given an assessment with a student cover enabled
+    const assessment = makeAssessment();
+    const hwpxRequest = new Request('http://localhost/api/export-workflow/assessment-cover?format=hwpx', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment),
+    });
+
+    // When the student cover is exported
+    const response = await POST(hwpxRequest, { params: Promise.resolve({ kind: 'assessment-cover' }) });
+
+    // Then the editable HWPX document is returned
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/hwp+zip');
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 4).toString()).toBe('PK\x03\x04');
+});
+
 test('exports separate student and teacher worksheet documents', async () => {
     const worksheet = makeWorksheet();
     const student = await POST(request(worksheet), { params: Promise.resolve({ kind: 'worksheet-student' }) });
@@ -43,6 +75,34 @@ test('rejects invalid workflow documents and unsupported kinds', async () => {
     expect((await POST(request(makeWorksheet()), { params: Promise.resolve({ kind: 'unknown' }) })).status).toBe(404);
 });
 
+test('rejects inherited document kinds and formats before reading the request body', async () => {
+    for (const kind of ['constructor', 'toString', '__proto__']) {
+        const response = await POST(request(makeWorksheet()), { params: Promise.resolve({ kind }) });
+        expect(response.status, kind).toBe(404);
+    }
+    for (const format of ['constructor', 'toString', '__proto__']) {
+        const response = await POST(new Request(`http://localhost/api/export-workflow/worksheet?format=${format}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(makeWorksheet()),
+        }), { params: Promise.resolve({ kind: 'worksheet' }) });
+        expect(response.status, format).toBe(404);
+    }
+});
+
+test('rejects malformed UTF-8 without replacing its bytes in an export document', async () => {
+    const body = new ReadableStream({
+        start(controller) {
+            controller.enqueue(Uint8Array.from([0x7B, 0x22, 0x74, 0x69, 0x74, 0x6C, 0x65, 0x22, 0x3A, 0x22, 0xC3, 0x28, 0x22, 0x7D]));
+            controller.close();
+        },
+    });
+    const response = await POST(new Request('http://localhost/api/export-workflow/worksheet', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body, duplex: 'half',
+    }), { params: Promise.resolve({ kind: 'worksheet' }) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' });
+});
+
 test('학생 표지를 끈 평가의 표지 전용 내보내기를 거부한다', async () => {
     const assessment = makeAssessment(); assessment.includeStudentCover = false;
     const coverRequest = new Request('http://localhost/api/export-workflow/assessment-cover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment) });
@@ -64,7 +124,7 @@ test('rejects a declared workflow export body above 500 KB with a safe 413 respo
     expect(response.status).toBe(413);
     expect(await response.json()).toEqual({
         code: 'request_too_large',
-        message: 'PDF로 저장할 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.',
+        message: '저장할 문서 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.',
     });
 });
 
@@ -81,7 +141,7 @@ test('rejects an actual UTF-8 workflow export body above 500 KB without echoing 
     expect(response.status).toBe(413);
     expect(await response.json()).toEqual({
         code: 'request_too_large',
-        message: 'PDF로 저장할 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.',
+        message: '저장할 문서 내용이 너무 깁니다. 내용을 줄인 뒤 다시 시도해주세요.',
     });
 });
 
@@ -155,7 +215,7 @@ test('rejects a schema-valid assessment whose aggregate render content exceeds t
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
         code: 'document_too_long',
-        message: '수행평가 PDF 내용이 너무 깁니다. 평가영역 또는 설명을 줄인 뒤 다시 시도해주세요.',
+        message: '수행평가 문서 내용이 너무 깁니다. 평가영역 또는 설명을 줄인 뒤 다시 시도해주세요.',
     });
 });
 
@@ -182,7 +242,7 @@ test('rejects adversarial array cardinality before Zod issue amplification and c
     const ordinaryBody = await ordinary.json();
 
     expect(amplified.status).toBe(400);
-    expect(amplifiedBody).toEqual({ code: 'invalid_document', message: 'PDF로 저장할 문서 구조가 너무 큽니다. 항목 수를 줄여주세요.' });
+    expect(amplifiedBody).toEqual({ code: 'invalid_document', message: '저장할 문서 구조가 너무 큽니다. 항목 수를 줄여주세요.' });
     expect(JSON.stringify(amplifiedBody).length).toBeLessThan(500);
     expect(ordinary.status).toBe(400);
     expect(ordinaryBody.issues.length).toBeLessThanOrEqual(20);

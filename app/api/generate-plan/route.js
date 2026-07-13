@@ -28,9 +28,10 @@ function validAgainstDraft(plan, draft) {
 }
 
 function parsePlan(value, draft) {
-    const requiredFields = generationRequiredFieldsSchema.safeParse(value);
+    const teacherOwnedValue = { ...value, metadata: draft.basics.metadata };
+    const requiredFields = generationRequiredFieldsSchema.safeParse(teacherOwnedValue);
     if (!requiredFields.success) return { success: false, issues: requiredFields.error.issues };
-    const parsed = lessonPlanSchema.safeParse(value);
+    const parsed = lessonPlanSchema.safeParse(teacherOwnedValue);
     if (!parsed.success) return { success: false, issues: parsed.error.issues };
     if (!validAgainstDraft(parsed.data, draft)) return { success: false, issues: [{ message: '기본 정보, 수업 모형, 행정 정보, 성취기준 또는 차시 구성이 요청과 다릅니다.' }] };
     const alignment = validateInstructionModelAlignment(parsed.data, draft.instructionModel);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BACKWARD_DESIGN_QUESTIONS } from '@/lib/assessment-request';
+import { ASSESSMENT_APPROACHES, assessmentApproachById } from '@/lib/assessment-approaches';
 import { useOperation } from './OperationProvider.jsx';
 
 const examples = {
@@ -22,6 +23,7 @@ export function BackwardDesignForm({ lessonPlan, value, onChange }) {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const update = patch => onChange({ ...value, ...patch });
     const updateIntent = patch => update({ teacherIntent: { ...value.teacherIntent, ...patch } });
+    const selectedApproach = assessmentApproachById(value.assessmentApproachId);
     const suggest = async () => {
         setStatus({ type: 'loading', message: '성취기준과 수업 내용을 바탕으로 관찰 가능한 증거를 제안하고 있습니다.' });
         try {
@@ -39,7 +41,8 @@ export function BackwardDesignForm({ lessonPlan, value, onChange }) {
         }
     };
     return <section className="document-section backward-design-form">
-        <div className="section-heading"><div><p className="eyebrow">백워드 설계 · 도착점부터</p><h2>평가의 도착점을 먼저 정해볼까요?</h2></div><button type="button" className="secondary-button" disabled={!value.teacherIntent.desiredResult.trim() || status.type === 'loading'} onClick={suggest}>백워드 설계 AI 초안 제안</button></div>
+        <div className="section-heading"><div><p className="eyebrow">수행평가 설계 · 방식과 도착점</p><h2>어떤 방식으로 학생의 배움을 확인할까요?</h2></div><button type="button" className="secondary-button" disabled={!value.teacherIntent.desiredResult.trim() || status.type === 'loading'} onClick={suggest}>평가 설계 AI 초안 제안</button></div>
+        <fieldset className="assessment-approach-picker"><legend>평가 설계 방식</legend><p>평가의 출발점을 고르면 과제 흐름, 과정 증거와 루브릭 초안에 반영합니다.</p><div>{ASSESSMENT_APPROACHES.map(approach => <label key={approach.id} className={selectedApproach.id === approach.id ? 'is-selected' : ''}><input type="radio" name="assessment-approach" value={approach.id} checked={selectedApproach.id === approach.id} onChange={() => update({ assessmentApproachId: approach.id })}/><span><strong>{approach.name}</strong><small>{approach.summary}</small><em>이럴 때: {approach.useWhen}</em></span></label>)}</div><p className="assessment-approach-picker__selected" role="status"><strong>{selectedApproach.name}을(를) 쉽게 말하면</strong><span>쉽게 말하면, {selectedApproach.plainGuide}</span><span>평가 흐름: {selectedApproach.flow.join(' → ')}</span></p></fieldset>
         <div className="backward-question-list">{Object.entries(BACKWARD_DESIGN_QUESTIONS).map(([key, label], index) => <label key={key}>{questionLabel(key, label)}{index === 0 && <span aria-hidden="true"> *</span>}<textarea aria-label={label} required={index === 0} rows="3" value={value.teacherIntent[key]} placeholder={examples[key]} onChange={event => updateIntent({ [key]: event.target.value })}/><span className="field-help">{examples[key]}</span></label>)}</div>
         {status.message && <p className={`status-line status-line--${status.type}`} role={status.type === 'error' ? 'alert' : 'status'}>{status.message}</p>}
         <div className="field-grid field-grid--two">

@@ -6,6 +6,8 @@ import { promisify } from 'node:util';
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { test, expect } from 'vitest';
 import { buildPdf } from '@/lib/export/pdf';
+import { processDefinition } from '@/lib/export/pdf-content';
+import { buildDocumentModel } from '@/lib/export/document-model';
 import { selectVisibleFallback, sanitizePdfText, wrapText } from '@/lib/export/pdf-table';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
@@ -99,6 +101,18 @@ test('renders every formal table with a readable font size', async () => {
     const tableText = trace.filter(event => event.type === 'text' && event.tableId);
     expect(tableText.length).toBeGreaterThan(0);
     expect(Math.min(...tableText.map(event => event.fontSize))).toBeGreaterThanOrEqual(8);
+});
+
+test('allocates a wide activity column instead of squeezing the lesson process into six narrow columns', () => {
+    // Given a standard lesson process
+    const process = buildDocumentModel(makeGeneratedPlan()).sessions[0].process;
+
+    // When the print table is defined
+    const definition = processDefinition(process, { regular: {}, bold: {} });
+
+    // Then teacher and student activity are combined into one wide, readable activity column
+    expect(definition.widths).toHaveLength(4);
+    expect(definition.widths[2]).toBeGreaterThan(200);
 });
 
 test('embeds Paperlogy regular and bold font resources once for reuse', async () => {

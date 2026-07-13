@@ -25,11 +25,17 @@ test('renders all five processes with text statuses and allows blocked tabs to b
 
     expect(screen.getAllByRole('tab')).toHaveLength(5);
     expect(screen.getByRole('tab', { name: /지도안.*완료/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /학습지.*검토 필요/ })).toBeEnabled();
+    expect(screen.getByRole('tab', { name: /학습지.*검토·재생성 필요/ })).toBeEnabled();
     const recordsTab = screen.getByRole('tab', { name: /세특.*선행 단계 필요/ });
     expect(recordsTab).toBeEnabled();
     await user.click(recordsTab);
     expect(onChange).toHaveBeenCalledWith('records');
+});
+
+test('explains that review needed can mean a missing, changed, or unconfirmed stage result', () => {
+    render(<ProcessTabs activeProcess="lesson" statuses={statuses} onChange={() => {}}/>);
+
+    expect(screen.getByRole('tab', { name: /학습지.*검토·재생성 필요/ })).toHaveAccessibleDescription('해당 단계의 결과가 아직 없거나, 앞 단계 변경으로 다시 생성 또는 교사 확인이 필요합니다.');
 });
 
 test('moves tab focus with arrow keys', async () => {

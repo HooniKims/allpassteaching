@@ -148,7 +148,7 @@ export function OcrGradingStage({ assessment, students = EMPTY_COLLECTION, submi
     };
     return <section className="workflow-stage workflow-stage--wide">
         <header className="workflow-stage__header"><div><p className="eyebrow">4단계 · OCR·채점</p><h1>학생 PDF를 읽고 루브릭으로 검토해요</h1><p>여러 PDF를 선택하면 최대 두 개씩 처리합니다. <span className="nowrap">OCR 원문과 채점 근거를</span> <span className="nowrap">교사가 직접 확인하고</span> 승인합니다.</p></div></header>
-        <aside className="ocr-privacy-note"><strong>처리 전 확인</strong><span>PDF는 Upstage에 전송되며 원본은 저장하지 않습니다. <span className="nowrap">학생 이름·OCR·채점·세특은</span> 현재 탭에만 임시 보관되어 <span className="nowrap">새로고침 후 복구되고</span>, <span className="nowrap">탭을 닫으면 사라집니다.</span></span></aside>
+        <aside className="ocr-privacy-note"><strong>처리 전 확인</strong><span>PDF는 Upstage에 전송되며 원본은 저장하지 않습니다. <span className="nowrap">학생 이름·OCR·채점·세특은</span> 이 브라우저의 로컬 저장소에 보관됩니다. 공용 기기에서는 <span className="nowrap">새 작업 시작</span>으로 지워주세요.</span></aside>
         <StudentRosterEditor students={students} submissions={submissions} records={records} onChange={onStudentsChange} onDeleteStudent={onDeleteStudent}/>
         <StudentPdfUpload students={students} submissions={submissions} onChange={onChange} onBusyChange={setFileBusy}/>
         {submissions.some(item => item.originalAttached === true && (files.has(item.id) || item.file) && ['pending', 'ocr_error'].includes(item.status)) && <div className="ocr-start-actions"><button type="button" disabled={busy || fileBusy || operationActive} onClick={() => processOcr(submissions.filter(item => item.originalAttached === true && (files.has(item.id) || item.file) && ['pending', 'ocr_error'].includes(item.status)))}>연결한 답안 PDF OCR 시작</button></div>}

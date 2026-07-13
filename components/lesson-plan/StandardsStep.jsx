@@ -8,6 +8,13 @@ function gradeBand({ schoolLevel, grade }) {
     return schoolLevel === 'middle' ? '7-9' : '10-12';
 }
 
+function gradeBandLabel(basics) {
+    const band = gradeBand(basics);
+    if (basics.schoolLevel === 'middle') return '중학교 1~3학년군';
+    if (basics.schoolLevel === 'high') return '고등학교 1~3학년';
+    return `초등학교 ${band}학년군`;
+}
+
 export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
     const { runOperation } = useOperation();
     const [query, setQuery] = useState(basics.intent);
@@ -49,7 +56,11 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
         }
     };
     return <div className="standards-step">
-        <header><p className="eyebrow">2단계 · 성취기준</p><h1>성취기준을 선택해주세요</h1><p>{basics.displaySubject || basics.subject} · {gradeBand(basics)}학년군 · {(basics.mappedSubjects?.length ? basics.mappedSubjects : [basics.subject]).join('·')} 기준만 보여드립니다.</p></header>
+        <header><p className="eyebrow">2단계 · 성취기준</p><h1>성취기준을 하나 이상 선택해주세요</h1><p>{basics.displaySubject || basics.subject} · {gradeBandLabel(basics)} · {(basics.mappedSubjects?.length ? basics.mappedSubjects : [basics.subject]).join('·')} 기준만 보여드립니다. 관련 성취기준은 여러 개를 함께 선택할 수 있어요.</p></header>
+        <aside className="standards-selection-summary" role="status" aria-live="polite" aria-label="선택한 성취기준">
+            <div><strong>선택한 성취기준</strong><span>{selected.length ? `${selected.length}개를 모두 지도안 생성에 반영합니다.` : '관련 성취기준을 여러 개 함께 선택할 수 있습니다.'}</span></div>
+            {selected.length > 0 && <ul>{selected.map(item => <li key={item.code}><strong>{item.code}</strong><span>{item.text}</span><button type="button" className="text-button" aria-label={`${item.code} 성취기준 선택 해제`} onClick={() => toggle(item)}>선택 해제</button></li>)}</ul>}
+        </aside>
         <div className="standards-toolbar"><label>코드 또는 내용 검색<input aria-label="성취기준 검색" value={query} onChange={event => {
             activeRecommendation.current?.abort(); activeRecommendation.current = null;
             setQuery(event.target.value); setRecommendations([]); setStatus('idle'); setMessage('');
@@ -62,6 +73,6 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
             {item.score != null && <em>{Math.round(item.score)}%</em>}
         </label>)}</div>
         {!visible.length && <p className="empty-state">검색 결과가 없습니다. 더 넓은 개념어로 검색해보세요.</p>}
-        <footer className="step-actions"><button className="secondary-button" type="button" onClick={onBack}>이전</button><span>{selected.length}개 선택됨</span><button type="button" disabled={!selected.length} onClick={onNext}>수업 모형 선택 →</button></footer>
+        <footer className="step-actions"><button className="secondary-button" type="button" onClick={onBack}>이전</button><span>{selected.length ? `${selected.length}개 선택됨 · 모두 생성에 반영` : '성취기준을 1개 이상 선택해주세요'}</span><button type="button" disabled={!selected.length} onClick={onNext}>수업 모형 선택 →</button></footer>
     </div>;
 }

@@ -1,15 +1,16 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { recommendWorksheetFormat, worksheetFormats } from '@/lib/worksheet-formats';
+import { recommendWorksheetFormat, worksheetFormatById, worksheetFormats } from '@/lib/worksheet-formats';
 import { worksheetQuestionTypes } from '@/lib/worksheet-schema';
 import { sourceHash } from '@/lib/source-hash';
+import { downloadFilename } from '@/lib/download-filename';
 import { WorksheetEditor } from './WorksheetEditor.jsx';
-import { useOperation } from './OperationProvider.jsx';
+import { OperationBusyError, useOperation } from './OperationProvider.jsx';
 
-async function downloadWorkflowPdf(kind, value, filename, signal) {
-    const response = await fetch(`/api/export-workflow/${kind}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+async function downloadWorkflowFile(kind, format, value, filename, signal) {
+    const response = await fetch(`/api/export-workflow/${kind}?format=${format}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
     const body = response.ok ? await response.blob() : await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.message || 'PDF 저장에 실패했습니다. 편집 내용을 확인해주세요.');
+    if (!response.ok) throw new Error(body.message || '파일 저장에 실패했습니다. 편집 내용을 확인해주세요.');
     const url = URL.createObjectURL(body);
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
 }
@@ -36,10 +37,11 @@ function upgradeWorksheet(value, lessonPlan) {
 }
 
 export function WorksheetStage({ lessonPlan, value, onChange }) {
-    const { runOperation } = useOperation();
+    const { active: operationActive, runOperation } = useOperation();
     const recommended = recommendWorksheetFormat(lessonPlan.instructionModel);
     const upgradedValue = useMemo(() => upgradeWorksheet(value, lessonPlan), [value, lessonPlan]);
     const [selectedFormatId, setSelectedFormatId] = useState(value?.formatId ?? recommended.id);
+    const selectedFormat = worksheetFormatById(selectedFormatId) ?? recommended;
     const [generationRequest, setGenerationRequest] = useState(upgradedValue?.generationRequest ?? { additionalRequirements: '', questionTypes: ['descriptive'] });
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const currentSourceHash = sourceHash(lessonPlan);
@@ -62,25 +64,25 @@ export function WorksheetStage({ lessonPlan, value, onChange }) {
             if (!body) { setStatus({ type: 'idle', message: '' }); return; }
             onChange({ ...body.worksheet, sourceHash: currentSourceHash });
             setStatus({ type: 'done', message: '학습지 초안을 만들었습니다. 교사가 내용을 확인하고 수정해주세요.' });
-        } catch (error) { setStatus({ type: 'error', message: error.message || '다시 시도해주세요.' }); }
+        } catch (error) { if (!(error instanceof OperationBusyError)) setStatus({ type: 'error', message: error.message || '다시 시도해주세요.' }); }
     };
-    const download = async (kind, suffix) => {
+    const download = async (kind, suffix, format) => {
         try {
-            await runOperation({ kind: 'worksheet-export', label: `${suffix} 학습지 PDF 저장`, phase: 'serverWaiting', cancelable: true }, ({ signal }) => downloadWorkflowPdf(kind, upgradedValue, `${upgradedValue.document.title}-${suffix}.pdf`, signal));
-        } catch (error) { setStatus({ type: 'error', message: error.message }); }
+            await runOperation({ kind: 'worksheet-export', label: `${suffix} 학습지 ${format.toUpperCase()} 저장`, phase: 'serverWaiting', cancelable: true }, ({ signal }) => downloadWorkflowFile(kind, format, upgradedValue, downloadFilename(upgradedValue.document.title, suffix, format), signal));
+        } catch (error) { if (!(error instanceof OperationBusyError)) setStatus({ type: 'error', message: error.message }); }
     };
     return <section className="workflow-stage workflow-stage--wide">
         <header className="workflow-stage__header"><div><p className="eyebrow">2단계 · 학습지</p><h1>수업 흐름에 맞는 학습지를 만들어요</h1><p>수업 모형의 사고 과정과 성취기준을 학생이 직접 기록할 문항으로 구성합니다.</p></div></header>
         <section className="worksheet-request" aria-label="학습지 생성 설정">
             <div className="worksheet-request__grid">
-                <label><span>학습지 형식</span><select aria-label="학습지 형식" value={selectedFormatId} onChange={event => setSelectedFormatId(event.target.value)}>{worksheetFormats.map(format => <option key={format.id} value={format.id}>{format.name}</option>)}</select><small>추천: {recommended.name} · {recommended.guide}</small></label>
+                <div className="worksheet-format-field"><label><span>학습지 형식</span><select aria-label="학습지 형식" value={selectedFormatId} onChange={event => setSelectedFormatId(event.target.value)}>{worksheetFormats.map(format => <option key={format.id} value={format.id}>{format.name}</option>)}</select></label><section className="worksheet-format-guidance" aria-label="선택한 학습지 형식 안내" aria-live="polite"><p><strong>선택한 형식은 이렇게 써요</strong><span>{selectedFormat.easyDescription}</span></p><p><strong>현재 추천</strong><span>{recommended.name}</span></p><p><strong>추천 기준</strong><span>선택한 수업 모형과 연결해 둔 기본 형식입니다. 성취기준과 추가 요구사항은 생성 내용에 반영하지만, 현재 추천을 바꾸지는 않습니다.</span></p></section></div>
                 <label>학습지 추가 요구사항<textarea aria-label="학습지 추가 요구사항" rows="4" value={generationRequest.additionalRequirements} onChange={event => setGenerationRequest(current => ({ ...current, additionalRequirements: event.target.value }))} placeholder="예: 그래프 해석 근거 문항을 넣어 주세요."/></label>
             </div>
             <fieldset className="question-type-picker"><legend>포함할 문항 유형</legend><p>필요한 유형을 하나 이상 선택하세요. AI 생성 후에도 유형과 내용을 바꿀 수 있습니다.</p><div>{worksheetQuestionTypes.map(type => <label key={type.id}><input type="checkbox" checked={generationRequest.questionTypes.includes(type.id)} onChange={() => toggleType(type.id)}/><span>{type.label}</span></label>)}</div></fieldset>
-            <button type="button" disabled={status.type === 'loading'} onClick={generate}>{value ? '요청 내용으로 다시 생성' : '학습지 생성하기'}</button>
+            <button type="button" disabled={status.type === 'loading' || operationActive} onClick={generate}>{value ? '요청 내용으로 다시 생성' : '학습지 생성하기'}</button>
         </section>
         {stale && <p className="stale-notice" role="status"><strong>이전 지도안으로 생성됨</strong><span>지도안이 바뀌었습니다. 현재 편집본은 유지되며 다시 생성할 수 있습니다.</span></p>}
         {status.message && <p className={`status-line status-line--${status.type}`} role={status.type === 'error' ? 'alert' : 'status'}>{status.message}</p>}
-        {upgradedValue && <><div className="stage-document-head"><div><span className="status-pill">AI 초안</span><strong>{upgradedValue.formatName}</strong><p>{upgradedValue.selectionReason}</p></div><div className="stage-document-actions"><button type="button" className="secondary-button" onClick={() => download('worksheet-student', '학생용')}>학생용 PDF</button><button type="button" className="secondary-button" onClick={() => download('worksheet-teacher', '교사용-답안')}>교사용 PDF</button></div></div><WorksheetEditor value={upgradedValue} onChange={onChange}/></>}
+        {upgradedValue && <><div className="stage-document-head"><div><span className="status-pill">AI 초안</span><strong>{upgradedValue.formatName}</strong><p>{upgradedValue.selectionReason}</p></div><div className="stage-document-actions"><button type="button" className="secondary-button" disabled={operationActive} onClick={() => download('worksheet-student', '학생용', 'pdf')}>학생용 PDF</button><button type="button" className="secondary-button" disabled={operationActive} onClick={() => download('worksheet-student', '학생용', 'hwpx')}>학생용 HWPX</button><button type="button" className="secondary-button" disabled={operationActive} onClick={() => download('worksheet-teacher', '교사용-답안', 'pdf')}>교사용 PDF</button><button type="button" className="secondary-button" disabled={operationActive} onClick={() => download('worksheet-teacher', '교사용-답안', 'hwpx')}>교사용 HWPX</button></div></div><WorksheetEditor value={upgradedValue} onChange={onChange}/></>}
     </section>;
 }

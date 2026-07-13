@@ -1,9 +1,16 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { vi, test, expect } from 'vitest';
 import { StandardsStep } from '@/components/lesson-plan/StandardsStep.jsx';
 
 const basics = { schoolLevel: 'elementary', grade: '5', subject: '과학', intent: '식물의 구조와 기능을 관찰한다' };
+const middleBasics = { schoolLevel: 'middle', grade: '2', subject: '과학', intent: '빛의 성질을 탐구한다' };
+
+function StandardsSelectionHarness() {
+    const [selected, setSelected] = useState([]);
+    return <StandardsStep basics={basics} selected={selected} onChange={setSelected} onBack={() => {}} onNext={() => {}}/>;
+}
 
 function deferred() {
     let resolve;
@@ -17,6 +24,28 @@ test('searches only scoped standards and lets the teacher select one', async () 
     expect(await screen.findByText('6과11-02')).toBeInTheDocument();
     await user.click(screen.getByRole('checkbox', { name: /6과11-02/ }));
     expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ code: '6과11-02' })]);
+});
+
+test('uses the official middle-school grade-group wording instead of 7-9 grades', () => {
+    render(<StandardsStep basics={middleBasics} selected={[]} onChange={() => {}} onBack={() => {}} onNext={() => {}}/>);
+
+    expect(screen.getByText(/중학교 1~3학년군/)).toBeInTheDocument();
+    expect(screen.queryByText(/7-9학년군/)).not.toBeInTheDocument();
+});
+
+test('keeps multiple selected standards visible and states that all are used for generation', async () => {
+    const user = userEvent.setup();
+    render(<StandardsSelectionHarness/>);
+
+    const summary = screen.getByRole('status', { name: '선택한 성취기준' });
+    expect(summary).toHaveTextContent('여러 개 함께 선택');
+    await user.click(await screen.findByRole('checkbox', { name: /6과11-02/ }));
+    await user.click(screen.getByRole('checkbox', { name: /6과11-03/ }));
+
+    expect(summary).toHaveTextContent('2개를 모두 지도안 생성에 반영');
+    expect(summary).toHaveTextContent('6과11-02');
+    expect(summary).toHaveTextContent('6과11-03');
+    expect(screen.getAllByRole('button', { name: /성취기준 선택 해제/ })).toHaveLength(2);
 });
 
 test.each([

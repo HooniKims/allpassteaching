@@ -1,7 +1,8 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
-import { createEmptyWorkflow, loadWorkflow, saveWorkflow } from '@/lib/workflow-store';
+import { clearDraft } from '@/lib/draft-store';
+import { clearWorkflow, createEmptyWorkflow, loadWorkflow, saveWorkflow } from '@/lib/workflow-store';
 import { workflowProcessStatuses } from '@/lib/workflow-lineage';
 import { reviseSubmission } from '@/lib/grading-generation.js';
 import { removeStudentFromProject, replaceProjectRoster } from '@/lib/student-roster.js';
@@ -50,6 +51,10 @@ function TeachingWorkflowContent() {
     const [project, setProject] = useState(createEmptyWorkflow);
     const [hydrated, setHydrated] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
+    const [confirmNewWorkspace, setConfirmNewWorkspace] = useState(false);
+    const [storageError, setStorageError] = useState('');
+    const [lessonWorkspaceKey, setLessonWorkspaceKey] = useState(0);
+    const newWorkspaceDialogRef = useRef(null);
     useEffect(() => {
         setProject(detachRestoredSubmissionFiles(loadWorkflow() ?? createEmptyWorkflow()));
         setHydrated(true);
@@ -66,8 +71,31 @@ function TeachingWorkflowContent() {
     const prerequisite = statuses[activeProcess] === 'prerequisite' ? prerequisiteContent[activeProcess] : null;
     const clearStudentData = () => {
         submissionFiles.clear();
-        setProject(current => ({ ...current, submissions: [], records: [] }));
+        const nextProject = { ...project, submissions: [], records: [] };
+        setProject(nextProject);
         setConfirmClear(false);
+        setStorageError(saveWorkflow(nextProject) ? '' : '브라우저 저장소에 변경 내용을 저장하지 못했습니다. 브라우저의 사이트 데이터 설정을 확인한 뒤 다시 시도해주세요.');
+    };
+    useEffect(() => {
+        const dialog = newWorkspaceDialogRef.current;
+        if (!dialog) return;
+        if (confirmNewWorkspace && !dialog.open) {
+            if (typeof dialog.showModal === 'function') dialog.showModal();
+            else dialog.setAttribute('open', '');
+        } else if (!confirmNewWorkspace && dialog.open) {
+            if (typeof dialog.close === 'function') dialog.close();
+            else dialog.removeAttribute('open');
+        }
+    }, [confirmNewWorkspace]);
+    const startNewWorkspace = () => {
+        submissionFiles.clear();
+        const draftCleared = clearDraft();
+        const workflowCleared = clearWorkflow();
+        const storageCleared = draftCleared && workflowCleared;
+        setProject(createEmptyWorkflow());
+        setLessonWorkspaceKey(current => current + 1);
+        setConfirmNewWorkspace(false);
+        setStorageError(storageCleared ? '' : '브라우저 저장소를 완전히 지우지 못했습니다. 브라우저의 사이트 데이터 설정을 확인한 뒤 다시 시도해주세요.');
     };
     const updateSubmissions = useCallback(updater => setProject(current => {
         const submissions = typeof updater === 'function' ? updater(current.submissions) : updater;
@@ -80,12 +108,19 @@ function TeachingWorkflowContent() {
         const submissionIds = [];
         for (const item of project.submissions) if (item.studentId === studentId) submissionIds.push(item.id);
         submissionFiles.removeMany(submissionIds);
-        setProject(current => removeStudentFromProject(current, studentId));
-    }, [project.submissions, submissionFiles]);
+        const nextProject = removeStudentFromProject(project, studentId);
+        setProject(nextProject);
+        setStorageError(saveWorkflow(nextProject) ? '' : '브라우저 저장소에 변경 내용을 저장하지 못했습니다. 브라우저의 사이트 데이터 설정을 확인한 뒤 다시 시도해주세요.');
+    }, [project, submissionFiles]);
     return <div className="teaching-workflow">
         <ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/>
+        <div className="workflow-toolbar"><p>현재 작업은 이 브라우저의 로컬 저장소에 저장됩니다. 공용 기기에서는 <span className="nowrap">새 작업 시작</span>으로 지워주세요.</p>{storageError && <p className="form-alert" role="alert">{storageError}</p>}<button type="button" className="secondary-button" onClick={() => { setStorageError(''); setConfirmNewWorkspace(true); }}>새 작업 시작</button></div>
+        <dialog ref={newWorkspaceDialogRef} className="workspace-reset-dialog" role="alertdialog" aria-labelledby="new-workspace-title" onCancel={event => { event.preventDefault(); setConfirmNewWorkspace(false); }}>
+            <h2 id="new-workspace-title">새 작업 시작 확인</h2><p>현재 지도안, 학습지, 수행평가, 학생 명단과 채점·세특 기록을 모두 지웁니다. 이 작업은 되돌릴 수 없습니다.</p>
+            <div><button type="button" className="secondary-button" autoFocus onClick={() => setConfirmNewWorkspace(false)}>취소</button><button type="button" className="danger-button" onClick={startNewWorkspace}>모든 작업 지우고 새로 시작</button></div>
+        </dialog>
         {activeProcess === 'lesson'
-            ? <div id="process-panel-lesson" role="tabpanel" aria-labelledby="process-tab-lesson"><LessonPlanWorkspace onDraftChange={onLessonDraftChange}/></div>
+            ? <div id="process-panel-lesson" role="tabpanel" aria-labelledby="process-tab-lesson"><LessonPlanWorkspace key={lessonWorkspaceKey} onDraftChange={onLessonDraftChange}/></div>
             : <main className="workflow-stage-shell" aria-label={`${activeProcessLabel} 작업 영역`}>
                 <div id={`process-panel-${activeProcess}`} role="tabpanel" aria-labelledby={`process-tab-${activeProcess}`}>
                     {prerequisite
@@ -102,7 +137,7 @@ function TeachingWorkflowContent() {
                     }
                 </div>
                 {(activeProcess === 'grading' || activeProcess === 'records') && <aside className="privacy-panel" aria-label="학생 자료 보관 안내">
-                    <p><strong>학생 자료 보호</strong><br/>PDF 원본은 저장하지 않습니다. <span className="nowrap">학생 이름·OCR·채점·세특은</span> 현재 탭에만 임시 보관되어 <span className="nowrap">새로고침 후 복구되고</span>, <span className="nowrap">탭을 닫으면 사라집니다.</span></p>
+                    <p><strong>학생 자료 보호</strong><br/>PDF 원본은 저장하지 않습니다. <span className="nowrap">학생 이름·OCR·채점·세특은</span> 이 브라우저의 로컬 저장소에 보관됩니다. 공용 기기에서는 <span className="nowrap">새 작업 시작</span>으로 지워주세요.</p>
                     {!confirmClear && <button type="button" className="danger-button" onClick={() => setConfirmClear(true)}>학생 제출·채점·세특 모두 지우기</button>}
                     {confirmClear && <div className="privacy-panel__confirm" role="alert"><span>PDF 연결, OCR, 채점, 세특을 모두 삭제할까요? 공용 학생 명단은 유지됩니다.</span><button type="button" className="danger-button" onClick={clearStudentData}>제출·채점·세특 삭제 확인</button><button type="button" className="secondary-button" onClick={() => setConfirmClear(false)}>취소</button></div>}
                 </aside>}

@@ -19,9 +19,32 @@ function reconcileTeacherOwnedFields(value, lessonPlan, assessmentRequest) {
             answerTypes: assessmentRequest.answerTypes,
             stages: assessmentRequest.stages,
             additionalRequirements: assessmentRequest.additionalRequirements,
+            assessmentApproachId: assessmentRequest.assessmentApproachId,
         },
         task: { ...value?.task, standards: lessonPlan.standards, product: assessmentRequest.outputTypes.join(', ') },
         cover: { ...value?.cover, title: `${assessmentRequest.assessmentName} 안내` },
+    };
+}
+
+function reconcileEvidenceMap(value) {
+    const standards = value?.task?.standards;
+    const criteria = value?.rubric?.criteria;
+    if (!Array.isArray(standards) || !Array.isArray(criteria)) return value;
+    return {
+        ...value,
+        backwardDesign: {
+            ...value?.backwardDesign,
+            evidenceMap: standards.map(standard => {
+                const linkedCriteria = criteria.filter(criterion => Array.isArray(criterion?.standardCodes) && criterion.standardCodes.includes(standard.code));
+                return {
+                    standardCode: standard.code,
+                    criterionIds: linkedCriteria.map(criterion => criterion.id),
+                    taskEvidenceTypes: [...new Set(linkedCriteria.map(criterion => criterion.evidence))],
+                    evidenceTypes: ['결과 증거', '과정 증거'].filter(type => linkedCriteria.some(criterion => (criterion.kind === 'process' ? '과정 증거' : '결과 증거') === type)),
+                    scoreBasis: `${linkedCriteria.map(criterion => `${criterion.name} ${criterion.maxPoints}점`).join(', ')} · 수준별 정의 점수`,
+                };
+            }),
+        },
     };
 }
 
@@ -42,7 +65,8 @@ function teacherContractIssues(assessment, assessmentRequest) {
 function parseAssessment(content, lessonPlan, assessmentRequest) {
     try {
         const rawValue = JSON.parse(content);
-        const value = reconcileTeacherOwnedFields(rawValue, lessonPlan, assessmentRequest);
+        const teacherOwnedValue = reconcileTeacherOwnedFields(rawValue, lessonPlan, assessmentRequest);
+        const value = reconcileEvidenceMap(teacherOwnedValue);
         const parsed = assessmentOutputSchema.safeParse(value);
         if (!parsed.success) return { success: false, value, issues: parsed.error.issues };
         if (JSON.stringify(parsed.data.backwardDesign.teacherIntent) !== JSON.stringify(assessmentRequest.teacherIntent)) return { success: false, value, issues: [{ path: ['backwardDesign', 'teacherIntent'], message: '교사가 입력한 도착점과 증거 질문을 정확히 보존해야 합니다.' }] };

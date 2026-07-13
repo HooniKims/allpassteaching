@@ -36,5 +36,13 @@
     "jsdom": "29.1.1",
     "vite-tsconfig-paths": "6.1.1",
     "vitest": "4.1.10"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "next": {
+      "postcss": "8.5.10"
+    }
   }
 }

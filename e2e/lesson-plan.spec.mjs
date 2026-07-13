@@ -99,6 +99,8 @@ async function completeBasics(page, { multi = false } = {}) {
     await page.locator('body').press('Tab');
     await expect(page.getByRole('tab', { name: /지도안/ })).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: '새 작업 시작' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: '수업 정보 단계로 이동' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('학교급')).toBeFocused();
@@ -196,7 +198,7 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
 
     // Then 편집값·접근성·반응형·인쇄 계약이 모두 유지된다
     await expect.poll(() => page.evaluate(() => {
-        const saved = JSON.parse(sessionStorage.getItem('allpass.lesson-plan') || 'null')?.data;
+        const saved = JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data;
         return {
             assessmentMethod: saved?.plan?.assessment?.[0]?.method,
             editedPlace: saved?.plan?.metadata?.place,
@@ -325,7 +327,7 @@ test('재생성 실패 후 기존 편집 지도안을 보존한다', async ({ pa
     await expect(page.getByText('잠시 후 다시 시도해주세요.')).toBeVisible();
     await expect(page.getByLabel('1차시 수업 제목')).toHaveValue(editedValues.lessonTitle);
     await expect.poll(() => page.evaluate(() => {
-        const saved = JSON.parse(sessionStorage.getItem('allpass.lesson-plan') || 'null')?.data;
+        const saved = JSON.parse(localStorage.getItem('allpass.lesson-plan') || 'null')?.data;
         return { edited: saved?.plan?.title, original: saved?.originalPlan?.title };
     })).toEqual({ edited: editedValues.lessonTitle, original: '식물의 구조와 기능' });
 });

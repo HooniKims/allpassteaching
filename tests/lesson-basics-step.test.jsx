@@ -8,6 +8,7 @@ import { generationDraft, makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 
 afterEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
     window.sessionStorage.clear();
 });
 
@@ -31,6 +32,21 @@ test('switches to a three-session lesson', async () => {
     const sessions = screen.getByLabelText('차시 수');
     await user.clear(sessions); await user.type(sessions, '3');
     expect(sessions).toHaveValue(3);
+});
+
+test('defaults a new lesson draft to middle school', () => {
+    render(<LessonPlanWorkspace />);
+
+    expect(screen.getByLabelText('학교급')).toHaveValue('middle');
+});
+
+test('saves edited lesson basics to local storage', async () => {
+    const user = userEvent.setup();
+    render(<LessonPlanWorkspace />);
+
+    await user.type(screen.getByLabelText('수업할 개념 및 내용'), '로컬 저장 확인 수업');
+
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('allpass.lesson-plan')).data.basics.intent).toBe('로컬 저장 확인 수업'));
 });
 
 test('does not advance without required lesson information', async () => {
@@ -149,7 +165,7 @@ test('생성 성공 시 원본을 별도로 저장하고 이후 편집은 현재
     await user.type(title, '교사 편집 제목');
 
     await waitFor(() => {
-        const saved = JSON.parse(window.sessionStorage.getItem('allpass.lesson-plan')).data;
+        const saved = JSON.parse(window.localStorage.getItem('allpass.lesson-plan')).data;
         expect(saved.plan.title).toBe('교사 편집 제목');
         expect(saved.originalPlan.title).toBe('AI 생성 원본');
         expect(saved.originalPlan.sessions[0].stages[0].teacherQuestions[0]).toBe('AI 생성 원본 발문');

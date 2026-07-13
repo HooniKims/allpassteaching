@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { loadDraft, saveDraft } from '@/lib/draft-store';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/draft-store';
 import { StepNavigation } from './StepNavigation.jsx';
 import { LessonBasicsStep } from './LessonBasicsStep.jsx';
 import { StandardsStep } from './StandardsStep.jsx';
@@ -11,8 +11,15 @@ import { GenerationSummary } from './GenerationSummary.jsx';
 import { createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
-const emptyBasics = { schoolLevel: '', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
+const emptyBasics = { schoolLevel: 'middle', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
 const emptyDraft = { step: 1, maxReached: 1, basics: emptyBasics, standards: [] };
+function hasDraftContent(draft) {
+    const basics = draft.basics ?? {};
+    return Boolean(draft.plan || draft.instructionModel || draft.standards?.length || draft.step > 1 || draft.maxReached > 1
+        || basics.schoolLevel !== 'middle' || basics.grade || basics.subject || basics.displaySubject || basics.mappedSubjects?.length
+        || basics.mode === 'multi' || basics.sessions !== 1 || basics.intent?.trim() || basics.studentNeeds?.trim()
+        || Object.values(normalizeLessonMetadata(basics.metadata)).some(Boolean));
+}
 
 export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
     const { runOperation } = useOperation();
@@ -30,7 +37,12 @@ export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
         } : emptyDraft);
         setReady(true);
     }, []);
-    useEffect(() => { if (!ready) return; const timer = setTimeout(() => saveDraft(draft), 300); return () => clearTimeout(timer); }, [draft, ready]);
+    useEffect(() => {
+        if (!ready) return;
+        if (!hasDraftContent(draft)) { clearDraft(); return; }
+        const timer = setTimeout(() => saveDraft(draft), 300);
+        return () => clearTimeout(timer);
+    }, [draft, ready]);
     useEffect(() => { if (ready) onDraftChange(draft); }, [draft, onDraftChange, ready]);
     useEffect(() => () => { activeGeneration.current?.abort(); activeGeneration.current = null; }, []);
     const cancelGeneration = () => {
@@ -89,6 +101,6 @@ export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
         {draft.step === 1 && <LessonBasicsStep value={draft.basics} onChange={updateBasics} onNext={() => advanceTo(2)}/>}
         {draft.step === 2 && <StandardsStep basics={draft.basics} selected={draft.standards || []} onChange={standards => setDraft(current => ({ ...current, standards }))} onBack={() => goToStep(1)} onNext={() => advanceTo(3)}/>}
         {draft.step === 3 && <InstructionModelStep lessonIntent={draft.basics.intent} selected={draft.instructionModel} onChange={instructionModel => setDraft(current => ({ ...current, instructionModel }))} onBack={() => goToStep(2)} onNext={() => advanceTo(4)}/>}
-        {draft.step === 4 && <div>{!draft.plan && <><p className="eyebrow">4단계 · 지도안 완성</p><h1>지도안을 생성할 준비가 됐어요</h1><p>선택한 성취기준과 수업 모형을 바탕으로 초안을 만듭니다.</p><GenerationStatus {...generation}/><div className="step-actions"><button type="button" className="secondary-button" onClick={() => goToStep(3)}>이전</button><button type="button" disabled={generation.status === 'loading'} onClick={generatePlan}>지도안 생성하기</button></div></>}{draft.plan && <><GenerationSummary draft={draft} changed={changed} loading={generation.status === 'loading'} onEdit={() => goToStep(1)} onRegenerate={generatePlan}/><GenerationStatus {...generation}/><LessonPlanEditor plan={draft.plan} originalPlan={draft.originalPlan} onChange={plan => setDraft(current => ({ ...current, plan }))}/></>}</div>}
+        {draft.step === 4 && <div>{!draft.plan && <><p className="eyebrow">4단계 · 지도안 완성</p><h1>지도안을 생성할 준비가 됐어요</h1><p>선택한 모든 성취기준과 수업 모형을 바탕으로 초안을 만듭니다.</p><GenerationStatus {...generation}/><div className="step-actions"><button type="button" className="secondary-button" onClick={() => goToStep(3)}>이전</button><button type="button" disabled={generation.status === 'loading'} onClick={generatePlan}>지도안 생성하기</button></div></>}{draft.plan && <><GenerationSummary draft={draft} changed={changed} loading={generation.status === 'loading'} onEdit={() => goToStep(1)} onRegenerate={generatePlan}/><GenerationStatus {...generation}/><LessonPlanEditor plan={draft.plan} originalPlan={draft.originalPlan} onChange={plan => setDraft(current => ({ ...current, plan }))}/></>}</div>}
     </section></main>;
 }

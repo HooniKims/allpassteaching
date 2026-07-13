@@ -24,15 +24,33 @@ const request = {
     additionalRequirements: '',
 };
 
-test('백워드 설계의 세 질문을 정확히 보여주고 첫 질문 전에는 제안과 생성을 막는다', () => {
+test('평가 방식과 세 질문을 보여주고 첫 질문 전에는 제안과 생성을 막는다', () => {
     render(<AssessmentStage lessonPlan={makeGeneratedPlan()} value={null} request={{ ...request, teacherIntent: { desiredResult: '', evidenceOfSuccess: '', growthProcess: '' } }} onRequestChange={() => {}} onChange={() => {}}/>);
 
-    expect(screen.getByRole('heading', { name: '평가의 도착점을 먼저 정해볼까요?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '어떤 방식으로 학생의 배움을 확인할까요?' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '평가 설계 방식' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /백워드 설계/ })).toBeChecked();
     expect(screen.getByLabelText('이 평가를 마친 학생이 무엇을 이해하고, 스스로 해낼 수 있길 바라나요?')).toBeRequired();
     expect(screen.getByLabelText('학생이 무엇을 보여주면 목표를 이뤘다고 판단할 수 있나요?')).toBeInTheDocument();
     expect(screen.getByLabelText('학생이 시도하고, 피드백을 받아 고쳐나가는 과정에서 무엇을 확인하고 싶나요?')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '백워드 설계 AI 초안 제안' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '평가 설계 AI 초안 제안' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '수행평가 생성하기' })).toBeDisabled();
+});
+
+test('교사가 평가 설계 방식을 바꾸면 다음 생성 요청에 보존한다', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+        const [currentRequest, setCurrentRequest] = useState(request);
+        return <><output data-testid="approach">{currentRequest.assessmentApproachId ?? 'backward-design'}</output><AssessmentStage lessonPlan={makeGeneratedPlan()} value={null} request={currentRequest} onRequestChange={setCurrentRequest} onChange={() => {}}/></>;
+    }
+
+    render(<Harness/>);
+    await user.click(screen.getByRole('radio', { name: /포트폴리오 성장 평가/ }));
+
+    expect(screen.getByTestId('approach')).toHaveTextContent('portfolio-growth');
+    const guide = screen.getAllByRole('status').at(-1);
+    expect(guide).toHaveTextContent('쉽게 말하면, 한 번의 결과만 보지 않고 초안부터 수정본까지 학생이 어떻게 달라졌는지 함께 보는 평가예요.');
+    expect(guide).toHaveTextContent('초기 산출물 → 피드백 → 수정본 → 성찰');
 });
 
 test('generates a performance assessment from the lesson source and teacher request', async () => {
@@ -407,4 +425,33 @@ test('표지 PDF가 한 페이지를 넘으면 서버의 구체적인 수정 안
 
     expect(await screen.findByRole('alert')).toHaveTextContent('표지 문구를 줄여주세요');
     expect(screen.getByLabelText('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
+});
+
+test('교사가 고친 루브릭을 네 가지 형식으로 내려받을 수 있다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const createObjectURL = vi.fn(() => 'blob:rubric');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Blob(['rubric']))));
+    function Harness() {
+        const [assessment, setAssessment] = useState({ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false });
+        return <AssessmentStage lessonPlan={lessonPlan} value={assessment} request={request} onRequestChange={() => {}} onChange={setAssessment}/>;
+    }
+    render(<Harness/>);
+
+    const name = screen.getAllByLabelText('영역명')[0];
+    await user.clear(name);
+    await user.type(name, '교사가 고친 관찰 근거');
+    expect(screen.getByRole('group', { name: '루브릭 다운로드' })).toBeInTheDocument();
+    for (const format of ['PDF', 'HWPX', 'DOCX', 'Excel']) expect(screen.getByRole('button', { name: `루브릭 ${format} 저장` })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: '루브릭 HWPX 저장' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/export-rubric/hwpx', expect.objectContaining({
+        body: expect.stringContaining('교사가 고친 관찰 근거'),
+    })));
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:rubric');
+    expect(click).toHaveBeenCalled();
 });

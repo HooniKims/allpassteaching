@@ -6,13 +6,17 @@ import { makeAssessment, makeWorksheet } from './fixtures/workflow.mjs';
 
 async function pageTexts(bytes) {
     const document = await getDocument({ data: Uint8Array.from(bytes), disableWorker: true }).promise;
-    const pages = [];
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-        const page = await document.getPage(pageNumber);
-        const content = await page.getTextContent();
-        pages.push(content.items.map(item => item.str).join(' '));
+    try {
+        const pages = [];
+        for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+            const page = await document.getPage(pageNumber);
+            const content = await page.getTextContent();
+            pages.push(content.items.map(item => item.str).join(' '));
+        }
+        return pages;
+    } finally {
+        await document.destroy();
     }
-    return pages;
 }
 
 function expectResponseBoxGap(events, questionId, promptText) {
@@ -87,6 +91,8 @@ test('학생 표지 루브릭은 평가영역 행과 성취수준 열을 가진 
     expect(pdf.getPageCount()).toBe(1);
     expect(table).toMatchObject({ rowCount: assessment.rubric.criteria.length + 1, columnCount: assessment.rubric.levels.length + 1 });
     expect(cells).toHaveLength(table.rowCount * table.columnCount);
+    expect(cells.filter(cell => cell.rowIndex === 0).every(cell => cell.backgroundColor === 'tint')).toBe(true);
+    expect(cells.filter(cell => cell.rowIndex > 0).every(cell => cell.backgroundColor === 'paper')).toBe(true);
     for (const [criterionIndex, criterion] of assessment.rubric.criteria.entries()) {
         for (const [levelIndex, level] of assessment.rubric.levels.entries()) {
             expect(cells).toContainEqual(expect.objectContaining({
@@ -167,10 +173,12 @@ test('Given a full mixed worksheet When PDF pages break Then no page contains on
     }));
 
     const studentEvents = [];
-    const [studentPages, teacherPages] = await Promise.all([
-        buildWorkflowPdf('worksheet-student', worksheet, { onDraw: event => studentEvents.push(event) }).then(pageTexts),
-        buildWorkflowPdf('worksheet-teacher', worksheet).then(pageTexts),
+    const [studentBytes, teacherBytes] = await Promise.all([
+        buildWorkflowPdf('worksheet-student', worksheet, { onDraw: event => studentEvents.push(event) }),
+        buildWorkflowPdf('worksheet-teacher', worksheet),
     ]);
+    const studentPages = await pageTexts(studentBytes);
+    const teacherPages = await pageTexts(teacherBytes);
     const teacherStart = teacherPages.findIndex(page => page.includes('교사용 예시 답안'));
 
     expect(studentPages.every(page => page.trim().length > 0)).toBe(true);
@@ -307,4 +315,14 @@ test('학생 표지 PDF는 교사가 정한 섹션 순서·라벨·내용과 모
     expect(texts).toContain('교사가 덧붙인 과목 설명');
     expect(text).toContain('모든 기관을 구체적으로 기록함');
     expect(text).toContain('관찰 기록이 매우 제한적임');
+});
+
+test('repeats the rubric criterion context when its levels continue on a new page', async () => {
+    const assessment = makeAssessment();
+    assessment.rubric.criteria[0].description = '관찰 근거를 구체적으로 설명한다. '.repeat(180);
+    const events = [];
+
+    await buildWorkflowPdf('assessment-rubric', assessment, { onDraw: event => events.push(event) });
+
+    expect(events.map(event => event.text)).toContain('1. 관찰 근거 · 계속');
 });

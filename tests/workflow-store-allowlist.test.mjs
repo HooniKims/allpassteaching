@@ -52,24 +52,24 @@ function fullWorkflow() {
     };
 }
 
-test('version 3 allowlist round-trips every workflow subtree the current app consumes', () => {
+test('version 4 allowlist round-trips every workflow subtree the current app consumes', () => {
     const project = fullWorkflow();
 
     saveWorkflow(project);
 
     expect(loadWorkflow()).toEqual(project);
-    expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY)).version).toBe(WORKFLOW_VERSION);
-    expect(WORKFLOW_VERSION).toBe(3);
+    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).version).toBe(WORKFLOW_VERSION);
+    expect(WORKFLOW_VERSION).toBe(4);
 });
 
-test('an already-clean full version 2 project migrates to version 3 without changing any allowed data', () => {
+test('an already-clean full version 2 project migrates to version 4 without changing any allowed data', () => {
     const project = fullWorkflow();
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
 
     const loaded = loadWorkflow();
 
     expect(loaded).toEqual(project);
-    expect(JSON.parse(window.sessionStorage.getItem(WORKFLOW_KEY))).toMatchObject({ version: 3, data: project });
+    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY))).toMatchObject({ version: 4, data: project });
 });
 
 test('worksheet authoring metadata and all ten question variants survive the private workflow allowlist', () => {
@@ -143,7 +143,7 @@ test('renamed sensitive fields and runtime-like objects are dropped at arbitrary
     project.records[0].runtimeHandle = { toJSON: () => ({ provider: 'secret record payload' }) };
 
     saveWorkflow(project);
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
     const forbiddenValues = ['thumbnailObjectUrl', 'originalBase64', 'previewAsset', 'rawResponse', 'binaryCache', 'unknownBinary', 'runtimeHandle', 'opaqueBuffer', 'secret worksheet payload', 'secret assessment payload', 'secret grading payload', 'secret record payload'];
 
     for (const forbidden of forbiddenValues) expect(raw).not.toContain(forbidden);
@@ -153,7 +153,7 @@ test('renamed sensitive fields and runtime-like objects are dropped at arbitrary
 
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
     expect(loadWorkflow()).toEqual(expected);
-    const cleanedRaw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const cleanedRaw = window.localStorage.getItem(WORKFLOW_KEY);
     for (const forbidden of [...forbiddenValues, 'JVBERi0xLjQ=', 'cHJpdmF0ZSBzdWJtaXNzaW9u']) expect(cleanedRaw).not.toContain(forbidden);
 });
 
@@ -164,7 +164,7 @@ test('object URLs and non-text binary values are rejected under otherwise allowe
     project.submissions[0].grading.criteria[0].feedback = new Uint8Array([1, 2, 3]);
 
     saveWorkflow(project);
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
 
     expect(raw).not.toContain('blob:http://localhost/renamed');
     expect(raw).not.toContain('data:application/pdf;base64');
@@ -189,7 +189,7 @@ test('safe student evidence metadata round-trips while runtime document fields r
 
     saveWorkflow(project);
     const loaded = loadWorkflow();
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
 
     expect(loaded.submissions[0]).toMatchObject({
         packetPages: [1, 2, 3], answerPages: [2, 3], ocrMode: 'enhanced', elementsTruncated: false,
@@ -208,7 +208,7 @@ test('forbidden values are dropped even when injected into every allowed value c
     project.submissions[0].elements = [new ArrayBuffer(8)];
 
     saveWorkflow(project);
-    const raw = window.sessionStorage.getItem(WORKFLOW_KEY);
+    const raw = window.localStorage.getItem(WORKFLOW_KEY);
 
     for (const forbidden of ['assessment.pdf', 'cHJpdmF0ZQ==', 'AbortController', 'ArrayBuffer', '"0":60']) expect(raw).not.toContain(forbidden);
 });

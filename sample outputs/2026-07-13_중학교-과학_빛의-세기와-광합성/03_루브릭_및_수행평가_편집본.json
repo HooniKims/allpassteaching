@@ -1,0 +1,365 @@
+{
+  "assessmentName": "빛 환경에 따른 학교 화단 식물 관리 제안서",
+  "subject": "과학",
+  "backwardDesign": {
+    "teacherIntent": {
+      "desiredResult": "학생이 빛의 세기와 광합성의 관계를 관찰 자료에 근거하여 설명하고, 학교 화단 식물의 빛 환경을 개선하는 실현 가능한 제안을 만들길 바랍니다.",
+      "evidenceOfSuccess": "빛 조건별 관찰 자료를 표나 그래프로 제시하고, 광합성 원리와 연결해 식물 관리 방안을 근거와 함께 설명하는 제안서를 완성합니다.",
+      "growthProcess": "초안에서 관찰 자료와 결론의 연결을 점검하고, 동료 피드백을 반영해 근거와 제안을 더 분명하게 고치는 과정을 확인하고 싶습니다."
+    },
+    "transferGoal": "새로운 맥락에서도 스스로 적용할 장기 전이 목표",
+    "enduringUnderstanding": "평가 뒤에도 남아야 할 핵심 이해",
+    "essentialQuestions": [
+      "빛의 세기가 광합성 속도에 어떤 영향을 미칠까?"
+    ],
+    "knowledge": [
+      "광합성 과정",
+      "빛의 세기와 광합성 관계",
+      "환경 요인 탐구"
+    ],
+    "skills": [
+      "관찰 자료 수집 및 정리",
+      "가설 설정 및 검증",
+      "근거 기반 제안 작성",
+      "피드백 반영 및 수정"
+    ],
+    "evidenceMap": [
+      {
+        "standardCode": "9과12-01",
+        "taskEvidenceTypes": [
+          "빛의 세기별 기포 수 3회 측정값, 평균값, 표와 그래프",
+          "기포 수 자료를 근거로 한 빛의 세기와 광합성 정도의 관계 설명",
+          "학교 화단의 식물 위치·차광·조명에 관한 구체적 관리 제안과 근거",
+          "초안, 동료 피드백 표시, 수정본, 수정 이유"
+        ],
+        "criterionIds": [
+          "observation-data",
+          "photosynthesis-explanation",
+          "management-proposal",
+          "feedback-revision"
+        ],
+        "evidenceTypes": [
+          "결과 증거",
+          "과정 증거"
+        ],
+        "scoreBasis": "관찰 자료의 정확한 정리 20점, 광합성 관계의 과학적 해석 30점, 식물 관리 방안의 타당성 30점, 피드백 반영 과정 20점 · 수준별 정의 점수"
+      }
+    ],
+    "checkpoints": [
+      {
+        "id": "checkpoint-feedback",
+        "phase": "feedback",
+        "title": "초안 피드백",
+        "evidence": "초안과 피드백 표시",
+        "feedbackPurpose": "근거를 보완하도록 피드백함",
+        "order": 1
+      },
+      {
+        "id": "checkpoint-revision",
+        "phase": "revision",
+        "title": "수정본",
+        "evidence": "수정 표시와 이유",
+        "feedbackPurpose": "피드백을 반영해 수정함",
+        "order": 2
+      }
+    ],
+    "supportPlan": [
+      {
+        "id": "support-1",
+        "order": 1,
+        "title": "수행 준비",
+        "purpose": "목표 증거를 준비함",
+        "teacherAction": "필요한 발판과 피드백을 제공함",
+        "studentEvidence": "지원 뒤 달라진 수행 증거"
+      }
+    ],
+    "alignmentIssues": []
+  },
+  "task": {
+    "title": "빛 환경에 따른 학교 화단 식물 관리 제안서",
+    "standards": [
+      {
+        "code": "9과12-01",
+        "text": "광합성 과정을 이해하고, 환경 요인과 광합성의 관계를 탐구하는 실험을 설계할 수 있다."
+      }
+    ],
+    "situation": "학교 화단 관리단이 식물 구역의 빛 환경을 개선해야 합니다. 과학실에서 얻은 수초 광합성 실험 자료를 바탕으로 관리가 필요한 식물 구역을 위한 제안서를 작성합니다.",
+    "role": "학교 화단 식물 관리단의 과학 탐구 담당자",
+    "audience": "학교 화단 관리 담당 교사와 학급 친구",
+    "product": "빛 환경 관찰 자료와 관리 방안이 담긴 식물 관리 제안서 및 2분 발표 자료",
+    "procedure": [
+      "1. 학교 화단의 빛 환경을 관찰하고 기록한다.",
+      "2. 관찰 자료를 바탕으로 식물의 위치나 차광·조명 방안을 제안한다.",
+      "3. 제안서를 작성하고, 동료 피드백을 받아 수정한다.",
+      "4. 최종 제안서를 제출한다."
+    ],
+    "conditions": [
+      "빛의 세기별 관찰값을 표와 그래프로 제시한다.",
+      "광합성 원리와 관찰 자료를 근거로 관리 방안을 설명한다.",
+      "제안 대상과 실행 방법을 구체적으로 쓴다."
+    ],
+    "materials": [
+      "수초 광합성 실험 기록",
+      "빛의 세기별 기포 수 관찰 자료",
+      "그래프 작성 도구",
+      "학교 화단 사진 또는 배치도"
+    ],
+    "cautions": [
+      "관찰하지 않은 결과를 사실처럼 쓰지 않는다.",
+      "식물 관리 방안은 학교에서 실현 가능한 범위로 제안한다."
+    ]
+  },
+  "cover": {
+    "title": "빛 환경에 따른 학교 화단 식물 관리 제안",
+    "sections": [
+      {
+        "id": "cover-subject",
+        "type": "subject",
+        "label": "과목",
+        "content": "과학",
+        "visible": true,
+        "order": 1
+      },
+      {
+        "id": "cover-transfer",
+        "type": "transfer-goal",
+        "label": "전이 목표",
+        "content": "새로운 맥락에서도 스스로 적용할 장기 전이 목표",
+        "visible": true,
+        "order": 2
+      },
+      {
+        "id": "cover-standards",
+        "type": "standards",
+        "label": "성취기준",
+        "content": "광합성 과정을 이해하고, 환경 요인과 광합성의 관계를 탐구하는 실험을 설계할 수 있다.",
+        "visible": true,
+        "order": 3
+      },
+      {
+        "id": "cover-grasps",
+        "type": "grasps",
+        "label": "수행과제 맥락",
+        "content": "학생이 학교 화단 관리단의 일원이라는 역할을 맡아, 빛 환경 관찰 자료를 바탕으로 식물의 위치나 차광·조명 방안을 제안하게 합니다.",
+        "visible": true,
+        "order": 4
+      },
+      {
+        "id": "cover-submission",
+        "type": "submission",
+        "label": "제출 안내",
+        "content": "제출 기한: 2026년 7월 20일, 제출 형식: 제안서(1~2페이지)와 발표 자료(PPT 5~10장)",
+        "visible": true,
+        "order": 5
+      },
+      {
+        "id": "cover-checkpoints",
+        "type": "checkpoints",
+        "label": "수행 과정",
+        "content": "초안 작성 → 동료 피드백 → 수정본 제출",
+        "visible": true,
+        "order": 6
+      },
+      {
+        "id": "cover-rubric",
+        "type": "rubric",
+        "label": "평가 기준",
+        "content": "학생이 이해하기 쉬운 루브릭 표를 포함합니다.",
+        "visible": true,
+        "order": 7
+      },
+      {
+        "id": "cover-self-checklist",
+        "type": "self-checklist",
+        "label": "제출 전 확인",
+        "content": "성취기준에 맞는 증거를 제시했는가?",
+        "visible": true,
+        "order": 8
+      }
+    ]
+  },
+  "rubric": {
+    "levels": [
+      {
+        "id": "excellent",
+        "label": "매우 충실"
+      },
+      {
+        "id": "proficient",
+        "label": "충실"
+      },
+      {
+        "id": "developing",
+        "label": "보완 필요"
+      },
+      {
+        "id": "beginning",
+        "label": "기초"
+      }
+    ],
+    "criteria": [
+      {
+        "id": "observation-data",
+        "name": "관찰 자료의 정확한 정리",
+        "description": "빛의 세기별 수초 기포 수 관찰 결과를 반복 측정해 표와 그래프로 명확하게 정리한다.",
+        "standardCodes": [
+          "9과12-01"
+        ],
+        "kind": "outcome",
+        "maxPoints": 20,
+        "intervalPoints": 5,
+        "evidence": "빛의 세기별 기포 수 3회 측정값, 평균값, 표와 그래프",
+        "levels": [
+          {
+            "levelId": "excellent",
+            "score": 20,
+            "description": "세 조건의 기포 수를 3회 이상 정확히 기록하고, 평균값이 있는 표와 축·단위가 분명한 그래프를 완성했다."
+          },
+          {
+            "levelId": "proficient",
+            "score": 15,
+            "description": "세 조건의 기포 수를 기록하고, 평균값 또는 표·그래프를 대체로 정확하게 정리했다."
+          },
+          {
+            "levelId": "developing",
+            "score": 10,
+            "description": "일부 조건의 관찰값이나 표·그래프가 빠졌으나, 빛의 세기별 차이를 확인할 수 있게 정리했다."
+          },
+          {
+            "levelId": "beginning",
+            "score": 5,
+            "description": "관찰값 기록 또는 표·그래프가 부족해 조건별 차이를 확인하기 어렵다."
+          }
+        ]
+      },
+      {
+        "id": "photosynthesis-explanation",
+        "name": "광합성 관계의 과학적 해석",
+        "description": "관찰 자료를 근거로 빛의 세기와 광합성 정도의 관계를 과학 개념과 연결해 설명한다.",
+        "standardCodes": [
+          "9과12-01"
+        ],
+        "kind": "outcome",
+        "maxPoints": 30,
+        "intervalPoints": 8,
+        "evidence": "기포 수 자료를 근거로 한 빛의 세기와 광합성 정도의 관계 설명",
+        "levels": [
+          {
+            "levelId": "excellent",
+            "score": 30,
+            "description": "기포 수 자료를 두 가지 이상 인용해 빛의 세기와 광합성 정도의 관계를 정확히 설명하고, 자료의 한계도 언급했다."
+          },
+          {
+            "levelId": "proficient",
+            "score": 22,
+            "description": "기포 수 자료를 근거로 빛의 세기와 광합성 정도의 관계를 대체로 정확히 설명했다."
+          },
+          {
+            "levelId": "developing",
+            "score": 14,
+            "description": "빛의 세기와 광합성의 관계는 설명했으나, 관찰 자료와의 연결 또는 과학 개념 설명이 부족하다."
+          },
+          {
+            "levelId": "beginning",
+            "score": 6,
+            "description": "관찰 자료를 근거로 관계를 설명하지 못했거나, 광합성 개념에 중요한 오류가 있다."
+          }
+        ]
+      },
+      {
+        "id": "management-proposal",
+        "name": "식물 관리 방안의 타당성",
+        "description": "관찰 자료와 광합성 원리를 바탕으로 학교 화단의 빛 환경을 개선하는 실현 가능한 방안을 제안한다.",
+        "standardCodes": [
+          "9과12-01"
+        ],
+        "kind": "outcome",
+        "maxPoints": 30,
+        "intervalPoints": 8,
+        "evidence": "학교 화단의 식물 위치·차광·조명에 관한 구체적 관리 제안과 근거",
+        "levels": [
+          {
+            "levelId": "excellent",
+            "score": 30,
+            "description": "학교 화단의 구체적 위치 또는 식물을 대상으로 실현 가능한 관리 방안을 제안하고, 관찰 자료와 광합성 원리로 근거를 충분히 설명했다."
+          },
+          {
+            "levelId": "proficient",
+            "score": 22,
+            "description": "실현 가능한 관리 방안을 제안하고, 관찰 자료 또는 광합성 원리와 연결해 근거를 설명했다."
+          },
+          {
+            "levelId": "developing",
+            "score": 14,
+            "description": "관리 방안은 제안했으나, 대상·실행 방법 또는 과학적 근거가 구체적이지 않다."
+          },
+          {
+            "levelId": "beginning",
+            "score": 6,
+            "description": "관리 방안이 관찰 자료와 연결되지 않거나 실행 방법을 확인하기 어렵다."
+          }
+        ]
+      },
+      {
+        "id": "feedback-revision",
+        "name": "피드백 반영 과정",
+        "description": "초안, 동료 피드백, 수정본과 수정 이유를 남겨 제안서를 보완하는 과정을 보여 준다.",
+        "standardCodes": [
+          "9과12-01"
+        ],
+        "kind": "process",
+        "maxPoints": 20,
+        "intervalPoints": 5,
+        "evidence": "초안, 동료 피드백 표시, 수정본, 수정 이유",
+        "levels": [
+          {
+            "levelId": "excellent",
+            "score": 20,
+            "description": "초안·동료 피드백·수정본을 모두 제출하고, 피드백을 어떻게 반영했는지 수정 이유를 구체적으로 설명했다."
+          },
+          {
+            "levelId": "proficient",
+            "score": 15,
+            "description": "초안·동료 피드백·수정본을 제출하고, 수정한 내용을 설명했다."
+          },
+          {
+            "levelId": "developing",
+            "score": 10,
+            "description": "초안과 수정본은 있으나, 피드백 표시 또는 수정 이유가 일부 부족하다."
+          },
+          {
+            "levelId": "beginning",
+            "score": 5,
+            "description": "초안·피드백·수정본 중 필요한 과정 증거가 부족하다."
+          }
+        ]
+      }
+    ]
+  },
+  "scoring": {
+    "includeProcessInScore": true,
+    "processWeightPercent": 20,
+    "processTargetPoints": 20
+  },
+  "totalPoints": 100,
+  "visualAnalysisRequired": false,
+  "includeStudentCover": true,
+  "generationSettings": {
+    "outputTypes": [
+      "식물 관리 제안서",
+      "발표 자료"
+    ],
+    "answerTypes": [
+      "서술형",
+      "표·그래프 작성"
+    ],
+    "stages": {
+      "draft": true,
+      "checkpoint": true,
+      "revision": true,
+      "final": true
+    },
+    "additionalRequirements": "학생이 학교 화단 관리단의 일원이라는 역할을 맡아, 빛 환경 관찰 자료를 바탕으로 식물의 위치나 차광·조명 방안을 제안하게 하세요. 수행평가 안내 표지에는 학생이 이해하기 쉬운 루브릭 표를 포함하세요.",
+    "assessmentApproachId": "authentic-performance"
+  }
+}

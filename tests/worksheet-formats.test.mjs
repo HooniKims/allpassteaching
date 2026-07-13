@@ -8,5 +8,5 @@ test('recommends a dedicated inquiry worksheet for inquiry instruction models', 
 test('defines complete, unique worksheet formats including teacher overrides', () => {
     expect(worksheetFormats.length).toBeGreaterThanOrEqual(10);
     expect(new Set(worksheetFormats.map(item => item.id)).size).toBe(worksheetFormats.length);
-    expect(worksheetFormats.every(item => item.name && item.sections.length >= 3 && item.guide)).toBe(true);
+    expect(worksheetFormats.every(item => item.name && item.sections.length >= 3 && item.guide && item.easyDescription)).toBe(true);
 });

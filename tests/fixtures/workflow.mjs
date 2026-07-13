@@ -111,7 +111,7 @@ export function makeAssessment() {
         generationSettings: {
             outputTypes: ['탐구 보고서'], answerTypes: ['서술형'],
             stages: { draft: true, checkpoint: true, revision: true, final: true },
-            additionalRequirements: '',
+            additionalRequirements: '', assessmentApproachId: 'backward-design',
         },
     };
 }

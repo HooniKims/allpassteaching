@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WorksheetStage } from '@/components/workflow/WorksheetStage.jsx';
+import { OperationProvider } from '@/components/workflow/OperationProvider.jsx';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 import { makeWorksheet } from './fixtures/workflow.mjs';
 
@@ -18,6 +19,21 @@ test('preselects the format matching the lesson model and saves generated conten
     await user.click(screen.getByRole('button', { name: '학습지 생성하기' }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ formatId: 'inquiry-experiment', sourceHash: expect.stringMatching(/^src-/) })));
+});
+
+test('explains the selected worksheet format and makes the recommendation rule visible', async () => {
+    const user = userEvent.setup();
+    render(<WorksheetStage lessonPlan={makeGeneratedPlan()} value={null} onChange={vi.fn()}/>);
+
+    expect(screen.getByText('선택한 형식은 이렇게 써요')).toBeInTheDocument();
+    expect(screen.getByText('학생이 스스로 질문하고 관찰·실험한 내용을 순서대로 기록하게 할 때 좋아요.')).toBeInTheDocument();
+    expect(screen.getByText('현재 추천')).toBeInTheDocument();
+    expect(screen.getByText(/선택한 수업 모형과 연결해 둔 기본 형식입니다/)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('학습지 형식'), 'discussion-evidence');
+
+    expect(screen.getByText('자기 주장과 이유, 다른 의견에 대한 생각을 차례로 정리하게 할 때 좋아요.')).toBeInTheDocument();
+    expect(screen.getByLabelText('선택한 학습지 형식 안내')).toHaveTextContent('탐구·실험 기록지');
 });
 
 test('lets the teacher edit worksheet questions and answer keys', async () => {
@@ -113,6 +129,25 @@ test('upgrades a persisted legacy worksheet for editing without discarding its t
 
     expect(screen.getByDisplayValue('식물의 각 기관은 어떤 일을 할까요?')).toBeInTheDocument();
     expect(screen.getAllByLabelText(/문항 \d+ \[6과11-02\] 연결/)).toHaveLength(2);
+});
+
+test('disables worksheet exports while one export is running', async () => {
+    const user = userEvent.setup();
+    let resolveDownload;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => { resolveDownload = resolve; })));
+    vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:worksheet'), revokeObjectURL: vi.fn() });
+    render(<OperationProvider><WorksheetStage lessonPlan={makeGeneratedPlan()} value={makeWorksheet()} onChange={vi.fn()}/></OperationProvider>);
+
+    const button = screen.getByRole('button', { name: '학생용 HWPX' });
+    await user.click(button);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(fetch).toHaveBeenCalledOnce();
+
+    resolveDownload(new Response(new Blob(['worksheet'])));
+    await waitFor(() => expect(button).toBeEnabled());
 });
 
 test('disables add and duplicate actions before worksheet schema limits are exceeded', () => {

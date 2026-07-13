@@ -1,0 +1,293 @@
+{
+  "assessmentName": "빛 환경에 따른 학교 화단 식물 관리 제안서",
+  "subject": "과학",
+  "backwardDesign": {
+    "teacherIntent": {
+      "desiredResult": "학생이 빛의 세기와 광합성의 관계를 관찰 자료에 근거하여 설명하고, 학교 화단 식물의 빛 환경을 개선하는 실현 가능한 제안을 만들길 바랍니다.",
+      "evidenceOfSuccess": "빛 조건별 관찰 자료를 표나 그래프로 제시하고, 광합성 원리와 연결해 식물 관리 방안을 근거와 함께 설명하는 제안서를 완성합니다.",
+      "growthProcess": "초안에서 관찰 자료와 결론의 연결을 점검하고, 동료 피드백을 반영해 근거와 제안을 더 분명하게 고치는 과정을 확인하고 싶습니다."
+    },
+    "transferGoal": "새로운 맥락에서도 스스로 적용할 장기 전이 목표",
+    "enduringUnderstanding": "평가 뒤에도 남아야 할 핵심 이해",
+    "essentialQuestions": [
+      "빛의 세기가 광합성 속도에 어떤 영향을 미칠까?"
+    ],
+    "knowledge": [
+      "광합성 과정",
+      "빛의 세기와 광합성 관계",
+      "환경 요인 탐구"
+    ],
+    "skills": [
+      "관찰 자료 수집 및 정리",
+      "가설 설정 및 검증",
+      "근거 기반 제안 작성",
+      "피드백 반영 및 수정"
+    ],
+    "evidenceMap": [
+      {
+        "standardCode": "9과12-01",
+        "taskEvidenceTypes": [
+          "산출물에서 직접 찾을 수 있는 결과 증거",
+          "초안, 피드백 표시, 수정본과 수정 이유"
+        ],
+        "criterionIds": [
+          "criterion-outcome",
+          "criterion-process"
+        ],
+        "evidenceTypes": [
+          "결과 증거",
+          "과정 증거"
+        ],
+        "scoreBasis": "결과 증거 80점, 피드백 반영 과정 20점 · 수준별 정의 점수"
+      }
+    ],
+    "checkpoints": [
+      {
+        "id": "checkpoint-feedback",
+        "phase": "feedback",
+        "title": "초안 피드백",
+        "evidence": "초안과 피드백 표시",
+        "feedbackPurpose": "근거를 보완하도록 피드백함",
+        "order": 1
+      },
+      {
+        "id": "checkpoint-revision",
+        "phase": "revision",
+        "title": "수정본",
+        "evidence": "수정 표시와 이유",
+        "feedbackPurpose": "피드백을 반영해 수정함",
+        "order": 2
+      }
+    ],
+    "supportPlan": [
+      {
+        "id": "support-1",
+        "order": 1,
+        "title": "수행 준비",
+        "purpose": "목표 증거를 준비함",
+        "teacherAction": "필요한 발판과 피드백을 제공함",
+        "studentEvidence": "지원 뒤 달라진 수행 증거"
+      }
+    ],
+    "alignmentIssues": []
+  },
+  "task": {
+    "title": "빛 환경에 따른 학교 화단 식물 관리 제안서",
+    "standards": [
+      {
+        "code": "9과12-01",
+        "text": "광합성 과정을 이해하고, 환경 요인과 광합성의 관계를 탐구하는 실험을 설계할 수 있다."
+      }
+    ],
+    "situation": "실제적 상황",
+    "role": "학생 역할",
+    "audience": "공유 대상",
+    "product": "식물 관리 제안서, 발표 자료",
+    "procedure": [
+      "1. 학교 화단의 빛 환경을 관찰하고 기록한다.",
+      "2. 관찰 자료를 바탕으로 식물의 위치나 차광·조명 방안을 제안한다.",
+      "3. 제안서를 작성하고, 동료 피드백을 받아 수정한다.",
+      "4. 최종 제안서를 제출한다."
+    ],
+    "conditions": [
+      "제출 기한: 2026년 7월 20일",
+      "제출 형식: 제안서(1~2페이지)와 발표 자료(PPT 5~10장)",
+      "제출 방법: 구글 클래스룸 업로드 및 발표"
+    ],
+    "materials": [
+      "관찰 기록지, 필기구, 색연필, 그래프 용지",
+      "컴퓨터(그래프 작성 및 PPT 제작용)",
+      "학교 화단 지도"
+    ],
+    "cautions": [
+      "안전하게 관찰 활동을 수행한다.",
+      "관찰 자료는 실제 데이터를 기반으로 한다.",
+      "제안서는 실현 가능한 방안을 제시한다."
+    ]
+  },
+  "cover": {
+    "title": "빛 환경에 따른 학교 화단 식물 관리 제안서 안내",
+    "sections": [
+      {
+        "id": "cover-subject",
+        "type": "subject",
+        "label": "과목",
+        "content": "과학",
+        "visible": true,
+        "order": 1
+      },
+      {
+        "id": "cover-transfer",
+        "type": "transfer-goal",
+        "label": "전이 목표",
+        "content": "새로운 맥락에서도 스스로 적용할 장기 전이 목표",
+        "visible": true,
+        "order": 2
+      },
+      {
+        "id": "cover-standards",
+        "type": "standards",
+        "label": "성취기준",
+        "content": "광합성 과정을 이해하고, 환경 요인과 광합성의 관계를 탐구하는 실험을 설계할 수 있다.",
+        "visible": true,
+        "order": 3
+      },
+      {
+        "id": "cover-grasps",
+        "type": "grasps",
+        "label": "수행과제 맥락",
+        "content": "학생이 학교 화단 관리단의 일원이라는 역할을 맡아, 빛 환경 관찰 자료를 바탕으로 식물의 위치나 차광·조명 방안을 제안하게 합니다.",
+        "visible": true,
+        "order": 4
+      },
+      {
+        "id": "cover-submission",
+        "type": "submission",
+        "label": "제출 안내",
+        "content": "제출 기한: 2026년 7월 20일, 제출 형식: 제안서(1~2페이지)와 발표 자료(PPT 5~10장)",
+        "visible": true,
+        "order": 5
+      },
+      {
+        "id": "cover-checkpoints",
+        "type": "checkpoints",
+        "label": "수행 과정",
+        "content": "초안 작성 → 동료 피드백 → 수정본 제출",
+        "visible": true,
+        "order": 6
+      },
+      {
+        "id": "cover-rubric",
+        "type": "rubric",
+        "label": "평가 기준",
+        "content": "학생이 이해하기 쉬운 루브릭 표를 포함합니다.",
+        "visible": true,
+        "order": 7
+      },
+      {
+        "id": "cover-self-checklist",
+        "type": "self-checklist",
+        "label": "제출 전 확인",
+        "content": "성취기준에 맞는 증거를 제시했는가?",
+        "visible": true,
+        "order": 8
+      }
+    ]
+  },
+  "rubric": {
+    "levels": [
+      {
+        "id": "level-1",
+        "label": "1수준"
+      },
+      {
+        "id": "level-2",
+        "label": "2수준"
+      },
+      {
+        "id": "level-3",
+        "label": "3수준"
+      },
+      {
+        "id": "level-4",
+        "label": "4수준"
+      }
+    ],
+    "criteria": [
+      {
+        "id": "criterion-outcome",
+        "name": "결과 증거",
+        "description": "성취기준에서 도출한 평가 내용",
+        "standardCodes": [
+          "9과12-01"
+        ],
+        "kind": "outcome",
+        "maxPoints": 80,
+        "intervalPoints": 1,
+        "evidence": "산출물에서 직접 찾을 수 있는 결과 증거",
+        "levels": [
+          {
+            "levelId": "level-1",
+            "score": 80,
+            "description": "광합성 과정과 빛의 세기 관계를 정확히 이해하고, 관찰 자료를 표나 그래프로 제시하며, 식물 관리 방안을 근거와 함께 설명한다."
+          },
+          {
+            "levelId": "level-2",
+            "score": 79,
+            "description": "광합성 과정과 빛의 세기 관계를 이해하고, 관찰 자료를 표나 그래프로 제시하며, 식물 관리 방안을 근거와 함께 설명한다."
+          },
+          {
+            "levelId": "level-3",
+            "score": 78,
+            "description": "광합성 과정과 빛의 세기 관계를 부분적으로 이해하고, 관찰 자료를 표나 그래프로 제시하며, 식물 관리 방안을 근거와 함께 설명한다."
+          },
+          {
+            "levelId": "level-4",
+            "score": 77,
+            "description": "광합성 과정과 빛의 세기 관계를 제한적으로 이해하고, 관찰 자료를 표나 그래프로 제시하며, 식물 관리 방안을 근거와 함께 설명한다."
+          }
+        ]
+      },
+      {
+        "id": "criterion-process",
+        "name": "피드백 반영 과정",
+        "description": "성취기준에서 도출한 평가 내용",
+        "standardCodes": [
+          "9과12-01"
+        ],
+        "kind": "process",
+        "maxPoints": 20,
+        "intervalPoints": 1,
+        "evidence": "초안, 피드백 표시, 수정본과 수정 이유",
+        "levels": [
+          {
+            "levelId": "level-1",
+            "score": 20,
+            "description": "초안을 작성하고, 동료 피드백을 받아 수정본을 제출하며, 수정 이유를 명확히 설명한다."
+          },
+          {
+            "levelId": "level-2",
+            "score": 19,
+            "description": "초안을 작성하고, 동료 피드백을 받아 수정본을 제출하며, 수정 이유를 설명한다."
+          },
+          {
+            "levelId": "level-3",
+            "score": 18,
+            "description": "초안을 작성하고, 동료 피드백을 받아 수정본을 제출한다."
+          },
+          {
+            "levelId": "level-4",
+            "score": 17,
+            "description": "초안을 작성하고, 수정본을 제출한다."
+          }
+        ]
+      }
+    ]
+  },
+  "scoring": {
+    "includeProcessInScore": true,
+    "processWeightPercent": 20,
+    "processTargetPoints": 20
+  },
+  "totalPoints": 100,
+  "visualAnalysisRequired": false,
+  "includeStudentCover": true,
+  "generationSettings": {
+    "outputTypes": [
+      "식물 관리 제안서",
+      "발표 자료"
+    ],
+    "answerTypes": [
+      "서술형",
+      "표·그래프 작성"
+    ],
+    "stages": {
+      "draft": true,
+      "checkpoint": true,
+      "revision": true,
+      "final": true
+    },
+    "additionalRequirements": "학생이 학교 화단 관리단의 일원이라는 역할을 맡아, 빛 환경 관찰 자료를 바탕으로 식물의 위치나 차광·조명 방안을 제안하게 하세요. 수행평가 안내 표지에는 학생이 이해하기 쉬운 루브릭 표를 포함하세요.",
+    "assessmentApproachId": "authentic-performance"
+  }
+}

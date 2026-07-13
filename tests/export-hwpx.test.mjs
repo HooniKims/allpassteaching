@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { buildHwpx } from '@/lib/export/hwpx';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
-const PROCESS_WIDTHS = [4252, 5669, 12047, 12047, 3543, 4962];
+const PROCESS_WIDTHS = [5500, 9000, 23020, 5000];
 const ASSESSMENT_WIDTHS = [8504, 8504, 11339, 14173];
 const REQUIRED_FILES = [
     'mimetype',
@@ -46,6 +46,7 @@ const width = cell => Number(children(cell, 'hp:cellSz')[0].getAttribute('width'
 const height = cell => Number(children(cell, 'hp:cellSz')[0].getAttribute('height'));
 const span = cell => children(cell, 'hp:cellSpan')[0];
 const address = cell => children(cell, 'hp:cellAddr')[0];
+const cellMargin = cell => children(cell, 'hp:cellMargin')[0];
 
 function expectExactGrid(table, expectedWidths) {
     for (const [rowIndex, row] of rows(table).entries()) {
@@ -114,18 +115,25 @@ test.each([
     expect(elements(section, 'hp:p').filter(paragraph => paragraph.getAttribute('pageBreak') === '1')).toHaveLength(expectedPageBreaks);
 });
 
-test('renders the exact six-column process table grid and cell coordinates', async () => {
+test('renders a readable four-column process table grid and cell coordinates', async () => {
     // Given one session containing three instructional stages
     // When its process table is inspected
     const { section } = await unpackHwpx(makeGeneratedPlan());
     const processTable = elements(section, 'hp:tbl')[1];
 
-    // Then its dimensions, fixed widths, addresses, spans, and pagination controls are exact
+    // Then the activity column has enough width for Korean sentences while dimensions and pagination controls stay exact
     expect(processTable.getAttribute('rowCnt')).toBe('4');
-    expect(processTable.getAttribute('colCnt')).toBe('6');
+    expect(processTable.getAttribute('colCnt')).toBe('4');
     expect(processTable.getAttribute('pageBreak')).toBe('CELL');
     expect(processTable.getAttribute('repeatHeader')).toBe('1');
     expectExactGrid(processTable, PROCESS_WIDTHS);
+    expect(PROCESS_WIDTHS[2]).toBeGreaterThan(20_000);
+    for (const cell of rows(processTable).flatMap(cells)) {
+        expect(cellMargin(cell).getAttribute('left')).toBe('120');
+        expect(cellMargin(cell).getAttribute('right')).toBe('120');
+        expect(cellMargin(cell).getAttribute('top')).toBe('160');
+        expect(cellMargin(cell).getAttribute('bottom')).toBe('160');
+    }
 });
 
 test('renders the exact four-column assessment table grid with common and level feedback', async () => {
