@@ -74,9 +74,33 @@ test('학생 표지만 내보내도 현재 루브릭 점수와 표지 섹션을 
     expect(text).toContain('탁월 · 39점');
     expect(text).not.toContain('교사용');
     expect(text).toContain('과목 · 과학');
+    expect(text).toContain(`목표 · ${assessment.task.goal}`);
     expect(text).toContain('상황 · 학교 화단 식물의 건강 상태를 설명해야 한다.');
+    expect(text).toContain(`성공 기준 · ${assessment.task.successCriteria}`);
     expect(text).toContain('□ 관찰 근거를 구체적으로 썼는가?');
     expect(text).not.toContain('• □');
+});
+
+test('학생 표지 PDF는 참조 데이터와 같은 섹션 설명을 중복 출력하지 않는다', async () => {
+    const assessment = makeAssessment();
+    assessment.cover.sections.find(section => section.type === 'transfer-goal').content = assessment.backwardDesign.transferGoal;
+    const events = [];
+
+    await buildWorkflowPdf('assessment-cover', assessment, { onDraw: event => events.push(event) });
+
+    expect(events.filter(event => event.text === assessment.backwardDesign.transferGoal)).toHaveLength(1);
+});
+
+test('학생 표지 PDF는 AI 절차에 붙은 순번을 다시 붙이지 않는다', async () => {
+    const assessment = makeAssessment();
+    assessment.task.procedure[0] = '1. 기관별 특징을 관찰한다.';
+    assessment.cover.sections.find(section => section.type === 'grasps').type = 'procedure';
+    const events = [];
+
+    await buildWorkflowPdf('assessment-cover', assessment, { onDraw: event => events.push(event) });
+
+    expect(events.map(event => event.text)).toContain('1. 기관별 특징을 관찰한다.');
+    expect(events.map(event => event.text)).not.toContain('1. 1. 기관별 특징을 관찰한다.');
 });
 
 test('학생 표지 루브릭은 평가영역 행과 성취수준 열을 가진 실제 표로 그린다', async () => {
@@ -278,6 +302,22 @@ test('학생 표지를 끈 전체본은 표지 없이 과제부터 시작하고 
     expect(events[0].text).toBe(assessment.task.title);
     expect(pdf.getPageCount()).toBeGreaterThanOrEqual(1);
     await expect(buildWorkflowPdf('assessment-cover', assessment)).rejects.toThrow(/표지/);
+});
+
+test('제출용 수행평가지는 안내문 포함 설정과 관계없이 실제 문항과 응답지부터 시작한다', async () => {
+    const assessment = makeAssessment();
+    const sheetEvents = [];
+    const fullEvents = [];
+
+    await buildWorkflowPdf('assessment-sheet', assessment, { onDraw: event => sheetEvents.push(event) });
+    await buildWorkflowPdf('assessment', assessment, { onDraw: event => fullEvents.push(event) });
+
+    expect(sheetEvents[0].text).toBe(assessment.studentSheet.document.title);
+    expect(sheetEvents.some(event => event.text?.includes(assessment.studentSheet.document.sections[0].questions[0].prompt))).toBe(true);
+    expect(sheetEvents.some(event => event.kind === 'worksheet-response-box' && event.questionId === 'performance-q-1')).toBe(true);
+    expect(sheetEvents.some(event => event.text === assessment.cover.title)).toBe(false);
+    expect(sheetEvents.some(event => event.text?.includes('분석적 루브릭'))).toBe(false);
+    expect(fullEvents[0].text).toBe(assessment.cover.title);
 });
 
 test('지원하는 최대 15개 영역·6수준 표지가 한 페이지를 넘으면 명시적으로 실패한다', async () => {

@@ -32,8 +32,10 @@ export async function POST(request, { params }) {
     }
     const parsed = lessonPlanSchema.safeParse(value);
     if (!parsed.success) return Response.json({ code: 'invalid_plan', message: '지도안 입력 내용을 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
-    const variant = new URL(request.url).searchParams.get('variant');
+    const searchParams = new URL(request.url).searchParams;
+    const variant = searchParams.get('variant');
+    const planVariant = searchParams.get('plan') === 'detailed' ? 'detailed' : 'brief';
     const build = format === 'hwpx' && variant === 'simple' ? buildSimpleHwpx : exporter.build;
-    const bytes = await build(parsed.data); const filename = encodeURIComponent(`${parsed.data.title}.${format}`);
+    const bytes = await build(parsed.data, { variant: planVariant }); const filename = encodeURIComponent(`${parsed.data.title}-${planVariant === 'detailed' ? '세안' : '약안'}.${format}`);
     return new Response(bytes, { headers: { 'Content-Type': exporter.type, 'Content-Disposition': `attachment; filename*=UTF-8''${filename}` } });
 }

@@ -103,16 +103,16 @@ test('renders every formal table with a readable font size', async () => {
     expect(Math.min(...tableText.map(event => event.fontSize))).toBeGreaterThanOrEqual(8);
 });
 
-test('allocates a wide activity column instead of squeezing the lesson process into six narrow columns', () => {
+test('prints teacher activity, student activity, notes, and remarks in separate process columns', () => {
     // Given a standard lesson process
     const process = buildDocumentModel(makeGeneratedPlan()).sessions[0].process;
 
     // When the print table is defined
     const definition = processDefinition(process, { regular: {}, bold: {} });
 
-    // Then teacher and student activity are combined into one wide, readable activity column
-    expect(definition.widths).toHaveLength(4);
-    expect(definition.widths[2]).toBeGreaterThan(200);
+    // Then every editable process field has its own visible column
+    expect(definition.widths).toHaveLength(7);
+    expect(definition.header.map(cell => cell.text)).toEqual(['단계', '학습 요소', '교사 활동', '학생 활동', '시간', '자료·유의점', '비고']);
 });
 
 test('embeds Paperlogy regular and bold font resources once for reuse', async () => {

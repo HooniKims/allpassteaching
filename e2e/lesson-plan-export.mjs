@@ -6,7 +6,10 @@ export async function exportAllFormats(page, metadata, editedValues) {
     const expected = { hwpx: ['application/hwp+zip', '504b0304'], docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', '504b0304'], pdf: ['application/pdf', '25504446'] };
     for (const [format, [contentType, signature]] of Object.entries(expected)) {
         await page.getByLabel('내보내기 형식').selectOption(format);
-        const responsePromise = page.waitForResponse(response => response.url().endsWith(`/api/export/${format}`) && response.request().method() === 'POST');
+        const responsePromise = page.waitForResponse(response => {
+            const url = new URL(response.url());
+            return url.pathname === `/api/export/${format}` && url.searchParams.get('plan') === 'detailed' && response.request().method() === 'POST';
+        });
         const downloadPromise = page.waitForEvent('download');
         await page.getByRole('button', { name: '파일로 저장' }).click();
         const [response, download] = await Promise.all([responsePromise, downloadPromise]);
@@ -27,7 +30,7 @@ export async function exportAllFormats(page, metadata, editedValues) {
         expect(response.status()).toBe(200);
         expect(response.headers()['content-type']).toContain(contentType);
         expect(response.headers()['content-disposition']).toContain(`.${format}`);
-        expect(download.suggestedFilename()).toBe(`${editedValues.lessonTitle}.${format}`);
+        expect(download.suggestedFilename()).toBe(`${editedValues.lessonTitle}-세안.${format}`);
         const bytes = await readFile(await download.path());
         expect(bytes.subarray(0, 4).toString('hex')).toBe(signature);
         if (format !== 'pdf') {
@@ -63,11 +66,12 @@ export async function exportAllFormats(page, metadata, editedValues) {
     expect(simpleResponse.status()).toBe(200);
     expect(simpleResponse.headers()['content-type']).toContain('application/hwp+zip');
     expect(simpleResponse.headers()['content-disposition']).toContain('.hwpx');
-    expect(simpleDownload.suggestedFilename()).toBe(`${editedValues.lessonTitle}.hwpx`);
+    expect(simpleDownload.suggestedFilename()).toBe(`${editedValues.lessonTitle}-세안.hwpx`);
     const simpleBytes = await readFile(await simpleDownload.path());
     const simpleZip = await JSZip.loadAsync(simpleBytes);
     const simpleSection = await simpleZip.file('Contents/section0.xml').async('string');
-    expect(simpleSection).not.toContain('<hp:tbl');
+    expect(simpleSection.match(/<hp:tbl\b/g)).toHaveLength(5);
+    expect(simpleSection).not.toContain('colSpan="2"');
     for (const questionLine of editedValues.teacherQuestion.split('\n')) expect(simpleSection).toContain(questionLine);
     expect(simpleSection).toContain(editedValues.assessmentMethod);
     expect(simpleSection).toContain('수업 후 성찰');

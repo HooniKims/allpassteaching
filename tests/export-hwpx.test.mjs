@@ -4,8 +4,9 @@ import { buildHwpx } from '@/lib/export/hwpx';
 import { buildSimpleHwpx } from '@/lib/export/simple-hwpx';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
-const PROCESS_WIDTHS = [5500, 9000, 23020, 5000];
-const ASSESSMENT_WIDTHS = [8504, 8504, 11339, 14173];
+const OVERVIEW_WIDTHS = [8200, 41728];
+const PROCESS_WIDTHS = [3600, 6000, 12000, 12000, 3600, 7200, 5528];
+const ASSESSMENT_WIDTHS = [7600, 7600, 9400, 25328];
 const REQUIRED_FILES = [
     'mimetype',
     'META-INF/container.xml',
@@ -48,12 +49,13 @@ const height = cell => Number(children(cell, 'hp:cellSz')[0].getAttribute('heigh
 const span = cell => children(cell, 'hp:cellSpan')[0];
 const address = cell => children(cell, 'hp:cellAddr')[0];
 const cellMargin = cell => children(cell, 'hp:cellMargin')[0];
+const tableWidths = table => cells(rows(table)[0]).map(width);
 
 function expectExactGrid(table, expectedWidths) {
     for (const [rowIndex, row] of rows(table).entries()) {
         const rowCells = cells(row);
         expect(rowCells.map(width), `row ${rowIndex} widths`).toEqual(expectedWidths);
-        expect(rowCells.reduce((sum, cell) => sum + width(cell), 0)).toBe(42520);
+        expect(rowCells.reduce((sum, cell) => sum + width(cell), 0)).toBe(expectedWidths.reduce((sum, value) => sum + value, 0));
         expect(rowCells.map(cell => Number(address(cell).getAttribute('colAddr')))).toEqual(expectedWidths.map((_, index) => index));
         expect(rowCells.map(cell => Number(address(cell).getAttribute('rowAddr')))).toEqual(expectedWidths.map(() => rowIndex));
         expect(rowCells.map(cell => Number(span(cell).getAttribute('colSpan')))).toEqual(expectedWidths.map(() => 1));
@@ -78,20 +80,22 @@ test('builds a well-formed HWPX package with a first uncompressed mimetype entry
     expect(section.documentElement.tagName).toBe('hs:sec');
 });
 
-test('builds a table-free simple HWPX while keeping the core lesson content', async () => {
-    // Given a complete lesson plan that needs a layout-safe alternative
+test('builds simple two-column HWPX tables while keeping the core lesson content', async () => {
+    // Given a complete lesson plan that needs a layout-safe but structured alternative
     const plan = makeGeneratedPlan();
 
     // When the simple HWPX builder creates a document
     const { section, sectionXml } = await unpackHwpx(plan, buildSimpleHwpx);
 
-    // Then the package uses ordinary paragraphs without tables or stale layout caches
-    expect(elements(section, 'hp:tbl')).toHaveLength(0);
+    // Then the package uses small two-column tables without stale layout caches or complex cell merging
+    const tables = elements(section, 'hp:tbl');
+    expect(tables).toHaveLength(4);
+    for (const table of tables) expectExactGrid(table, [8504, 34016]);
     expect(sectionXml).not.toContain('<hp:linesegarray');
     for (const text of [
         '교수·학습 과정안', '수업 개요', '[6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.',
-        '1차시 · 식물 기관 관찰 (40분)', '교사 활동: 질문을 제시한다.', '학생 활동: 예상한다.',
-        '과정중심평가', '관찰 결과 설명 · 관찰 및 산출물 확인', '관찰 증거: 관찰 기록지', '수업 후 성찰', '학생이 증거를 바탕으로 설명했는가?',
+        '1차시 · 식물 기관 관찰 (40분)', '교사 활동', '• 문제 인식: 질문을 제시한다.', '학생 활동', '• 문제 인식: 관찰할 문제를 확인한다.',
+        '과정중심평가', '관찰 결과 설명', '관찰 및 산출물 확인', '관찰 증거: 관찰 기록지', '수업 후 성찰', '학생이 증거를 바탕으로 설명했는가?',
     ]) expect(section.documentElement.textContent).toContain(text);
 });
 
@@ -110,43 +114,47 @@ test('keeps every header collection count equal to its actual element count', as
 });
 
 test.each([
-    ['one session', makeGeneratedPlan(), 3],
-    ['two sessions', makeTwoSessionPlan(), 6],
-])('renders three real OWPML tables per session for %s', async (_label, plan, expectedTableCount) => {
+    ['one session', makeGeneratedPlan(), 7],
+    ['two sessions', makeTwoSessionPlan(), 14],
+])('renders PDF-matched OWPML table segments per session for %s', async (_label, plan, expectedTableCount) => {
     // Given one or more structured lesson sessions
     // When the section XML is generated
     const { section } = await unpackHwpx(plan);
 
-    // Then each session has overview, process, and assessment tables
+    // Then each session has overview, page-safe process segments, assessment, support, reflection, and connection tables
     expect(elements(section, 'hp:tbl')).toHaveLength(expectedTableCount);
 });
 
 test.each([
-    ['one session', makeGeneratedPlan(), 1],
-    ['two sessions', makeTwoSessionPlan(), 3],
-])('adds the exact logical page boundaries for %s', async (_label, plan, expectedPageBreaks) => {
+    ['one session', makeGeneratedPlan(), 2],
+    ['two sessions', makeTwoSessionPlan(), 5],
+])('adds explicit safe page boundaries for %s', async (_label, plan, expectedPageBreaks) => {
     // Given a document with two logical portions per session
     // When its section paragraphs are inspected
     const { section } = await unpackHwpx(plan);
 
-    // Then page 1/2 and adjacent sessions have explicit page-break paragraphs
+    // Then oversized first-page sections, assessment sections, and adjacent sessions have explicit page-break paragraphs
     expect(elements(section, 'hp:p').filter(paragraph => paragraph.getAttribute('pageBreak') === '1')).toHaveLength(expectedPageBreaks);
 });
 
-test('renders a readable four-column process table grid and cell coordinates', async () => {
+test('renders a readable seven-column process table with separate student activity and remarks', async () => {
     // Given one session containing three instructional stages
     // When its process table is inspected
     const { section } = await unpackHwpx(makeGeneratedPlan());
-    const processTable = elements(section, 'hp:tbl')[1];
+    const processTables = elements(section, 'hp:tbl').filter(table => tableWidths(table).join(',') === PROCESS_WIDTHS.join(','));
 
-    // Then the activity column has enough width for Korean sentences while dimensions and pagination controls stay exact
-    expect(processTable.getAttribute('rowCnt')).toBe('4');
-    expect(processTable.getAttribute('colCnt')).toBe('4');
-    expect(processTable.getAttribute('pageBreak')).toBe('CELL');
-    expect(processTable.getAttribute('repeatHeader')).toBe('1');
-    expectExactGrid(processTable, PROCESS_WIDTHS);
-    expect(PROCESS_WIDTHS[2]).toBeGreaterThan(20_000);
-    for (const cell of rows(processTable).flatMap(cells)) {
+    // Then teacher activity, student activity, notes, and remarks remain independent while dimensions and pagination controls stay exact across segments
+    expect(processTables.length).toBeGreaterThanOrEqual(2);
+    expect(processTables.reduce((total, table) => total + rows(table).length - 1, 0)).toBeGreaterThanOrEqual(3);
+    for (const processTable of processTables) {
+        expect(processTable.getAttribute('colCnt')).toBe('7');
+        expect(processTable.getAttribute('pageBreak')).toBe('CELL');
+        expect(processTable.getAttribute('repeatHeader')).toBe('1');
+        expectExactGrid(processTable, PROCESS_WIDTHS);
+    }
+    expect(rows(processTables[0])[0].textContent).toContain('학생 활동');
+    expect(rows(processTables[0])[0].textContent).toContain('비고');
+    for (const cell of processTables.flatMap(rows).flatMap(cells)) {
         expect(cellMargin(cell).getAttribute('left')).toBe('120');
         expect(cellMargin(cell).getAttribute('right')).toBe('120');
         expect(cellMargin(cell).getAttribute('top')).toBe('160');
@@ -158,7 +166,7 @@ test('renders the exact four-column assessment table grid with common and level 
     // Given a plan with one assessment row
     // When its assessment table is inspected
     const { section, sectionXml } = await unpackHwpx(makeGeneratedPlan());
-    const assessmentTable = elements(section, 'hp:tbl')[2];
+    const assessmentTable = elements(section, 'hp:tbl').find(table => tableWidths(table).join(',') === ASSESSMENT_WIDTHS.join(','));
 
     // Then the formal grid and all four feedback variants are preserved
     expect(assessmentTable.getAttribute('rowCnt')).toBe('2');
@@ -210,7 +218,7 @@ test('preserves the edited lesson title and common connection labels in section 
     expect(sectionXml).not.toContain('다음 학습 연결');
 });
 
-test('renders the ordered four-column overview with practical merged long rows and blank metadata', async () => {
+test('renders the ordered PDF-style two-column overview with blank metadata', async () => {
     // Given intentionally blank metadata and distinct ordered overview values
     const base = makeGeneratedPlan();
     const plan = makeGeneratedPlan({
@@ -227,17 +235,14 @@ test('renders the ordered four-column overview with practical merged long rows a
 
     // When the overview table is inspected
     const { section } = await unpackHwpx(plan);
-    const overview = elements(section, 'hp:tbl')[0];
+    const overview = elements(section, 'hp:tbl').find(table => tableWidths(table).join(',') === OVERVIEW_WIDTHS.join(','));
     const overviewRows = rows(overview);
 
-    // Then paired rows have four cells and long rows merge the value across three columns
-    expect(overview.getAttribute('colCnt')).toBe('4');
-    expect(overviewRows).toHaveLength(10);
-    expect(overviewRows.map(row => cells(row).length)).toEqual([4, 4, 4, 2, 2, 4, 2, 2, 2, 2]);
-    for (const rowIndex of [3, 4, 6, 7, 8, 9]) {
-        expect([...cells(overviewRows[rowIndex])].map(cell => Number(span(cell).getAttribute('colSpan')))).toEqual([1, 3]);
-        expect(cells(overviewRows[rowIndex]).reduce((sum, cell) => sum + width(cell), 0)).toBe(42520);
-    }
+    // Then every field gets the same label/value grid used by the PDF overview
+    expect(overview.getAttribute('colCnt')).toBe('2');
+    expect(overviewRows).toHaveLength(14);
+    expect(overviewRows.map(row => cells(row).length)).toEqual(Array(14).fill(2));
+    expectExactGrid(overview, OVERVIEW_WIDTHS);
     const orderedText = overview.textContent;
     let previousIndex = -1;
     for (const value of ['일시', '장소', '대상 학급', '수업자', '초등학교 5학년', '순서과목', '순서단원', '순서수업제목', '1/1', '순서 수업모형', '순서-기준', '순서 학습목표', '순서 핵심 질문?', '순서 준비물']) {
@@ -280,7 +285,7 @@ test('maps every used formal text role to the exact planned HWPUNIT height', asy
         .getElementsByTagName('hp:run')[0].getAttribute('charPrIDRef');
 
     // When each formal role is resolved through the style ID actually used by section XML
-    // Then title/body/table body use 18/10/9pt while section and table headers retain their planned sizes
+    // Then title/formal table body use 18/9pt while section and table headers retain their planned sizes
     expect(charHeights).toMatchObject({ 7: '1000', 8: '1800', 9: '1200', 10: '900', 11: '900' });
     expect({
         title: usedStyle('교수·학습 과정안'),
@@ -288,7 +293,7 @@ test('maps every used formal text role to the exact planned HWPUNIT height', asy
         section: usedStyle('수업 개요'),
         tableHeader: usedStyle('단계'),
         compactTableBody: usedStyle('문제 인식 · 가설 설정'),
-    }).toEqual({ title: '8', body: '7', section: '9', tableHeader: '10', compactTableBody: '11' });
+    }).toEqual({ title: '8', body: '11', section: '9', tableHeader: '10', compactTableBody: '11' });
 });
 
 test('uses deterministic unique IDs for paragraphs, tables, and cell sublists', async () => {
@@ -307,14 +312,14 @@ test('uses deterministic unique IDs for paragraphs, tables, and cell sublists', 
 test('preserves long structured fields without truncating any process or assessment content', async () => {
     // Given distinct long sentinels in every detailed structured field
     const sentinel = name => `${name}-시작-${`${name}긴내용`.repeat(80)}-${name}-끝`;
-    const values = Object.fromEntries(['교사활동', '주요발문', '학생활동', '예상반응', '자료유의점', '지원', '공통피드백', '보충피드백', '도달피드백', '심화피드백', '다음연결'].map(name => [name, sentinel(name)]));
+    const values = Object.fromEntries(['교사활동', '주요발문', '학생활동', '예상반응', '자료유의점', '지원', '비고', '공통피드백', '보충피드백', '도달피드백', '심화피드백', '다음연결'].map(name => [name, sentinel(name)]));
     const base = makeGeneratedPlan();
     const plan = makeGeneratedPlan({
         sessions: [{ ...base.sessions[0], nextSessionConnection: values.다음연결, stages: [{
             ...base.sessions[0].stages[0],
             teacherActivities: [values.교사활동], teacherQuestions: [values.주요발문],
             studentActivities: [values.학생활동], expectedStudentResponses: [values.예상반응],
-            materialsAndNotes: [values.자료유의점], supportNotes: [values.지원],
+            materialsAndNotes: [values.자료유의점], supportNotes: [values.지원], remarks: [values.비고],
         }] }],
         assessment: [{ ...base.assessment[0], feedback: values.공통피드백, levelFeedback: {
             needsSupport: values.보충피드백, meets: values.도달피드백, exceeds: values.심화피드백,
@@ -322,23 +327,41 @@ test('preserves long structured fields without truncating any process or assessm
     });
 
     // When the HWPX section is generated
-    const { sectionXml } = await unpackHwpx(plan);
+    const { section } = await unpackHwpx(plan);
 
-    // Then every exact sentinel reaches the XML unchanged
-    for (const value of Object.values(values)) expect(sectionXml).toContain(value);
+    // Then every exact sentinel remains in its logical column even when a very long cell is split across safe continuation rows
+    const textOf = element => elements(element, 'hp:t').map(node => node.textContent).join('');
+    const tables = elements(section, 'hp:tbl');
+    const processTables = tables.filter(table => tableWidths(table).join(',') === PROCESS_WIDTHS.join(','));
+    const assessmentTables = tables.filter(table => tableWidths(table).join(',') === ASSESSMENT_WIDTHS.join(','));
+    const processRows = processTables.flatMap(table => rows(table).slice(1));
+    const processColumnText = columnIndex => processRows.map(row => textOf(cells(row)[columnIndex])).join('');
+    const assessmentFeedbackText = assessmentTables.flatMap(table => rows(table).slice(1)).map(row => textOf(cells(row)[3])).join('');
+    const connectionText = textOf(tables.at(-1));
+    for (const key of ['교사활동', '주요발문']) expect(processColumnText(2)).toContain(values[key]);
+    for (const key of ['학생활동', '예상반응']) expect(processColumnText(3)).toContain(values[key]);
+    for (const key of ['자료유의점', '지원']) expect(processColumnText(5)).toContain(values[key]);
+    expect(processColumnText(6)).toContain(values.비고);
+    for (const key of ['공통피드백', '보충피드백', '도달피드백', '심화피드백']) {
+        expect(assessmentFeedbackText).toContain(values[key]);
+    }
+    expect(connectionText).toContain(values.다음연결);
 });
 
 test('expands HWPX rows from their paragraph content and sizes each table to the row-height sum', async () => {
     const { section } = await unpackHwpx(makeGeneratedPlan());
-    const processTable = elements(section, 'hp:tbl')[1];
-    const processRows = rows(processTable);
-    const rowHeights = processRows.map(row => height(cells(row)[0]));
-    const tableHeight = Number(children(processTable, 'hp:sz')[0].getAttribute('height'));
+    const processTables = elements(section, 'hp:tbl').filter(table => tableWidths(table).join(',') === PROCESS_WIDTHS.join(','));
+    const bodyRowHeights = processTables.flatMap(table => rows(table).slice(1).map(row => height(cells(row)[0])));
 
-    expect(new Set(rowHeights).size).toBeGreaterThan(1);
-    expect(rowHeights.slice(1).every(value => value > 2000)).toBe(true);
-    for (const row of processRows) expect(new Set(cells(row).map(height)).size).toBe(1);
-    expect(tableHeight).toBe(rowHeights.reduce((sum, value) => sum + value, 0));
+    expect(new Set(bodyRowHeights).size).toBeGreaterThan(1);
+    expect(bodyRowHeights.every(value => value > 2000)).toBe(true);
+    for (const processTable of processTables) {
+        const processRows = rows(processTable);
+        const rowHeights = processRows.map(row => height(cells(row)[0]));
+        const tableHeight = Number(children(processTable, 'hp:sz')[0].getAttribute('height'));
+        for (const row of processRows) expect(new Set(cells(row).map(height)).size).toBe(1);
+        expect(tableHeight).toBe(rowHeights.reduce((sum, value) => sum + value, 0));
+    }
 });
 
 test('centers short overview values through the instruction model and keeps standards left aligned', async () => {
@@ -350,7 +373,7 @@ test('centers short overview values through the instruction model and keeps stan
     };
 
     expect(paragraphFor('탐구·발견 학습').getAttribute('paraPrIDRef')).toBe('23');
-    expect(paragraphFor('[6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.').getAttribute('paraPrIDRef')).toBe('24');
+    expect(paragraphFor('[과학] [6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.').getAttribute('paraPrIDRef')).toBe('24');
 });
 
 test('escapes XML and visibly replaces forbidden controls, lone surrogates, and noncharacters', async () => {

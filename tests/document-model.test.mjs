@@ -89,9 +89,35 @@ test('개요 표의 항목 순서와 성취기준 코드·원문을 보존한다
         {
             code: '6과11-02',
             text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.',
+            subject: '과학',
         },
     ]);
     expect(session.overview.rows.find(row => row.key === 'session').value).toBe('1/1');
+});
+
+test('약안은 본시 중심이고 세안은 단원·학습자·지도 전략 자료를 추가한다', () => {
+    const plan = makeGeneratedPlan();
+
+    const brief = buildDocumentModel(plan, { variant: 'brief' });
+    const detailed = buildDocumentModel(plan, { variant: 'detailed' });
+
+    expect(brief.detail).toBeNull();
+    expect(detailed.detail).toMatchObject({
+        teacherIntent: plan.detailedPlan.teacherIntent,
+        unitOverview: plan.detailedPlan.unitOverview,
+        learnerAnalysis: plan.detailedPlan.learnerAnalysis,
+        teachingStrategy: plan.detailedPlan.teachingStrategy,
+    });
+    expect(detailed.detail.unitSequence).toHaveLength(3);
+    expect(detailed.detail.unitSequence).not.toBe(plan.detailedPlan.unitSequence);
+});
+
+test('TPACK과 SAMR은 문서 개요에서 수업 모형이 아니라 설계 틀로 표시한다', () => {
+    const plan = makeGeneratedPlan({ instructionModel: { id: 'samr', name: 'SAMR 에듀테크 설계', reason: '과제 변화를 점검함' } });
+
+    const row = buildDocumentModel(plan).sessions[0].overview.rows.find(item => item.key === 'instructionModel');
+
+    expect(row).toEqual({ key: 'instructionModel', label: '설계 틀', value: 'SAMR 에듀테크 설계' });
 });
 
 test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조적으로 보존한다', () => {
@@ -109,6 +135,7 @@ test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조
         'studentActivity',
         'minutes',
         'notes',
+        'remarks',
     ]);
     expect(PROCESS_COLUMNS.map(column => column.label)).toEqual([
         '단계',
@@ -117,25 +144,30 @@ test('과정 표의 열 계약과 발문·예상 반응·지원 내용을 구조
         '학생 활동',
         '시간',
         '자료·유의점',
+        '비고',
     ]);
     expect(process.columns).toEqual(PROCESS_COLUMNS);
     expect(process.rows[1].teacherActivity.map(block => block.key)).toEqual(['teacherActivities', 'teacherQuestions']);
     expect(process.rows[1].studentActivity.map(block => block.key)).toEqual(['studentActivities', 'expectedStudentResponses']);
     expect(process.rows[1].notes.map(block => block.key)).toEqual(['materialsAndNotes', 'supportNotes']);
+    expect(process.rows[1].remarks.map(block => block.key)).toEqual(['remarks']);
     expect(process.rows[1]).toMatchObject({
         phase: '전개',
         learningElement: '탐구 수행 · 식물 기관 관찰',
         teacherActivity: [
-            { key: 'teacherActivities', label: '교사 활동', items: ['관찰을 안내한다.'] },
+            { key: 'teacherActivities', label: '교사 활동', items: ['탐구 수행: 관찰을 안내한다.', '탐구 수행: 근거를 기록하도록 돕는다.'] },
             { key: 'teacherQuestions', label: '주요 발문', items: ['관찰한 구조에서 어떤 특징을 찾았나요?'] },
         ],
         studentActivity: [
-            { key: 'studentActivities', label: '학생 활동', items: ['관찰하고 기록한다.'] },
+            { key: 'studentActivities', label: '학생 활동', items: ['탐구 수행: 관찰하고 기록한다.', '탐구 수행: 모둠의 기록을 비교한다.'] },
             { key: 'expectedStudentResponses', label: '예상 학생 반응', items: ['뿌리에는 가는 털이 있습니다.'] },
         ],
         notes: [
             { key: 'materialsAndNotes', label: '자료·유의점', items: ['안전하게 다룬다.'] },
             { key: 'supportNotes', label: '지원', items: ['관찰 문장 틀을 제공한다.'] },
+        ],
+        remarks: [
+            { key: 'remarks', label: '비고', items: ['모둠별 관찰 순서를 확인한다.'] },
         ],
         minutes: 30,
     });

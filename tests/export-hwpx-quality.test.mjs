@@ -97,13 +97,13 @@ test('preserves CRLF, LF, CR, and tab as explicit OWPML inline controls', async 
     const { section, sectionXml } = await unpackHwpx(plan);
 
     // Then line and tab boundaries remain ordered mixed content inside one hp:t node
-    const lineBreaks = elements(section, 'hp:lineBreak');
-    const tabs = elements(section, 'hp:tab');
+    const mixedText = elements(section, 'hp:t').find(text => text.textContent === '줄시작줄중간탭뒤CR뒤줄끝');
+    const lineBreaks = [...mixedText.getElementsByTagName('hp:lineBreak')];
+    const tabs = [...mixedText.getElementsByTagName('hp:tab')];
     expect(lineBreaks).toHaveLength(3);
     expect(tabs).toHaveLength(1);
     for (const control of [...lineBreaks, ...tabs]) expect(control.parentElement.tagName).toBe('hp:t');
     expect(Object.fromEntries([...tabs[0].attributes].map(attribute => [attribute.name, attribute.value]))).toEqual({ width: '0', leader: '0', type: '0' });
-    const mixedText = elements(section, 'hp:t').find(text => text.textContent === '줄시작줄중간탭뒤CR뒤줄끝');
     expect([...mixedText.childNodes].map(node => node.nodeType === Node.TEXT_NODE ? node.textContent : node.nodeName)).toEqual([
         '줄시작', 'hp:lineBreak', '줄중간', 'hp:tab', '탭뒤', 'hp:lineBreak', 'CR뒤', 'hp:lineBreak', '줄끝',
     ]);

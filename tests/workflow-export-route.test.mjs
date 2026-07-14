@@ -56,17 +56,21 @@ test('exports separate student and teacher worksheet documents', async () => {
     expect(Buffer.from(await teacher.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
 });
 
-test('exports cover-only and full assessment documents from the same validated assessment', async () => {
+test('exports separate guidance, submission sheet, and full assessment documents', async () => {
     const assessment = makeAssessment();
     const coverRequest = new Request('http://localhost/api/export-workflow/assessment-cover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment) });
+    const sheetRequest = new Request('http://localhost/api/export-workflow/assessment-sheet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment) });
     const fullRequest = new Request('http://localhost/api/export-workflow/assessment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(assessment) });
 
     const cover = await POST(coverRequest, { params: Promise.resolve({ kind: 'assessment-cover' }) });
+    const sheet = await POST(sheetRequest, { params: Promise.resolve({ kind: 'assessment-sheet' }) });
     const full = await POST(fullRequest, { params: Promise.resolve({ kind: 'assessment' }) });
 
     expect(cover.status).toBe(200);
+    expect(sheet.status).toBe(200);
     expect(full.status).toBe(200);
     expect(Buffer.from(await cover.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+    expect(Buffer.from(await sheet.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
     expect(Buffer.from(await full.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
 });
 

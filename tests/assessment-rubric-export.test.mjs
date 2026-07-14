@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { expect, test } from 'vitest';
 import { POST } from '@/app/api/export-rubric/[format]/route';
+import { buildAssessmentRubricHwpx } from '@/lib/export/assessment-rubric';
 import { buildWorkflowPdf } from '@/lib/export/workflow-pdf';
 import { makeAssessment } from './fixtures/workflow.mjs';
 
@@ -84,12 +85,13 @@ test('exports the teacher-edited rubric in PDF, HWPX, DOCX, and Excel', async ()
     expect(sectionXml).toContain('교사가 직접 고친 탁월 수준 설명');
     expect(sectionXml).not.toContain('<hp:linesegarray');
     const rubricTable = [...section.getElementsByTagName('hp:tbl')].at(-1);
-    expect(Number(rubricTable.getAttribute('colCnt'))).toBe(2);
+    expect(Number(rubricTable.getAttribute('colCnt'))).toBe(assessment.rubric.levels.length + 1);
     for (const row of [...rubricTable.getElementsByTagName('hp:tr')]) {
         const widths = [...row.getElementsByTagName('hp:tc')].map(cell => Number(cell.getElementsByTagName('hp:cellSz')[0].getAttribute('width')));
         expect(widths.reduce((sum, width) => sum + width, 0)).toBe(42520);
+        for (const cell of [...row.getElementsByTagName('hp:tc')]) expect(cell.getElementsByTagName('hp:p')).toHaveLength(1);
     }
-    expect([...rubricTable.getElementsByTagName('hp:tr')][0].textContent).toContain('수준별 기준');
+    expect([...rubricTable.getElementsByTagName('hp:tr')][0].textContent).toContain('탁월');
 
     const docxZip = await JSZip.loadAsync(docx);
     const documentXml = await docxZip.file('word/document.xml').async('string');
@@ -107,6 +109,26 @@ test('exports the teacher-edited rubric in PDF, HWPX, DOCX, and Excel', async ()
     expect(sheet.getRow(5).values).toContain('탁월');
     expect(sheet.getCell('A6').value).toContain('교사가 고친 관찰 근거');
     expect(sheet.getCell('D6').value).toContain('교사가 직접 고친 탁월 수준 설명');
+});
+
+test('splits a long HWPX rubric into page-sized level-column tables', async () => {
+    const assessment = makeAssessment();
+    assessment.rubric.criteria[0].description = `평가영역-시작-${'관찰 근거를 구체적으로 설명한다. '.repeat(120)}-평가영역-끝`;
+    assessment.rubric.criteria[0].levels[0].description = `수준기준-시작-${'학생의 수행 증거를 바탕으로 판단한다. '.repeat(120)}-수준기준-끝`;
+    const bytes = await buildAssessmentRubricHwpx(assessment);
+    const zip = await JSZip.loadAsync(bytes);
+    const sectionXml = await zip.file('Contents/section0.xml').async('string');
+    const section = new DOMParser().parseFromString(sectionXml, 'application/xml');
+    const rubricTables = [...section.getElementsByTagName('hp:tbl')].filter(table => table.textContent.includes('평가영역') && table.textContent.includes('탁월'));
+
+    expect(rubricTables.length).toBeGreaterThan(1);
+    expect([...section.getElementsByTagName('hp:p')].filter(paragraph => paragraph.getAttribute('pageBreak') === '1').length).toBeGreaterThan(0);
+    for (const table of rubricTables) {
+        expect(Number(table.getAttribute('colCnt'))).toBe(assessment.rubric.levels.length + 1);
+        for (const cell of [...table.getElementsByTagName('hp:tc')]) expect(cell.getElementsByTagName('hp:p')).toHaveLength(1);
+    }
+    expect(rubricTables.map(table => table.textContent).join('')).toContain('평가영역-끝');
+    expect(rubricTables.map(table => table.textContent).join('')).toContain('수준기준-끝');
 });
 
 test('rejects a malformed rubric export and unsupported file types', async () => {

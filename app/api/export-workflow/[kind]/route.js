@@ -2,8 +2,9 @@ import { worksheetOutputSchema } from '@/lib/worksheet-schema';
 import { assessmentOutputSchema, assessmentRenderBudgetExceeded } from '@/lib/assessment-schema';
 import { buildWorkflowPdf, CoverPageOverflowError, WorkflowPdfLimitError } from '@/lib/export/workflow-pdf';
 import { buildWorkflowHwpx } from '@/lib/export/workflow-hwpx';
+import { upgradeAssessmentStudentSheet } from '@/lib/assessment-student-sheet';
 
-const schemas = { worksheet: worksheetOutputSchema, 'worksheet-student': worksheetOutputSchema, 'worksheet-teacher': worksheetOutputSchema, assessment: assessmentOutputSchema, 'assessment-cover': assessmentOutputSchema };
+const schemas = { worksheet: worksheetOutputSchema, 'worksheet-student': worksheetOutputSchema, 'worksheet-teacher': worksheetOutputSchema, assessment: assessmentOutputSchema, 'assessment-cover': assessmentOutputSchema, 'assessment-sheet': assessmentOutputSchema };
 const formats = {
     pdf: { build: buildWorkflowPdf, contentType: 'application/pdf' },
     hwpx: { build: buildWorkflowHwpx, contentType: 'application/hwp+zip' },
@@ -72,7 +73,7 @@ export async function POST(request, context) {
     } catch { return Response.json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 }); }
     try { body = JSON.parse(body); } catch { return Response.json({ code: 'invalid_request', message: '요청 본문이 올바른 JSON이 아닙니다.' }, { status: 400 }); }
     if (jsonStructureTooLarge(body)) return Response.json({ code: 'invalid_document', message: '저장할 문서 구조가 너무 큽니다. 항목 수를 줄여주세요.' }, { status: 400 });
-    const parsed = schema.safeParse(body);
+    const parsed = schema.safeParse(kind.startsWith('assessment') ? upgradeAssessmentStudentSheet(body) : body);
     if (!parsed.success) {
         const onlyRenderBudgetIssue = parsed.error.issues.every(issue => issue.path.length === 0 && issue.message.includes('PDF 전체 글자 수'));
         const renderBudgetIssue = kind.startsWith('assessment') && onlyRenderBudgetIssue && assessmentRenderBudgetExceeded(body);

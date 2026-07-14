@@ -104,18 +104,18 @@ test('applies Paperlogy defaults and calm green table styling', async () => {
     expect(documentXml).toContain('<w:cantSplit/>');
 });
 
-test('renders fixed standard table grids and repeatable unsplit rows', async () => {
+test('renders fixed standard table grids with repeatable headers and flowable process rows', async () => {
     // Given one session with three process rows and one assessment row
     // When the DOCX tables are unpacked
     const { documentXml } = await unpackDocx(makeGeneratedPlan());
     const [, processTable, assessmentTable] = tableParts(documentXml);
 
     // Then the formal process and assessment grids and row controls are exact
-    expect(gridWidths(processTable)).toEqual([760, 1250, 2730, 2550, 650, 2038]);
+    expect(gridWidths(processTable)).toEqual([650, 1050, 2300, 2200, 550, 1900, 1328]);
     expect(gridWidths(assessmentTable)).toEqual([1700, 1700, 1900, 4678]);
     expect(processTable.match(/<w:tblHeader\/>/g) ?? []).toHaveLength(1);
     expect(assessmentTable.match(/<w:tblHeader\/>/g) ?? []).toHaveLength(1);
-    expect(processTable.match(/<w:cantSplit\/>/g) ?? []).toHaveLength(4);
+    expect(processTable.match(/<w:cantSplit\/>/g) ?? []).toHaveLength(1);
     expect(assessmentTable.match(/<w:cantSplit\/>/g) ?? []).toHaveLength(2);
 });
 
@@ -139,6 +139,7 @@ test('preserves every long structured content field without truncation', async (
         expectedResponse: sentinel('예상반응'),
         materialNote: sentinel('자료유의점'),
         support: sentinel('지원'),
+        remarks: sentinel('비고'),
         commonFeedback: sentinel('공통피드백'),
         needsSupport: sentinel('보충피드백'),
         meets: sentinel('도달피드백'),
@@ -158,6 +159,7 @@ test('preserves every long structured content field without truncation', async (
                 expectedStudentResponses: [values.expectedResponse],
                 materialsAndNotes: [values.materialNote],
                 supportNotes: [values.support],
+                remarks: [values.remarks],
             }],
         }],
         assessment: [{

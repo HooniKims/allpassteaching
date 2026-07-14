@@ -15,19 +15,29 @@ describe('lesson plan export route', () => {
     }
 
     test('exports the simple HWPX variant with an HWPX filename', async () => {
-        // Given a teacher chooses the table-free HWPX download
+        // Given a teacher chooses the compact two-column HWPX download
         const request = new Request('http://localhost/api/export/hwpx?variant=simple', { method: 'POST', body: JSON.stringify(makeGeneratedPlan()) });
 
         // When the export route receives the request
         const response = await POST(request, { params: Promise.resolve({ format: 'hwpx' }) });
 
-        // Then it returns a normal HWPX attachment whose section has no table layout
+        // Then it returns a normal HWPX attachment with only compact two-column tables
         const bytes = new Uint8Array(await response.arrayBuffer());
         const zip = await JSZip.loadAsync(bytes);
+        const sectionXml = await zip.file('Contents/section0.xml').async('string');
         expect(response.status).toBe(200);
         expect(response.headers.get('content-type')).toContain('application/hwp+zip');
         expect(response.headers.get('content-disposition')).toContain('.hwpx');
-        expect(await zip.file('Contents/section0.xml').async('string')).not.toContain('<hp:tbl');
+        expect(sectionXml.match(/<hp:tbl\b/g)).toHaveLength(4);
+        expect([...sectionXml.matchAll(/<hp:tbl\b[^>]*\bcolCnt="(\d+)"/g)].map(match => match[1])).toEqual(['2', '2', '2', '2']);
+    });
+
+    test.each(['hwpx', 'docx', 'pdf'])('exports the generated detailed plan as a %s 세안', async format => {
+        const response = await POST(new Request(`http://localhost/api/export/${format}?plan=detailed`, { method: 'POST', body: JSON.stringify(makeGeneratedPlan()) }), { params: Promise.resolve({ format }) });
+
+        expect(response.status).toBe(200);
+        expect(decodeURIComponent(response.headers.get('content-disposition'))).toContain('-세안.');
+        expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(1000);
     });
 
     test('rejects an unsupported format', async () => {
