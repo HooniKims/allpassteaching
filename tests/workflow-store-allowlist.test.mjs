@@ -49,6 +49,7 @@ function fullWorkflow() {
         students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘' }],
         submissions: [submission],
         records: [record],
+        recordTargetBytes: 700,
     };
 }
 
@@ -215,15 +216,15 @@ test('forbidden values are dropped even when injected into every allowed value c
 
 test('comparison lineage is stored only while a candidate draft exists', () => {
     const project = fullWorkflow();
-    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '', candidateSourceHash: 'stale', candidateTargetLength: 500, regenerationStatus: 'done' };
+    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '', candidateSourceHash: 'stale', candidateTargetBytes: 700, regenerationStatus: 'done' };
 
     saveWorkflow(project);
     expect(loadWorkflow().records[0]).not.toHaveProperty('previousText');
     expect(loadWorkflow().records[0]).not.toHaveProperty('candidateSourceHash');
 
-    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500, candidateInvalidCode: 'length_limit', candidateInvalidMessage: '현재 글자 수 제한과 맞지 않습니다.', regenerationStatus: 'done' };
+    project.records[0] = { ...project.records[0], previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetBytes: 700, candidateInvalidCode: 'length_limit', candidateInvalidMessage: '현재 분량 설정과 맞지 않습니다.', regenerationStatus: 'done' };
     saveWorkflow(project);
-    expect(loadWorkflow().records[0]).toMatchObject({ previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetLength: 500, candidateInvalidCode: 'length_limit', candidateInvalidMessage: '현재 글자 수 제한과 맞지 않습니다.' });
+    expect(loadWorkflow().records[0]).toMatchObject({ previousText: '이전 문장', candidateText: '새 후보', candidateSourceHash: 'record-v2:candidate', candidateTargetBytes: 700, candidateInvalidCode: 'length_limit', candidateInvalidMessage: '현재 분량 설정과 맞지 않습니다.' });
 });
 
 test('interrupted generation states recover as retryable records after reload', () => {

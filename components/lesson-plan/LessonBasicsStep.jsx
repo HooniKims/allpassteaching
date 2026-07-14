@@ -29,11 +29,17 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
         setMappingStatus('idle');
         setMappingMessage('');
         if (selected === CUSTOM_SUBJECT_VALUE) {
-            onChange({ ...value, subjectMode: 'custom', subject: '', displaySubject: '', mappedSubjects: [], error: '' });
+            onChange(current => ({ ...current, subjectMode: 'custom', subject: '', displaySubject: '', mappedSubjects: [], error: '' }));
             return;
         }
-        const mappedSubjects = catalogSubjectsFor(value.schoolLevel, value.grade, selected);
-        onChange({ ...value, subjectMode: 'official', subject: selected, displaySubject: selected, mappedSubjects, error: '' });
+        onChange(current => ({
+            ...current,
+            subjectMode: 'official',
+            subject: selected,
+            displaySubject: selected,
+            mappedSubjects: catalogSubjectsFor(current.schoolLevel, current.grade, selected),
+            error: '',
+        }));
     };
     const updateCustomSubject = displaySubject => {
         setMappingOptions([]);
@@ -87,8 +93,14 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
         <header><p className="eyebrow">1단계 · 수업 정보</p><h1>어떤 수업을 준비하시나요?</h1><p>수업의 기본 정보를 알려주시면 교육과정 연결을 도와드릴게요.</p></header>
         {value.error && <p className="form-alert" role="alert">{value.error}</p>}
         <div className="field-grid">
-            <label>학교급<select aria-label="학교급" value={value.schoolLevel} onChange={event => onChange({ ...value, schoolLevel: event.target.value, grade: '', subject: '', displaySubject: '', mappedSubjects: [], error: '' })}><option value="">선택</option><option value="elementary">초등학교</option><option value="middle">중학교</option><option value="high">일반고등학교</option></select></label>
-            <label>학년<select aria-label="학년" value={value.grade} disabled={!value.schoolLevel} onChange={event => onChange({ ...value, grade: event.target.value, subjectMode: 'official', subject: '', displaySubject: '', mappedSubjects: [], error: '' })}><option value="">선택</option>{(gradeOptions[value.schoolLevel] || []).map(grade => <option key={grade} value={grade}>{grade}학년</option>)}</select></label>
+            <label>학교급<select aria-label="학교급" value={value.schoolLevel} onChange={event => {
+                const schoolLevel = event.target.value;
+                onChange(current => ({ ...current, schoolLevel, grade: '', subject: '', displaySubject: '', mappedSubjects: [], error: '' }));
+            }}><option value="">선택</option><option value="elementary">초등학교</option><option value="middle">중학교</option><option value="high">일반고등학교</option></select></label>
+            <label>학년<select aria-label="학년" value={value.grade} disabled={!value.schoolLevel} onChange={event => {
+                const grade = event.target.value;
+                onChange(current => ({ ...current, grade, subjectMode: 'official', subject: '', displaySubject: '', mappedSubjects: [], error: '' }));
+            }}><option value="">선택</option>{(gradeOptions[value.schoolLevel] || []).map(grade => <option key={grade} value={grade}>{grade}학년</option>)}</select></label>
             <label>과목<select aria-label="과목" value={selectedSubject} disabled={!value.schoolLevel || !value.grade} onChange={event => selectSubject(event.target.value)}><option value="">선택</option>{subjectGroups.map(group => <optgroup key={group.label} label={group.label}>{group.options.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</optgroup>)}</select></label>
         </div>
         {subjectMode === 'custom' && <section className="subject-mapping" aria-label="관련 공식 과목 확인">

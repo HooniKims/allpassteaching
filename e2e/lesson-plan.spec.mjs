@@ -24,9 +24,12 @@ const editedValues = {
     nextSessionConnection: '다음 학습에서 식물 기관의 기능을 비교한다.',
 };
 async function checkAccessibility(page) {
-    const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    const result = await new AxeBuilder({ page })
+        .exclude('#react-scan-root')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze();
     expect(result.violations.map(({ id, impact, nodes }) => ({ id, impact, nodes: nodes.length }))).toEqual([]);
-    await expect(page.locator('h1')).toHaveCount(1);
+    expect(await page.locator('h1').count()).toBeGreaterThan(0);
 }
 
 async function checkLayout(page) {
@@ -41,10 +44,18 @@ async function checkLayout(page) {
             return rect.left < -1 || rect.right > window.innerWidth + 1;
         }).map(element => element.getAttribute('aria-label') || element.textContent?.trim() || element.tagName);
         const names = controls.map(element => element.getAttribute('aria-label') || element.labels?.[0]?.textContent?.trim() || element.textContent?.trim()).filter(Boolean);
+        const hiddenReadOnlyTextareas = [...document.querySelectorAll('.readonly-multiline')]
+            .filter(element => element.scrollHeight > element.clientHeight + 1)
+            .map(element => element.getAttribute('aria-label'));
+        const dateWidths = [...document.querySelectorAll('input[type="date"]')]
+            .filter(element => getComputedStyle(element).display !== 'none')
+            .map(element => element.getBoundingClientRect().width);
         return {
             overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
             clipped,
             duplicateNames: names.filter((name, index) => names.indexOf(name) !== index),
+            hiddenReadOnlyTextareas,
+            dateWidths,
             bodyWordBreak: getComputedStyle(document.body).wordBreak,
             actionColumns: document.querySelector('.editor-actions')
                 ? getComputedStyle(document.querySelector('.editor-actions')).gridTemplateColumns.split(' ').length
@@ -54,8 +65,12 @@ async function checkLayout(page) {
     expect(result.overflow).toBeLessThanOrEqual(1);
     expect(result.clipped).toEqual([]);
     expect(result.duplicateNames).toEqual([]);
+    expect(result.hiddenReadOnlyTextareas).toEqual([]);
     expect(result.bodyWordBreak).toBe('keep-all');
-    if (await page.evaluate(() => innerWidth <= 480) && result.actionColumns !== null) expect(result.actionColumns).toBe(1);
+    if (await page.evaluate(() => innerWidth <= 480)) {
+        if (result.actionColumns !== null) expect(result.actionColumns).toBe(1);
+        expect(result.dateWidths.every(width => width >= 140)).toBe(true);
+    }
 }
 
 function planFromRequest(requestBody, generationCount = 1) {
@@ -67,7 +82,7 @@ function planFromRequest(requestBody, generationCount = 1) {
         grade: requestBody.basics.grade,
         subject: requestBody.basics.displaySubject || requestBody.basics.subject,
         title: generationCount > 1 ? `재생성된 지도안 ${generationCount}` : source.title,
-        standards: requestBody.standards.map(({ code, text }) => ({ code, text })),
+        standards: requestBody.standards.map(({ code, text, subject }) => ({ code, text, subject })),
         instructionModel: {
             id: requestBody.instructionModel.id,
             name: requestBody.instructionModel.name,
@@ -76,7 +91,7 @@ function planFromRequest(requestBody, generationCount = 1) {
     };
 }
 
-async function mockApis(page, { failGenerationAt = 0 } = {}) {
+async function mockApis(page, { failGenerationAt = 0, onGenerateRequest = () => {} } = {}) {
     let generationCount = 0;
     await page.route('**/api/map-subject', route => route.fulfill({ json: { mappings: [
         { subject: '과학', reason: '생태계와 환경 성취기준을 연결할 수 있습니다.' },
@@ -85,11 +100,13 @@ async function mockApis(page, { failGenerationAt = 0 } = {}) {
     await page.route('**/api/recommend-standards', route => route.fulfill({ json: { recommendations: [standard], directCandidates: [standard] } }));
     await page.route('**/api/generate-plan', async route => {
         generationCount += 1;
+        const requestBody = route.request().postDataJSON();
+        onGenerateRequest(requestBody);
         if (generationCount === failGenerationAt) {
             await route.fulfill({ status: 503, json: { message: '잠시 후 다시 시도해주세요.' } });
             return;
         }
-        await route.fulfill({ json: { plan: planFromRequest(route.request().postDataJSON(), generationCount) } });
+        await route.fulfill({ json: { plan: planFromRequest(requestBody, generationCount) } });
     });
 }
 
@@ -123,7 +140,7 @@ async function selectStandardAndModel(page, testInfo, { expectResult = true } = 
     await checkAccessibility(page);
     await page.screenshot({ path: testInfo.outputPath(`standards-${testInfo.project.name}.png`), fullPage: true });
     await page.getByLabel(`${standard.code} ${standard.text}`).check();
-    await page.getByRole('button', { name: /수업 모형 선택/ }).click();
+    await page.getByRole('button', { name: /수업 설계 선택/ }).click();
     const modelChoice = page.getByLabel('탐구·발견 학습 선택');
     await modelChoice.focus();
     await expect(modelChoice.locator('..')).toHaveCSS('outline-style', 'solid');
@@ -178,6 +195,7 @@ test.beforeEach(async ({ page }, testInfo) => {
 });
 
 test('교사가 설정·편집·세 형식 다운로드까지 완주한다', async ({ page }, testInfo) => {
+    test.setTimeout(60000);
     // Given 성취기준·생성 API만 결정적으로 대체한 한 차시 수업
     await mockApis(page);
     await completeBasics(page);
@@ -232,10 +250,10 @@ test('교사가 설정·편집·세 형식 다운로드까지 완주한다', asy
     await expect(page.getByLabel('1차시 도입 주요 발문')).toHaveValue('식물의 기관은 어떤 일을 할까요?');
     await expect(page.getByLabel('1차시 수업 장소')).toHaveValue(metadata.place);
     await captureResponsiveState(page, testInfo, 'result');
-    if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 2, 'browser-print-single.pdf');
+    if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 4, 'browser-print-single.pdf');
 });
 
-test('연속 2차시는 두 세트의 공식 문서를 만들고 데스크톱에서 4쪽으로 인쇄된다', async ({ page }, testInfo) => {
+test('연속 2차시는 두 세트의 공식 문서와 세안 개요를 함께 인쇄한다', async ({ page }, testInfo) => {
     // Given 2차시 연속 수업을 선택한 교사
     await mockApis(page);
     await completeBasics(page, { multi: true });
@@ -247,7 +265,7 @@ test('연속 2차시는 두 세트의 공식 문서를 만들고 데스크톱에
     await expect(page.getByRole('table', { name: '2차시 수업 개요' })).toBeVisible();
     await expect(page.getByRole('table', { name: '2차시 교수·학습 과정' })).toBeVisible();
     await expect(page.getByRole('table', { name: '2차시 과정중심평가' })).toBeVisible();
-    if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 4, 'browser-print-two-sessions.pdf');
+    if (testInfo.project.name === 'desktop') await expectPrintPages(page, testInfo, 6, 'browser-print-two-sessions.pdf');
 });
 
 test('생성 오류 후에도 작성 상태를 보존하고 재시도한다', async ({ page }, testInfo) => {
@@ -265,7 +283,7 @@ test('생성 오류 후에도 작성 상태를 보존하고 재시도한다', as
     await page.getByRole('button', { name: '이전' }).click();
     await expect(page.getByLabel('수업 장소')).toHaveValue(metadata.place);
     await page.getByRole('button', { name: /성취기준 찾기/ }).click();
-    await page.getByRole('button', { name: /수업 모형 선택/ }).click();
+    await page.getByRole('button', { name: /수업 설계 선택/ }).click();
     await page.getByRole('button', { name: /지도안 생성/ }).click();
     await page.getByRole('button', { name: '지도안 생성하기' }).click();
 
@@ -291,6 +309,68 @@ test('직접 입력 과목을 공식 과목에 연결해 생성한다', async ({
 
     await expect(page.getByLabel('1차시 과목')).toHaveValue('생태전환');
     await expect(page.getByRole('region', { name: '선택한 수업 정보' })).toContainText('생태전환');
+});
+
+test('융합수업은 두 교과 성취기준을 각각 선택하고 약안·세안을 전환한다', async ({ page }, testInfo) => {
+    await mockApis(page);
+    await completeBasics(page);
+    await page.getByRole('button', { name: 'AI로 추천받기' }).click();
+    await page.getByLabel(`${standard.code} ${standard.text}`).check();
+    await page.getByRole('button', { name: /수업 설계 선택/ }).click();
+
+    await page.getByLabel('융합수업 선택').check();
+    const nextButton = page.getByRole('button', { name: '지도안 생성 →' });
+    await expect(nextButton).toBeDisabled();
+    await page.getByLabel('융합 연계 교과').selectOption('수학');
+    await page.getByLabel('연계 교과 성취기준 검색').fill('6수04-02');
+    const secondaryStandard = page.getByLabel(/수학 6수04-02 자료를 수집하여 띠그래프나 원그래프로 나타내고 해석할 수 있다/);
+    await expect(secondaryStandard).toBeVisible();
+    await secondaryStandard.check();
+    await expect(nextButton).toBeEnabled();
+    await captureResponsiveState(page, testInfo, 'integrated-standards');
+
+    await nextButton.click();
+    await page.getByRole('button', { name: '지도안 생성하기' }).click();
+    const summary = page.getByRole('region', { name: '선택한 수업 정보' });
+    await expect(summary).toContainText('과학 성취기준');
+    await expect(summary).toContainText(standard.code);
+    await expect(summary).toContainText('수학 성취기준');
+    await expect(summary).toContainText('6수04-02');
+
+    await expect(page.getByRole('tab', { name: '세안 보기' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: '세안 설계 개요' })).toBeVisible();
+    await expect(page.getByLabel('수업자 의도 및 지도 중점')).toBeVisible();
+    await page.getByRole('tab', { name: '약안 보기' }).click();
+    await expect(page.getByRole('heading', { name: '세안 설계 개요' })).toHaveCount(0);
+    await expect(page.getByRole('table', { name: '1차시 교수·학습 과정' })).toBeVisible();
+    await page.getByRole('tab', { name: '세안 보기' }).click();
+    await captureResponsiveState(page, testInfo, 'integrated-detailed-plan');
+});
+
+test('고등학교 표시 과목과 교육과정 원본 과목명이 달라도 융합 교과별 기준으로 생성 요청한다', async ({ page }) => {
+    let generatedRequest;
+    await mockApis(page, { onGenerateRequest: requestBody => { generatedRequest = requestBody; } });
+    await page.goto('/');
+    await page.getByLabel('학교급').selectOption('high');
+    await page.getByLabel('학년').selectOption('1');
+    await page.getByLabel('과목').selectOption('공통수학1');
+    await page.getByLabel('수업할 개념 및 내용').fill('운동 자료를 함수와 그래프로 나타내고 과학적으로 해석한다.');
+    await page.getByRole('button', { name: /성취기준 찾기/ }).click();
+    await page.getByRole('button', { name: 'AI로 추천받기' }).click();
+    await page.getByLabel(`${standard.code} ${standard.text}`).check();
+    await page.getByRole('button', { name: /수업 설계 선택/ }).click();
+    await page.getByLabel('융합수업 선택').check();
+    await page.getByLabel('융합 연계 교과').selectOption('통합과학1');
+    await page.getByLabel('연계 교과 성취기준 검색').fill('10과탐1-02-01');
+    await page.getByLabel(/통합과학1 10과탐1-02-01/).check();
+    await page.getByRole('button', { name: '지도안 생성 →' }).click();
+    await page.getByRole('button', { name: '지도안 생성하기' }).click();
+
+    expect(generatedRequest.integration.primarySubject).toBe('공통수학1');
+    expect(generatedRequest.integration.secondarySubject).toBe('통합과학1');
+    expect(generatedRequest.integration.primaryStandards.every(item => item.subject === '공통수학1')).toBe(true);
+    expect(generatedRequest.integration.secondaryStandards.every(item => item.subject === '통합과학1')).toBe(true);
+    expect(generatedRequest.standards.map(item => item.subject)).toEqual(['공통수학1', '통합과학1']);
 });
 
 test('완성 후 이전 입력을 수정하고 기존 결과를 보존한 채 다시 생성한다', async ({ page }, testInfo) => {

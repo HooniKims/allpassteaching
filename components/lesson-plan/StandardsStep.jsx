@@ -73,6 +73,6 @@ export function StandardsStep({ basics, selected, onChange, onBack, onNext }) {
             {item.score != null && <em>{Math.round(item.score)}%</em>}
         </label>)}</div>
         {!visible.length && <p className="empty-state">검색 결과가 없습니다. 더 넓은 개념어로 검색해보세요.</p>}
-        <footer className="step-actions"><button className="secondary-button" type="button" onClick={onBack}>이전</button><span>{selected.length ? `${selected.length}개 선택됨 · 모두 생성에 반영` : '성취기준을 1개 이상 선택해주세요'}</span><button type="button" disabled={!selected.length} onClick={onNext}>수업 모형 선택 →</button></footer>
+        <footer className="step-actions"><button className="secondary-button" type="button" onClick={onBack}>이전</button><span>{selected.length ? `${selected.length}개 선택됨 · 모두 생성에 반영` : '성취기준을 1개 이상 선택해주세요'}</span><button type="button" disabled={!selected.length} onClick={onNext}>수업 설계 선택 →</button></footer>
     </div>;
 }

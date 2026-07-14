@@ -1,6 +1,6 @@
 const steps = [
     ['수업 정보', '학교급·과목·차시'], ['성취기준', '직접 선택 또는 AI 추천'],
-    ['수업 모형', '목적에 맞는 모형 선택'], ['지도안 완성', '생성·편집·내보내기'],
+    ['수업 설계', '목적에 맞는 모형·설계 틀 선택'], ['지도안 완성', '생성·편집·내보내기'],
 ];
 
 export function StepNavigation({ current, maxReached = current, onStepChange = () => {} }) {

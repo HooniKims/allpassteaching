@@ -45,10 +45,11 @@ test('빠른 작업은 숨기고 느린 불투명 작업·취소를 정직하게
         await page.getByRole('button', { name: '지도안 다시 생성' }).click();
         const dialog = page.getByRole('dialog', { name: '수업 지도안 생성' });
         await expect(dialog).toBeVisible();
-        await expect(dialog.getByRole('status', { name: '작업 진행 상태' })).toContainText('Upstage 응답 대기');
+        await expect(dialog.getByRole('status', { name: '작업 진행 상태' })).toContainText('AI가 생성 중입니다.');
+        await expect(dialog).not.toContainText(/Upstage|비용|요금|5초 뒤/);
         await expect(dialog.getByRole('progressbar')).toHaveCount(0);
         await expect(dialog).not.toContainText('%');
-        await expect(dialog).toContainText('예상 시간');
+        await expect(dialog).not.toContainText(/예상 시간|남음|처리 중/);
         expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
         await page.keyboard.press('Tab');
         expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);

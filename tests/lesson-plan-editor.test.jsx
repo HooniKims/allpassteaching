@@ -18,7 +18,7 @@ test('renders every session as two formal document pages with semantic tables', 
 
     // Then
     expect(screen.getAllByRole('heading', { level: 1, name: '교수·학습 과정안' })).toHaveLength(1);
-    expect(container.querySelectorAll('.lesson-document-page')).toHaveLength(4);
+    expect(container.querySelectorAll('.lesson-document-page')).toHaveLength(5);
     expect(screen.getByRole('table', { name: '1차시 수업 개요' })).toBeInTheDocument();
     expect(screen.getByRole('table', { name: '1차시 교수·학습 과정' })).toBeInTheDocument();
     expect(screen.getByRole('table', { name: '1차시 과정중심평가' })).toBeInTheDocument();
@@ -65,8 +65,21 @@ test('renders derived overview values and standards as read-only fields', () => 
     // Then
     expect(screen.getByLabelText('1차시 학교급')).toHaveValue('초등학교');
     expect(screen.getByLabelText('1차시 학교급')).toHaveAttribute('readonly');
-    expect(screen.getByLabelText('1차시 성취기준')).toHaveValue('[6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.');
-    expect(screen.getByLabelText('1차시 성취기준')).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('1차시 성취기준')).toHaveTextContent('[과학] [6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.');
+    expect(screen.getByLabelText('1차시 성취기준')).toHaveAttribute('aria-readonly', 'true');
+});
+
+test('복수 교과 성취기준 읽기 영역은 내용 높이에 맞춰 확장할 수 있게 표시한다', () => {
+    const plan = makeGeneratedPlan({ standards: [
+        ...makeGeneratedPlan().standards,
+        { code: '6수04-02', text: '자료를 수집하여 그래프로 나타내고 해석할 수 있다.', subject: '수학' },
+    ] });
+
+    render(<LessonPlanEditor plan={plan} onChange={() => {}} />);
+
+    const standards = screen.getByLabelText('1차시 성취기준');
+    expect(standards).toHaveClass('readonly-multiline');
+    expect(standards).toHaveTextContent('[수학] [6수04-02]');
 });
 
 test('centers overview rows from the date through the instruction model', () => {
@@ -77,6 +90,15 @@ test('centers overview rows from the date through the instruction model', () => 
     expect(screen.getByLabelText('1차시 성취기준').closest('tr')).not.toHaveClass('overview-table__centered');
 });
 
+test('SAMR 지도안 개요는 선택 항목을 설계 틀로 안내한다', () => {
+    const plan = makeGeneratedPlan({ instructionModel: { id: 'samr', name: 'SAMR 에듀테크 설계', reason: '과제 변화를 점검함' } });
+
+    render(<LessonPlanEditor plan={plan} onChange={() => {}} />);
+
+    expect(screen.getByLabelText('1차시 설계 틀')).toHaveValue('SAMR 에듀테크 설계');
+    expect(screen.queryByLabelText('1차시 수업 모형')).not.toBeInTheDocument();
+});
+
 test('keeps the timing table cell intact and lays out date and period inside it', () => {
     render(<LessonPlanEditor plan={makeGeneratedPlan({ metadata: { date: '2026-07-11', period: '3' } })} onChange={() => {}} />);
 
@@ -84,6 +106,22 @@ test('keeps the timing table cell intact and lays out date and period inside it'
     expect(dateInput.closest('td')).not.toHaveClass('overview-timing');
     expect(dateInput.parentElement).toHaveClass('overview-timing');
     expect(dateInput.parentElement).toContainElement(screen.getByLabelText('1차시 교시'));
+});
+
+test('학생 활동을 별도 열로 보여주고 단계별 비고를 편집한다', () => {
+    const plan = makeGeneratedPlan();
+    const onChange = vi.fn();
+    render(<LessonPlanEditor plan={plan} onChange={onChange} />);
+
+    expect(screen.getByRole('columnheader', { name: '학생 활동' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '비고' })).toBeInTheDocument();
+    const remarks = screen.getByLabelText('1차시 도입 비고');
+    fireEvent.change(remarks, { target: { value: '준비물 배부 순서를 확인한다.\n안전 수칙을 다시 안내한다.' } });
+
+    expect(onChange.mock.lastCall[0].sessions[0].stages[0].remarks).toEqual([
+        '준비물 배부 순서를 확인한다.',
+        '안전 수칙을 다시 안내한다.',
+    ]);
 });
 
 test.each([
@@ -311,7 +349,7 @@ test('copies every editable lesson-plan field and announces success', async () =
         stages: [{
             ...plan.sessions[0].stages[0],
             learningElement: '복사-학습요소', teacherActivities: ['복사-교사활동'], teacherQuestions: ['복사-주요발문'],
-            studentActivities: ['복사-학생활동'], expectedStudentResponses: ['복사-예상반응'], materialsAndNotes: ['복사-자료유의'], supportNotes: ['복사-지원사항'],
+            studentActivities: ['복사-학생활동'], expectedStudentResponses: ['복사-예상반응'], materialsAndNotes: ['복사-자료유의'], supportNotes: ['복사-지원사항'], remarks: ['복사-비고'],
         }, ...plan.sessions[0].stages.slice(1)],
     };
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -327,7 +365,7 @@ test('copies every editable lesson-plan field and announces success', async () =
     for (const sentinel of [
         ...Object.values(sentinels.metadata), sentinels.title, sentinels.unitTitle, sentinels.essentialQuestion,
         ...sentinels.learningGoals, ...sentinels.materials, '복사-학습요소', '복사-교사활동', '복사-주요발문',
-        '복사-학생활동', '복사-예상반응', '복사-자료유의', '복사-지원사항',
+        '복사-학생활동', '복사-예상반응', '복사-자료유의', '복사-지원사항', '복사-비고',
         ...Object.values(sentinels.assessment[0]).filter(value => typeof value === 'string'),
         ...Object.values(sentinels.assessment[0].levelFeedback), ...sentinels.supportStrategies,
         sentinels.reflectionPrompt, '복사-후속연결',
@@ -465,4 +503,35 @@ test('connects overview values and process totals to their semantic headers', ()
     const footerCells = screen.getByRole('table', { name: '1차시 교수·학습 과정' }).querySelectorAll('tfoot td');
     expect(footerCells[0]).toHaveAttribute('headers', expect.stringContaining('session-1-process-minutes'));
     expect(footerCells[1]).toHaveAttribute('headers', expect.stringContaining('session-1-process-minutes'));
+});
+
+test('한 생성 결과에서 약안과 세안을 전환하고 세안 항목을 직접 수정한다', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={onChange}/>);
+
+    expect(screen.getByRole('tab', { name: '세안 보기' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: '세안 설계 개요' })).toBeVisible();
+    await user.clear(screen.getByLabelText('수업자 의도 및 지도 중점'));
+    await user.type(screen.getByLabelText('수업자 의도 및 지도 중점'), '교사가 수정한 세안 지도 중점');
+    expect(onChange).toHaveBeenCalled();
+
+    await user.click(screen.getByRole('tab', { name: '약안 보기' }));
+    expect(screen.queryByRole('heading', { name: '세안 설계 개요' })).not.toBeInTheDocument();
+    expect(screen.getByText('약안은 본시의 핵심 흐름과 평가를 간결하게 보여줍니다.')).toBeVisible();
+    expect(screen.getByRole('heading', { name: '1차시 수업 설계' })).toBeVisible();
+});
+
+test('약안·세안 탭은 패널을 연결하고 방향키로 전환한다', async () => {
+    const user = userEvent.setup();
+    render(<LessonPlanEditor plan={makeGeneratedPlan()} onChange={() => {}}/>);
+
+    const detailedTab = screen.getByRole('tab', { name: '세안 보기' });
+    expect(detailedTab).toHaveAttribute('aria-controls', 'lesson-plan-variant-panel');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'plan-variant-detailed');
+
+    detailedTab.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('tab', { name: '약안 보기' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'plan-variant-brief');
 });

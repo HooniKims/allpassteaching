@@ -8,6 +8,7 @@ import { SessionEditor } from './SessionEditor.jsx';
 import { normalizeEditorLines, splitEditorLines } from './editor-lines.js';
 import { lessonPlanClipboardText } from './lesson-plan-clipboard.js';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
+import { DetailedPlanEditor } from './DetailedPlanEditor.jsx';
 
 const sharedFieldsNoteId = 'shared-plan-fields-note';
 
@@ -17,12 +18,13 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
     if (original.current === null) original.current = structuredClone(originalPlan);
     const [value, setValue] = useState(() => structuredClone(plan));
     const [format, setFormat] = useState('hwpx');
+    const [planVariant, setPlanVariant] = useState('detailed');
     const [exporting, setExporting] = useState(false);
     const [copyStatus, setCopyStatus] = useState('');
     const lastReceivedPlan = useRef(plan);
     const lastReceivedOriginalPlan = useRef(originalPlan);
     const lastEmittedPlan = useRef(null);
-    const documentModel = buildDocumentModel(value);
+    const documentModel = buildDocumentModel(value, { variant: planVariant });
     const update = next => {
         lastEmittedPlan.current = next;
         setValue(next);
@@ -49,6 +51,16 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
         ...value,
         sessions: value.sessions.map((item, itemIndex) => itemIndex === index ? session : item),
     });
+    const selectPlanVariant = nextVariant => {
+        setPlanVariant(nextVariant);
+        requestAnimationFrame(() => document.getElementById(`plan-variant-${nextVariant}`)?.focus());
+    };
+    const handleVariantKeyDown = event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        if (event.key === 'Home' || event.key === 'ArrowLeft') selectPlanVariant('brief');
+        else selectPlanVariant('detailed');
+    };
     const restore = () => {
         if (!window.confirm('수정 내용을 지우고 생성 원본으로 되돌릴까요?')) return;
         update(structuredClone(original.current));
@@ -70,7 +82,9 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
             await runOperation({ kind: 'lesson-export', label: `${isSimpleHwpx ? '간편 HWPX' : exportFormat.toUpperCase()} 지도안 파일 저장`, phase: 'serverWaiting', cancelable: true }, async ({ signal }) => {
                 let response;
                 try {
-                    response = await fetch(`/api/export/${exportFormat}${isSimpleHwpx ? '?variant=simple' : ''}`, {
+                    const search = new URLSearchParams({ plan: planVariant });
+                    if (isSimpleHwpx) search.set('variant', 'simple');
+                    response = await fetch(`/api/export/${exportFormat}?${search}`, {
                         method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checked.data),
                     });
                 } catch (error) {
@@ -90,7 +104,7 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
                 const url = URL.createObjectURL(await response.blob());
                 const anchor = document.createElement('a');
                 anchor.href = url;
-                anchor.download = `${value.title}.${exportFormat}`;
+                anchor.download = `${value.title}-${planVariant === 'detailed' ? '세안' : '약안'}.${exportFormat}`;
                 anchor.click();
                 URL.revokeObjectURL(url);
             });
@@ -102,7 +116,7 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
     };
     const copyText = async () => {
         try {
-            await navigator.clipboard.writeText(lessonPlanClipboardText(value));
+            await navigator.clipboard.writeText(lessonPlanClipboardText(value, planVariant));
             setCopyStatus('지도안 전체 내용을 복사했습니다.');
         } catch {
             setCopyStatus('클립보드에 복사하지 못했습니다. 브라우저 권한을 확인해 주세요.');
@@ -119,8 +133,8 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
                 <label className="export-format">
                     <span className="sr-only">내보내기 형식</span>
                     <select aria-label="내보내기 형식" value={format} onChange={event => setFormat(event.target.value)}>
-                        <option value="hwpx">한글 HWPX (표 형식)</option>
-                        <option value="hwpx-simple">간편 HWPX (표 없음)</option>
+                        <option value="hwpx">한글 HWPX (PDF형 정식 표)</option>
+                        <option value="hwpx-simple">간편 HWPX (호환성 우선 · 2열)</option>
                         <option value="docx">Word DOCX</option>
                         <option value="pdf">PDF</option>
                     </select>
@@ -137,7 +151,16 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
             <p>내용이 매우 길면 인쇄 페이지가 늘어날 수 있습니다. 필요하면 문장을 간결하게 다듬어 주세요.</p>
         </aside>
 
-        <div className="lesson-document-stack">
+        <section className="plan-variant-switcher" aria-labelledby="plan-variant-title">
+            <div><strong id="plan-variant-title">지도안 형식</strong><p>{planVariant === 'brief' ? '약안은 본시의 핵심 흐름과 평가를 간결하게 보여줍니다.' : '세안은 단원 개관, 학습자 분석, 지도 전략과 단원 계획까지 포함합니다.'}</p></div>
+            <div role="tablist" aria-label="지도안 형식 선택" onKeyDown={handleVariantKeyDown}>
+                <button id="plan-variant-brief" type="button" role="tab" aria-controls="lesson-plan-variant-panel" aria-selected={planVariant === 'brief'} tabIndex={planVariant === 'brief' ? 0 : -1} onClick={() => setPlanVariant('brief')}>약안 보기</button>
+                <button id="plan-variant-detailed" type="button" role="tab" aria-controls="lesson-plan-variant-panel" aria-selected={planVariant === 'detailed'} tabIndex={planVariant === 'detailed' ? 0 : -1} onClick={() => setPlanVariant('detailed')}>세안 보기</button>
+            </div>
+        </section>
+
+        <div id="lesson-plan-variant-panel" className="lesson-document-stack" role="tabpanel" aria-labelledby={`plan-variant-${planVariant}`}>
+            {planVariant === 'detailed' && <DetailedPlanEditor value={value} onChange={update}/>}
             {value.sessions.map((session, index) => {
                 const model = documentModel.sessions[index];
                 const connectionLabel = model.connectionLabel;

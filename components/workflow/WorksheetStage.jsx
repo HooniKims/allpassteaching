@@ -6,6 +6,7 @@ import { sourceHash } from '@/lib/source-hash';
 import { downloadFilename } from '@/lib/download-filename';
 import { WorksheetEditor } from './WorksheetEditor.jsx';
 import { OperationBusyError, useOperation } from './OperationProvider.jsx';
+import { instructionModelTypeLabel, isInstructionDesignFramework } from '@/data/instruction-models';
 
 async function downloadWorkflowFile(kind, format, value, filename, signal) {
     const response = await fetch(`/api/export-workflow/${kind}?format=${format}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
@@ -39,6 +40,8 @@ function upgradeWorksheet(value, lessonPlan) {
 export function WorksheetStage({ lessonPlan, value, onChange }) {
     const { active: operationActive, runOperation } = useOperation();
     const recommended = recommendWorksheetFormat(lessonPlan.instructionModel);
+    const designFramework = isInstructionDesignFramework(lessonPlan.instructionModel);
+    const instructionModelLabel = instructionModelTypeLabel(lessonPlan.instructionModel);
     const upgradedValue = useMemo(() => upgradeWorksheet(value, lessonPlan), [value, lessonPlan]);
     const [selectedFormatId, setSelectedFormatId] = useState(value?.formatId ?? recommended.id);
     const selectedFormat = worksheetFormatById(selectedFormatId) ?? recommended;
@@ -53,7 +56,7 @@ export function WorksheetStage({ lessonPlan, value, onChange }) {
             : [...current.questionTypes, type],
     }));
     const generate = async () => {
-        setStatus({ type: 'loading', message: '수업 모형, 성취기준, 요청한 문항 유형을 분석해 학습지를 만들고 있습니다.' });
+        setStatus({ type: 'loading', message: `${instructionModelLabel}, 성취기준, 요청한 문항 유형을 분석해 학습지를 만들고 있습니다.` });
         try {
             const body = await runOperation({ kind: 'worksheet-generation', label: '학습지 생성', phase: 'upstageWaiting', cancelable: true, model: 'configured-generation-model' }, async ({ signal }) => {
                 const response = await fetch('/api/generate-worksheet', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lessonPlan, selectedFormatId, generationRequest }) });
@@ -72,10 +75,10 @@ export function WorksheetStage({ lessonPlan, value, onChange }) {
         } catch (error) { if (!(error instanceof OperationBusyError)) setStatus({ type: 'error', message: error.message }); }
     };
     return <section className="workflow-stage workflow-stage--wide">
-        <header className="workflow-stage__header"><div><p className="eyebrow">2단계 · 학습지</p><h1>수업 흐름에 맞는 학습지를 만들어요</h1><p>수업 모형의 사고 과정과 성취기준을 학생이 직접 기록할 문항으로 구성합니다.</p></div></header>
+        <header className="workflow-stage__header"><div><p className="eyebrow">2단계 · 학습지</p><h1>{designFramework ? '설계 틀과 학습 활동에 맞는 학습지를 만들어요' : '수업 흐름에 맞는 학습지를 만들어요'}</h1><p>{designFramework ? '설계 점검의 의도와 실제 학생 활동, 성취기준을 학생이 직접 기록할 문항으로 구성합니다.' : '수업 모형의 사고 과정과 성취기준을 학생이 직접 기록할 문항으로 구성합니다.'}</p></div></header>
         <section className="worksheet-request" aria-label="학습지 생성 설정">
             <div className="worksheet-request__grid">
-                <div className="worksheet-format-field"><label><span>학습지 형식</span><select aria-label="학습지 형식" value={selectedFormatId} onChange={event => setSelectedFormatId(event.target.value)}>{worksheetFormats.map(format => <option key={format.id} value={format.id}>{format.name}</option>)}</select></label><section className="worksheet-format-guidance" aria-label="선택한 학습지 형식 안내" aria-live="polite"><p><strong>선택한 형식은 이렇게 써요</strong><span>{selectedFormat.easyDescription}</span></p><p><strong>현재 추천</strong><span>{recommended.name}</span></p><p><strong>추천 기준</strong><span>선택한 수업 모형과 연결해 둔 기본 형식입니다. 성취기준과 추가 요구사항은 생성 내용에 반영하지만, 현재 추천을 바꾸지는 않습니다.</span></p></section></div>
+                <div className="worksheet-format-field"><label><span>학습지 형식</span><select aria-label="학습지 형식" value={selectedFormatId} onChange={event => setSelectedFormatId(event.target.value)}>{worksheetFormats.map(format => <option key={format.id} value={format.id}>{format.name}</option>)}</select></label><section className="worksheet-format-guidance" aria-label="선택한 학습지 형식 안내" aria-live="polite"><p><strong>선택한 형식은 이렇게 써요</strong><span>{selectedFormat.easyDescription}</span></p><p><strong>현재 추천</strong><span>{recommended.name}</span></p><p><strong>추천 기준</strong><span>선택한 {instructionModelLabel}과 연결해 둔 기본 형식입니다. 성취기준과 추가 요구사항은 생성 내용에 반영하지만, 현재 추천을 바꾸지는 않습니다.</span></p></section></div>
                 <label>학습지 추가 요구사항<textarea aria-label="학습지 추가 요구사항" rows="4" value={generationRequest.additionalRequirements} onChange={event => setGenerationRequest(current => ({ ...current, additionalRequirements: event.target.value }))} placeholder="예: 그래프 해석 근거 문항을 넣어 주세요."/></label>
             </div>
             <fieldset className="question-type-picker"><legend>포함할 문항 유형</legend><p>필요한 유형을 하나 이상 선택하세요. AI 생성 후에도 유형과 내용을 바꿀 수 있습니다.</p><div>{worksheetQuestionTypes.map(type => <label key={type.id}><input type="checkbox" checked={generationRequest.questionTypes.includes(type.id)} onChange={() => toggleType(type.id)}/><span>{type.label}</span></label>)}</div></fieldset>

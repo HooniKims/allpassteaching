@@ -8,7 +8,7 @@ import { InstructionModelStep } from './InstructionModelStep.jsx';
 import { GenerationStatus } from './GenerationStatus.jsx';
 import { LessonPlanEditor } from './LessonPlanEditor.jsx';
 import { GenerationSummary } from './GenerationSummary.jsx';
-import { createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
+import { buildLessonPlanGenerationRequest, createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
 const emptyBasics = { schoolLevel: 'middle', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
@@ -52,12 +52,8 @@ export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
     const generatePlan = async () => {
         cancelGeneration();
         const controller = new AbortController();
-        const requestDraft = {
-            basics: { ...draft.basics, sessionMinutes: draft.basics.schoolLevel === 'elementary' ? 40 : 45 },
-            standards: draft.standards,
-            instructionModel: draft.instructionModel,
-        };
-        const requestedSnapshot = createGenerationSnapshot(requestDraft);
+        const requestDraft = buildLessonPlanGenerationRequest(draft);
+        const requestedSnapshot = createGenerationSnapshot(draft);
         activeGeneration.current = controller;
         setGeneration({ status: 'loading', message: '' });
         try {
@@ -91,16 +87,24 @@ export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
         setDraft(current => ({ ...current, step }));
     };
     const advanceTo = step => setDraft(current => ({ ...current, step, maxReached: Math.max(current.maxReached, step) }));
-    const updateBasics = basics => setDraft(current => {
+    const updateBasics = nextBasics => setDraft(current => {
+        const basics = typeof nextBasics === 'function' ? nextBasics(current.basics) : nextBasics;
         const previousScope = JSON.stringify([current.basics.schoolLevel, current.basics.grade, current.basics.mappedSubjects]);
         const nextScope = JSON.stringify([basics.schoolLevel, basics.grade, basics.mappedSubjects]);
-        return { ...current, basics, standards: previousScope === nextScope ? current.standards : [] };
+        if (previousScope === nextScope) return { ...current, basics };
+        const instructionModel = current.instructionModel?.id === 'integrated'
+            ? { ...current.instructionModel, integrationSubject: '', integrationStandards: [] }
+            : current.instructionModel;
+        return { ...current, basics, standards: [], instructionModel };
     });
+    if (!ready) return <main className="workspace" aria-busy="true">
+        <section className="workspace__main"><p role="status">저장된 수업 정보를 불러오는 중입니다.</p></section>
+    </main>;
     const changed = draft.plan ? hasGenerationInputChanged(draft, draft.generatedFrom) : false;
     return <main className="workspace"><StepNavigation current={draft.step} maxReached={draft.maxReached} onStepChange={goToStep}/><section className="workspace__main">
         {draft.step === 1 && <LessonBasicsStep value={draft.basics} onChange={updateBasics} onNext={() => advanceTo(2)}/>}
         {draft.step === 2 && <StandardsStep basics={draft.basics} selected={draft.standards || []} onChange={standards => setDraft(current => ({ ...current, standards }))} onBack={() => goToStep(1)} onNext={() => advanceTo(3)}/>}
-        {draft.step === 3 && <InstructionModelStep lessonIntent={draft.basics.intent} selected={draft.instructionModel} onChange={instructionModel => setDraft(current => ({ ...current, instructionModel }))} onBack={() => goToStep(2)} onNext={() => advanceTo(4)}/>}
-        {draft.step === 4 && <div>{!draft.plan && <><p className="eyebrow">4단계 · 지도안 완성</p><h1>지도안을 생성할 준비가 됐어요</h1><p>선택한 모든 성취기준과 수업 모형을 바탕으로 초안을 만듭니다.</p><GenerationStatus {...generation}/><div className="step-actions"><button type="button" className="secondary-button" onClick={() => goToStep(3)}>이전</button><button type="button" disabled={generation.status === 'loading'} onClick={generatePlan}>지도안 생성하기</button></div></>}{draft.plan && <><GenerationSummary draft={draft} changed={changed} loading={generation.status === 'loading'} onEdit={() => goToStep(1)} onRegenerate={generatePlan}/><GenerationStatus {...generation}/><LessonPlanEditor plan={draft.plan} originalPlan={draft.originalPlan} onChange={plan => setDraft(current => ({ ...current, plan }))}/></>}</div>}
+        {draft.step === 3 && <InstructionModelStep basics={draft.basics} primaryStandards={draft.standards || []} lessonIntent={draft.basics.intent} selected={draft.instructionModel} onChange={instructionModel => setDraft(current => ({ ...current, instructionModel }))} onBack={() => goToStep(2)} onNext={() => advanceTo(4)}/>}
+        {draft.step === 4 && <div>{!draft.plan && <><p className="eyebrow">4단계 · 지도안 완성</p><h1>지도안을 생성할 준비가 됐어요</h1><p>선택한 모든 성취기준과 수업 설계를 바탕으로 초안을 만듭니다.</p><GenerationStatus {...generation}/><div className="step-actions"><button type="button" className="secondary-button" onClick={() => goToStep(3)}>이전</button><button type="button" disabled={generation.status === 'loading'} onClick={generatePlan}>지도안 생성하기</button></div></>}{draft.plan && <><GenerationSummary draft={draft} changed={changed} loading={generation.status === 'loading'} onEdit={() => goToStep(1)} onRegenerate={generatePlan}/><GenerationStatus {...generation}/><LessonPlanEditor plan={draft.plan} originalPlan={draft.originalPlan} onChange={plan => setDraft(current => ({ ...current, plan }))}/></>}</div>}
     </section></main>;
 }

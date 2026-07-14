@@ -1,11 +1,43 @@
 import { afterEach, test, expect, vi } from 'vitest';
 import { POST } from '@/app/api/generate-plan/route';
 import { generationDraft, makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
+import { instructionModels } from '@/data/instruction-models';
 
 afterEach(() => { vi.restoreAllMocks(); delete process.env.UPSTAGE_API_KEY; });
 const request = body => new Request('http://localhost/api/generate-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const completionContent = content => new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
 const completion = value => completionContent(JSON.stringify(value));
+
+function integratedDraftAndPlan() {
+    const integrated = instructionModels.find(item => item.id === 'integrated');
+    const primaryStandard = generationDraft.standards[0];
+    const secondaryStandard = { code: '6수04-02', text: '자료를 수집하여 그래프로 나타내고 해석할 수 있다.', subject: '수학' };
+    const draft = {
+        ...generationDraft,
+        standards: [primaryStandard, secondaryStandard],
+        instructionModel: integrated,
+        integration: {
+            primarySubject: '과학', secondarySubject: '수학',
+            primaryStandards: [primaryStandard], secondaryStandards: [secondaryStandard],
+        },
+    };
+    const plan = makeGeneratedPlan({
+        standards: [primaryStandard, secondaryStandard],
+        instructionModel: { id: integrated.id, name: integrated.name, reason: '관찰 자료를 그래프로 해석해 통합하기 위해' },
+    });
+    plan.sessions[0].stages[0].learningElement = '공통 맥락·문제';
+    plan.sessions[0].stages[0].teacherActivities = ['공통 맥락·문제: 과학 관찰과 수학 표현이 함께 필요한 공동 문제를 제시한다.', '공통 맥락·문제: 두 교과의 역할을 질문한다.'];
+    plan.sessions[0].stages[0].studentActivities = ['공통 맥락·문제: 과학과 수학이 필요한 까닭을 찾는다.', '공통 맥락·문제: 공동 문제 지도를 만든다.'];
+    plan.sessions[0].stages[1].learningElement = '교과 관점 탐구 · 관점 통합';
+    plan.sessions[0].stages[1].teacherActivities = ['교과 관점 탐구: 과학 관찰 근거와 수학 그래프를 탐구하도록 안내한다.', '관점 통합: 근거 사이의 관계를 묻는다.'];
+    plan.sessions[0].stages[1].studentActivities = ['교과 관점 탐구: 과학 자료를 수학 그래프로 나타낸다.', '관점 통합: 두 관점을 융합한 설명 산출물을 만든다.'];
+    plan.sessions[0].stages[2].learningElement = '적용·성찰';
+    plan.sessions[0].stages[2].teacherActivities = ['적용·성찰: 융합 설명을 새 사례에 적용하도록 돕는다.', '적용·성찰: 교과별 기여를 성찰하게 한다.'];
+    plan.sessions[0].stages[2].studentActivities = ['적용·성찰: 통합 결과물을 발표한다.', '적용·성찰: 과학과 수학의 기여를 성찰한다.'];
+    plan.assessment[0].evidence = '과학 관찰과 수학 그래프를 통합한 설명 산출물';
+    plan.detailedPlan.teachingStrategy = '과학 관찰과 수학 그래프 해석을 단계적으로 통합해 공동 산출물을 만드는 융합수업 전략을 적용한다.';
+    return { draft, plan };
+}
 
 test('returns a consistent 400 response for malformed request JSON', async () => {
     const malformedRequest = new Request('http://localhost/api/generate-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' });
@@ -14,6 +46,72 @@ test('returns a consistent 400 response for malformed request JSON', async () =>
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual(expect.objectContaining({ code: 'invalid_request', message: expect.any(String) }));
+});
+
+test('융합수업은 서로 다른 두 교과와 각 교과 성취기준이 없으면 생성 요청을 거부한다', async () => {
+    const integrated = instructionModels.find(item => item.id === 'integrated');
+    const response = await POST(request({ ...generationDraft, instructionModel: integrated }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual(expect.objectContaining({ code: 'invalid_request', issues: expect.any(Array) }));
+});
+
+test('융합수업은 교과별 성취기준과 전체 성취기준 목록이 다르면 생성 요청을 거부한다', async () => {
+    const integrated = instructionModels.find(item => item.id === 'integrated');
+    const primaryStandard = generationDraft.standards[0];
+    const secondaryStandard = { code: '6수04-01', text: '자료를 수집하여 그림그래프나 띠그래프로 나타낼 수 있다.', subject: '수학' };
+    const response = await POST(request({
+        ...generationDraft,
+        instructionModel: integrated,
+        standards: [primaryStandard],
+        integration: {
+            primarySubject: '과학',
+            secondarySubject: '수학',
+            primaryStandards: [primaryStandard],
+            secondaryStandards: [secondaryStandard],
+        },
+    }));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toEqual(expect.objectContaining({ code: 'invalid_request' }));
+    expect(body.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: ['standards'] }),
+    ]));
+});
+
+test('융합수업 생성 결과는 두 교과 관점과 통합 산출물이 실제 활동에 있어야 통과한다', async () => {
+    const { draft, plan } = integratedDraftAndPlan();
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(plan)));
+
+    const response = await POST(request(draft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+});
+
+test('융합수업 활동에서 교과별 관점과 통합 산출물이 빠지면 복구 생성을 요청한다', async () => {
+    const { draft, plan } = integratedDraftAndPlan();
+    const generic = structuredClone(plan);
+    generic.sessions[0].stages.forEach(stage => {
+        stage.teacherActivities = ['활동을 안내한다.', '질문을 제시한다.'];
+        stage.studentActivities = ['자료를 살펴본다.', '생각을 나눈다.'];
+        stage.expectedStudentResponses = ['자료의 특징을 말합니다.'];
+        stage.materialsAndNotes = [];
+    });
+    generic.assessment[0] = { ...generic.assessment[0], element: '내용 이해', method: '관찰', evidence: '학습 기록', feedback: '근거를 보완한다.' };
+    generic.detailedPlan.teachingStrategy = '학습자의 참여를 돕는 질문과 단계별 피드백을 활용하고, 수업 중 관찰 결과에 따라 지원 방법을 조정한다.';
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(generic)).mockResolvedValueOnce(completion(plan)));
+
+    const response = await POST(request(draft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairRequest = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(repairRequest.messages.at(-1).content).toContain('과학 관점·활동');
+    expect(repairRequest.messages.at(-1).content).toContain('공동 산출물');
 });
 
 test('returns a validated lesson plan', async () => {
@@ -76,6 +174,50 @@ test('repairs a plan that names the selected model but omits its stage evidence'
     expect(fetch).toHaveBeenCalledTimes(2);
     const repairRequest = JSON.parse(fetch.mock.calls[1][1].body);
     expect(repairRequest.messages.at(-1).content).toContain('가설 설정');
+});
+
+test('구체적인 활동은 유지하고 누락된 수업 모형 단계 라벨을 서버에서 보완한다', async () => {
+    const generated = makeGeneratedPlan();
+    generated.sessions[0].stages[0].learningElement = '문제 인식 · 문제 인식 · 가설 설정';
+    generated.sessions[0].stages.forEach(stage => {
+        stage.teacherActivities = stage.teacherActivities.map(item => item.replace(/^[^:]+:\s*/, ''));
+        stage.studentActivities = stage.studentActivities.map(item => item.replace(/^[^:]+:\s*/, ''));
+    });
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(generated)));
+
+    const response = await POST(request(generationDraft));
+    const plan = (await response.json()).plan;
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(plan.sessions[0].stages[0].teacherActivities.join('\n')).toContain('문제 인식:');
+    expect(plan.sessions[0].stages[0].studentActivities.join('\n')).toContain('가설 설정:');
+    expect(plan.sessions[0].stages[1].teacherActivities.join('\n')).toContain('탐구 수행:');
+    expect(plan.sessions[0].stages[0].learningElement).toBe('문제 인식 · 가설 설정');
+});
+
+test('accepts unordered TPACK checks without turning them into lesson phases', async () => {
+    const tpack = instructionModels.find(model => model.id === 'tpack');
+    const draft = { ...generationDraft, instructionModel: tpack };
+    const generated = makeGeneratedPlan({ instructionModel: { id: tpack.id, name: tpack.name, reason: '학습 목표에 맞는 기술 활용 점검' } });
+    generated.sessions[0].stages[0].learningElement = '수업 맥락과 목표 확인';
+    generated.sessions[0].stages[0].materialsAndNotes = ['설계 점검: 기술 적합성 검토 · 내용·목표 확인'];
+    generated.sessions[0].stages[0].teacherActivities = ['내용·목표 확인: 학습 목표를 확인한다.', '기술 적합성 검토: 접근성과 대체 수단을 확인한다.'];
+    generated.sessions[0].stages[1].learningElement = '핵심 학습 활동';
+    generated.sessions[0].stages[1].materialsAndNotes = ['설계 점검: 통합·맥락 점검 · 교수법 선택'];
+    generated.sessions[0].stages[1].studentActivities = ['교수법 선택: 협력 탐구를 수행한다.', '통합·맥락 점검: 기술 활용의 효과를 성찰한다.'];
+    generated.sessions[0].stages[2].learningElement = '학습 결과와 기술 활용 성찰';
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => completion(generated)));
+
+    const response = await POST(request(draft));
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await response.json()).plan.sessions[0].stages.map(stage => stage.learningElement)).toEqual([
+        '수업 맥락과 목표 확인', '핵심 학습 활동', '학습 결과와 기술 활용 성찰',
+    ]);
 });
 
 test.each(generationInvariantCases)('returns 422 when generated %s still differs after repair', async (_field, changePlan) => {

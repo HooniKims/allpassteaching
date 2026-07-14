@@ -1,8 +1,18 @@
 const ALL_SCHOOLS = ['elementary', 'middle', 'high'];
+const DEFAULT_CATEGORY = '수업 흐름 중심';
 
-function model(id, name, summary, plainGuide, stages, keywords, cautions = ['학습자의 사전 지식과 수업 시간을 확인한다.']) {
-    return { id, name, summary, plainGuide, bestFor: summary, schoolLevels: ALL_SCHOOLS, subjects: ['전체'], stages, keywords, cautions };
+function model(id, name, summary, plainGuide, stages, keywords, options = {}) {
+    const category = options.category ?? DEFAULT_CATEGORY;
+    const cautions = options.cautions ?? ['학습자의 사전 지식과 수업 시간을 확인한다.'];
+    const applicationMode = options.applicationMode ?? 'lesson-sequence';
+    return { id, name, summary, summaryParts: options.summaryParts, plainGuide, plainGuideParts: options.plainGuideParts, bestFor: summary, category, applicationMode, schoolLevels: ALL_SCHOOLS, subjects: ['전체'], stages, keywords, cautions };
 }
+
+export const instructionModelCategories = Object.freeze([
+    Object.freeze({ name: DEFAULT_CATEGORY, description: '도입부터 정리까지 학생의 학습 활동이 이어지는 대표적인 수업 흐름입니다.' }),
+    Object.freeze({ name: '융합 수업 설계', description: '두 개 이상 교과의 개념과 방법을 실제 문제 안에서 연결하는 설계입니다.' }),
+    Object.freeze({ name: '에듀테크 설계', description: 'TPACK과 SAMR은 시간 순서형 모형이 아니라 기술을 수업에 맞게 선택·점검하는 설계 틀입니다.' }),
+]);
 
 export const instructionModels = [
     model('direct', '직접 교수', '기능과 절차를 명료하게 시범 보일 때', '교사가 먼저 보여주고, 학생이 따라 해 본 뒤 혼자 해 보는 수업이에요.', ['설명', '시범', '안내된 연습', '독립 연습'], ['설명', '기능', '절차']),
@@ -17,7 +27,35 @@ export const instructionModels = [
     model('design-thinking', '디자인 씽킹', '사용자 관점에서 창의적인 해결안을 설계할 때', '누가 불편한지 먼저 살피고, 해결 아이디어를 만들어 시험해 보는 수업이에요.', ['공감', '문제 정의', '아이디어', '시제품·검증'], ['디자인', '공감', '시제품']),
     model('blended', '거꾸로·블렌디드 학습', '사전 학습과 교실 활동을 연결할 때', '기본 내용은 미리 익히고, 교실에서는 적용하고 질문하며 깊게 배우는 수업이에요.', ['사전 학습', '확인', '적용 활동', '피드백'], ['거꾸로', '온라인', '블렌디드']),
     model('subject-specific', '교과별 특화 모형', '반응 중심·실천적 문제 해결·수학적 모델링 등 교과 고유 흐름이 필요할 때', '교과에서 자주 쓰는 생각의 순서를 따라 표현하고 적용해 보는 수업이에요.', ['맥락 확인', '교과 탐구', '표현·적용', '성찰'], ['반응', '실천적', '모델링']),
+    model('integrated', '융합수업', '두 개 이상 교과의 개념과 방법을 연결해 복합 문제를 다룰 때', '여러 교과에서 배운 생각과 방법을 한 문제에 연결해 새로운 설명이나 결과물을 만드는 수업이에요.', ['공통 맥락·문제', '교과 관점 탐구', '관점 통합', '적용·성찰'], ['융합', '통합', '교과', 'STEAM', '복합', '주제'], {
+        category: '융합 수업 설계',
+        cautions: ['교과 이름만 여러 개 붙이고 실제 개념·방법의 연결이 없는 나열식 활동을 피한다.'],
+        summaryParts: ['두 개 이상 교과의 개념과 방법을 연결해', '복합 문제를 다룰 때'],
+    }),
+    model('tpack', 'TPACK 수업 설계', '내용·교수법·기술을 수업 맥락에 맞게 함께 설계할 때', '무엇을 가르칠지, 어떻게 가르칠지, 어떤 기술이 도움이 되는지를 함께 맞춰 보는 설계 틀이에요.', ['내용·목표 확인', '교수법 선택', '기술 적합성 검토', '통합·맥락 점검'], ['디지털', '에듀테크', 'AI', '기술', '온라인', '미디어'], {
+        category: '에듀테크 설계',
+        applicationMode: 'design-check',
+        cautions: ['도구를 먼저 정한 뒤 학습 목표와 교수법을 끼워 맞추지 않는다.'],
+        plainGuideParts: ['무엇을 가르칠지,', '어떻게 가르칠지,', '어떤 기술이 도움이 되는지를', '함께 맞춰 보는', '설계 틀이에요.'],
+    }),
+    model('samr', 'SAMR 에듀테크 설계', '디지털 기술이 과제를 단순 대체하는지 새롭게 바꾸는지 점검할 때', '기술 활용을 대체, 증강, 수정, 재정의의 네 수준으로 살펴보고 학습 목표에 맞게 과제를 바꾸는 틀이에요.', ['대체(Substitution)', '증강(Augmentation)', '수정(Modification)', '재정의(Redefinition)'], ['디지털', '에듀테크', '기술', '변형', '재설계', '온라인'], {
+        category: '에듀테크 설계',
+        applicationMode: 'design-check',
+        cautions: ['재정의를 무조건 목표로 삼지 말고 학습 목표와 학생의 접근성에 맞는 수준을 선택한다.'],
+        summaryParts: ['디지털 기술이 과제를 단순 대체하는지', '새롭게 바꾸는지 점검할 때'],
+        plainGuideParts: ['기술 활용을 대체, 증강, 수정, 재정의의 네 수준으로 살펴보고', '학습 목표에 맞게', '과제를 바꾸는 틀이에요.'],
+    }),
 ];
+
+export function isInstructionDesignFramework(instructionModel) {
+    if (!instructionModel) return false;
+    const registered = instructionModels.find(item => item.id === instructionModel.id);
+    return (registered ?? instructionModel).applicationMode === 'design-check';
+}
+
+export function instructionModelTypeLabel(instructionModel) {
+    return isInstructionDesignFramework(instructionModel) ? '설계 틀' : '수업 모형';
+}
 
 export function recommendModels(lessonIntent, limit = 3) {
     const normalized = lessonIntent.toLowerCase();

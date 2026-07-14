@@ -32,14 +32,14 @@ const student = { id: 'student-1', grade: '6', className: '1', number: 1, name: 
 const request = body => new Request('http://localhost/api/generate-record', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const completion = value => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) } }] }), { status: 200 });
 const claims = value => ({ claims: [{ text: value, kind: 'performance', criterionIds: ['criterion-1'], evidenceQuotes: [{ criterionId: 'criterion-1', stage: 'performance', quote: '뿌리에 가는 털' }], sourceRefs: [{ criterionId: 'criterion-1', elementId: 'e1', page: 1 }] }] });
-const input = ({ currentLessonPlan = lessonPlan, currentAssessment = assessment, currentStudent = student, currentSubmission = submission, roster = [currentStudent], targetLength = 500 } = {}) => ({
+const input = ({ currentLessonPlan = lessonPlan, currentAssessment = assessment, currentStudent = student, currentSubmission = submission, roster = [currentStudent], targetBytes = 700 } = {}) => ({
     lessonPlan: currentLessonPlan,
     assessment: currentAssessment,
     student: currentStudent,
     submission: currentSubmission,
     roster,
     recordContext: createRecordContext({ lessonPlan: currentLessonPlan, assessment: currentAssessment, students: roster, submissions: [currentSubmission] }),
-    targetLength,
+    targetBytes,
 });
 function submissionWithRevisionEvidence() {
     const criteria = submission.grading.criteria.map(criterion => criterion.criterionId === 'criterion-3' ? { ...criterion, revisionEvidence: {
@@ -60,6 +60,19 @@ test('generates only from a teacher-approved grading result', async () => {
     expect(response.status).toBe(200);
     expect((await response.json()).record.text).toBe(text);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
+});
+
+test('accepts a still-open page that sends the previous targetLength field', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(claims(text))));
+    const legacyInput = input();
+    delete legacyInput.targetBytes;
+    legacyInput.targetLength = 500;
+
+    const response = await POST(request(legacyInput));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).record.text).toBe(text);
 });
 
 test('rejects a submission that is not linked to the current roster student id', async () => {
@@ -107,6 +120,21 @@ test('repairs score-list language in the generated record', async () => {
     expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+test('repairs a generated record that exceeds the selected UTF-8 byte limit', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const overLimit = '가'.repeat(234);
+    expect(new TextEncoder().encode(overLimit).byteLength).toBeGreaterThan(700);
+    vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(completion(claims(overLimit)))
+        .mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input({ targetBytes: 700 })));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).record.text).toBe(text);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 test('rejects grading created for an older rubric', async () => {
     const changedAssessment = { ...assessment, task: { ...assessment.task, title: '바뀐 과제' } };
     const response = await POST(request(input({ currentAssessment: changedAssessment })));
@@ -125,7 +153,7 @@ test('rejects a stale roster context before calling the model', async () => {
     const recordContext = createRecordContext({ lessonPlan, assessment, students: [student], submissions: [submission] });
     const roster = [{ ...student, name: '변경된 이름' }];
 
-    const response = await POST(request({ lessonPlan, assessment, student: roster[0], roster, submission, recordContext, targetLength: 500 }));
+    const response = await POST(request({ lessonPlan, assessment, student: roster[0], roster, submission, recordContext, targetBytes: 700 }));
 
     expect(response.status).toBe(409);
     expect((await response.json()).code).toBe('stale_context');
@@ -219,7 +247,7 @@ test('rejects an expired record context before calling the model', async () => {
     vi.stubGlobal('fetch', vi.fn());
     const recordContext = createRecordContext({ lessonPlan, assessment, students: [student], submissions: [submission] }, Date.now() - 5 * 60_000 - 1);
 
-    const response = await POST(request({ lessonPlan, assessment, student, roster: [student], submission, recordContext, targetLength: 500 }));
+    const response = await POST(request({ lessonPlan, assessment, student, roster: [student], submission, recordContext, targetBytes: 700 }));
 
     expect(response.status).toBe(409);
     expect((await response.json()).code).toBe('expired_context');
@@ -231,7 +259,7 @@ test('rejects a deleted student absent from the signed current roster before cal
     const otherStudent = { ...student, id: 'student-2', number: 2, name: '이학생' };
     const recordContext = createRecordContext({ lessonPlan, assessment, students: [otherStudent], submissions: [submission] });
 
-    const response = await POST(request({ lessonPlan, assessment, student, roster: [otherStudent], submission, recordContext, targetLength: 500 }));
+    const response = await POST(request({ lessonPlan, assessment, student, roster: [otherStudent], submission, recordContext, targetBytes: 700 }));
 
     expect(response.status).toBe(409);
     expect((await response.json()).code).toBe('stale_context');

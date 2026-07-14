@@ -61,7 +61,7 @@ test('keeps an opaque Upstage request indeterminate without inventing a percent'
     // Then
     expect(waiting).toMatchObject({
         phase: 'upstageWaiting',
-        phaseLabel: 'Upstage 응답 대기',
+        phaseLabel: 'AI가 생성 중입니다.',
         progress: null,
         progressKind: 'indeterminate',
     });
@@ -151,6 +151,23 @@ test('labels remaining time as approximate', () => {
     });
     expect(timing.label.startsWith('약 ')).toBe(true);
     expect(formatRemainingSeconds(75)).toBe('약 1~2분 남음');
+});
+
+test('collapses a rounded short ETA range into one natural time label', () => {
+    // Given
+    const operation = createOperation({
+        kind: 'generate',
+        label: '지도안 생성',
+        phase: 'upstageWaiting',
+        startedAt: 0,
+        estimate: { averageSeconds: 5, rangeSeconds: [4, 5], sampleCount: 1, source: 'session-average' },
+    });
+
+    // When
+    const timing = getOperationTiming(operation, 0);
+
+    // Then
+    expect(timing.label).toBe('약 5초 남음');
 });
 
 test('keeps an approximate ETA range on operation state as actual batch progress advances', () => {

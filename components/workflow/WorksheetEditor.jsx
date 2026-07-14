@@ -48,7 +48,10 @@ function QuestionFields({ question, number, standards, onUpdate }) {
     </>;
 }
 
-export function WorksheetEditor({ value, onChange }) {
+export function WorksheetEditor({ value, onChange, mode = 'worksheet' }) {
+    const copy = mode === 'assessment'
+        ? { title: '실제 수행평가지 편집', titleField: '수행평가지 제목', section: '수행 영역', purpose: '수행 목적', defaultSection: '새 수행 영역', answer: '교사 채점 참고', addSection: '수행 영역 추가' }
+        : { title: '문서 기본 정보', titleField: '학습지 제목', section: '학습 활동', purpose: '학습 목적', defaultSection: '새 학습 활동', answer: '예시 답안', addSection: '섹션 추가' };
     const updateDocument = patch => onChange({ ...value, document: { ...value.document, ...patch } });
     const updateSections = sections => updateDocument({ sections });
     const updateSection = (sectionIndex, patch) => updateSections(value.document.sections.map((section, index) => index === sectionIndex ? { ...section, ...patch } : section));
@@ -79,7 +82,7 @@ export function WorksheetEditor({ value, onChange }) {
     const addSection = () => {
         if (value.document.sections.length >= WORKSHEET_LIMITS.sections || value.teacherKey.answers.length >= WORKSHEET_LIMITS.answers) return;
         const question = createQuestion('descriptive', value.standards[0].code);
-        updateWithAnswers([...value.document.sections, { id: nextId('section'), title: '새 학습 활동', purpose: '학습 목적을 입력하세요.', questions: [question] }], [...value.teacherKey.answers, { questionId: question.id, answer: '예시 답안과 확인할 핵심을 입력하세요.' }]);
+        updateWithAnswers([...value.document.sections, { id: nextId('section'), title: copy.defaultSection, purpose: `${copy.purpose}을 입력하세요.`, questions: [question] }], [...value.teacherKey.answers, { questionId: question.id, answer: `${copy.answer}와 확인할 핵심을 입력하세요.` }]);
     };
     const updateWithAnswers = (sections, answers) => onChange({ ...value, document: { ...value.document, sections }, teacherKey: { answers } });
     const duplicateSection = sectionIndex => {
@@ -98,22 +101,22 @@ export function WorksheetEditor({ value, onChange }) {
     const moveQuestion = (sectionIndex, questionIndex, target) => updateSection(sectionIndex, { questions: move(value.document.sections[sectionIndex].questions, questionIndex, target) });
     let questionNumber = 0;
     return <div className="structured-editor worksheet-editor">
-        <section className="document-section"><h2>문서 기본 정보</h2><label>학습지 제목<input value={value.document.title} onChange={event => updateDocument({ title: event.target.value })}/></label><label>학생 안내<textarea rows="3" value={value.document.instructions} onChange={event => updateDocument({ instructions: event.target.value })}/></label><label>학생 정보란 <span className="optional">쉼표로 구분</span><input value={value.document.studentFields.join(', ')} onChange={event => updateDocument({ studentFields: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })}/></label></section>
+        <section className="document-section"><h2>{copy.title}</h2><p className="section-help">학생이 실제로 작성할 문항, 응답 공간과 연결 성취기준을 수정할 수 있습니다.</p><label>{copy.titleField}<input value={value.document.title} onChange={event => updateDocument({ title: event.target.value })}/></label><label>학생 안내<textarea rows="3" value={value.document.instructions} onChange={event => updateDocument({ instructions: event.target.value })}/></label><label>학생 정보란 <span className="optional">쉼표로 구분</span><input value={value.document.studentFields.join(', ')} onChange={event => updateDocument({ studentFields: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })}/></label></section>
         {value.document.sections.map((section, sectionIndex) => <section className="document-section" key={section.id}>
-            <div className="document-section__heading section-heading"><strong>{sectionIndex + 1}. 학습 활동</strong><div className="compact-actions"><button type="button" className="secondary-button" disabled={sectionIndex === 0} aria-label={`${ordinal(sectionIndex)} 번째 섹션 위로 이동`} onClick={() => updateSections(move(value.document.sections, sectionIndex, sectionIndex - 1))}>위로</button><button type="button" className="secondary-button" disabled={sectionIndex === value.document.sections.length - 1} aria-label={`${ordinal(sectionIndex)} 번째 섹션 아래로 이동`} onClick={() => updateSections(move(value.document.sections, sectionIndex, sectionIndex + 1))}>아래로</button><button type="button" className="secondary-button" disabled={value.document.sections.length >= WORKSHEET_LIMITS.sections || value.teacherKey.answers.length + section.questions.length > WORKSHEET_LIMITS.answers} aria-label={`${ordinal(sectionIndex)} 번째 섹션 복제`} onClick={() => duplicateSection(sectionIndex)}>복제</button><button type="button" className="text-button" disabled={value.document.sections.length === 1} aria-label={`${ordinal(sectionIndex)} 번째 섹션 삭제`} onClick={() => removeSection(sectionIndex)}>삭제</button></div></div>
-            <div className="field-grid field-grid--two"><label>섹션 제목<input value={section.title} onChange={event => updateSection(sectionIndex, { title: event.target.value })}/></label><label>학습 목적<input value={section.purpose} onChange={event => updateSection(sectionIndex, { purpose: event.target.value })}/></label></div>
+            <div className="document-section__heading section-heading"><strong>{sectionIndex + 1}. {copy.section}</strong><div className="compact-actions"><button type="button" className="secondary-button" disabled={sectionIndex === 0} aria-label={`${ordinal(sectionIndex)} 번째 섹션 위로 이동`} onClick={() => updateSections(move(value.document.sections, sectionIndex, sectionIndex - 1))}>위로</button><button type="button" className="secondary-button" disabled={sectionIndex === value.document.sections.length - 1} aria-label={`${ordinal(sectionIndex)} 번째 섹션 아래로 이동`} onClick={() => updateSections(move(value.document.sections, sectionIndex, sectionIndex + 1))}>아래로</button><button type="button" className="secondary-button" disabled={value.document.sections.length >= WORKSHEET_LIMITS.sections || value.teacherKey.answers.length + section.questions.length > WORKSHEET_LIMITS.answers} aria-label={`${ordinal(sectionIndex)} 번째 섹션 복제`} onClick={() => duplicateSection(sectionIndex)}>복제</button><button type="button" className="text-button" disabled={value.document.sections.length === 1} aria-label={`${ordinal(sectionIndex)} 번째 섹션 삭제`} onClick={() => removeSection(sectionIndex)}>삭제</button></div></div>
+            <div className="field-grid field-grid--two"><label>섹션 제목<input value={section.title} onChange={event => updateSection(sectionIndex, { title: event.target.value })}/></label><label>{copy.purpose}<input value={section.purpose} onChange={event => updateSection(sectionIndex, { purpose: event.target.value })}/></label></div>
             {section.questions.map((question, questionIndex) => {
                 questionNumber += 1;
                 const currentNumber = questionNumber;
                 const answer = value.teacherKey.answers.find(item => item.questionId === question.id)?.answer ?? '';
                 return <article className="worksheet-question" key={question.id}>
                     <QuestionFields question={question} number={currentNumber} standards={value.standards} onUpdate={(patch, replace) => updateQuestion(sectionIndex, questionIndex, patch, replace)}/>
-                    <label className="teacher-key-field">문항 {currentNumber} 예시 답안<textarea rows="3" value={answer} onChange={event => updateAnswer(question.id, event.target.value)}/></label>
+                    <label className="teacher-key-field">문항 {currentNumber} {copy.answer}<textarea rows="3" value={answer} onChange={event => updateAnswer(question.id, event.target.value)}/></label>
                     <div className="compact-actions"><button type="button" className="secondary-button" disabled={questionIndex === 0} aria-label={`문항 ${currentNumber} 위로 이동`} onClick={() => moveQuestion(sectionIndex, questionIndex, questionIndex - 1)}>위로</button><button type="button" className="secondary-button" disabled={questionIndex === section.questions.length - 1} aria-label={`문항 ${currentNumber} 아래로 이동`} onClick={() => moveQuestion(sectionIndex, questionIndex, questionIndex + 1)}>아래로</button><button type="button" className="secondary-button" disabled={section.questions.length >= WORKSHEET_LIMITS.questionsPerSection || value.teacherKey.answers.length >= WORKSHEET_LIMITS.answers} aria-label={`문항 ${currentNumber} 복제`} onClick={() => duplicateQuestion(sectionIndex, questionIndex)}>복제</button><button type="button" className="text-button" disabled={section.questions.length === 1} aria-label={`문항 ${currentNumber} 삭제`} onClick={() => removeQuestion(sectionIndex, questionIndex)}>삭제</button></div>
                 </article>;
             })}
             <button type="button" className="secondary-button" onClick={() => addQuestion(sectionIndex)} disabled={section.questions.length >= WORKSHEET_LIMITS.questionsPerSection || value.teacherKey.answers.length >= WORKSHEET_LIMITS.answers}>문항 추가</button>
         </section>)}
-        <button type="button" className="secondary-button worksheet-add-section" onClick={addSection} disabled={value.document.sections.length >= WORKSHEET_LIMITS.sections || value.teacherKey.answers.length >= WORKSHEET_LIMITS.answers}>섹션 추가</button>
+        <button type="button" className="secondary-button worksheet-add-section" onClick={addSection} disabled={value.document.sections.length >= WORKSHEET_LIMITS.sections || value.teacherKey.answers.length >= WORKSHEET_LIMITS.answers}>{copy.addSection}</button>
     </div>;
 }

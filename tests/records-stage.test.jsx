@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RecordsStage } from '@/components/workflow/RecordsStage.jsx';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
@@ -63,7 +63,44 @@ test('shows only approved students and saves an editable generated draft', async
     await user.click(screen.getByRole('button', { name: '김학생 세특 생성' }));
 
     expect(await screen.findByDisplayValue(generatedText)).toBeInTheDocument();
-    expect(screen.getByText(`${generatedText.length}자 / 500자`)).toBeInTheDocument();
+    expect(screen.getByText(`${generatedText.length}자 · ${new TextEncoder().encode(generatedText).byteLength}byte / 700byte`)).toBeInTheDocument();
+});
+
+test('defaults to a 700byte record limit and sends a teacher-entered custom byte target', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', mockRecordFetch(Response.json({ record: { text: generatedText } })));
+    render(<Harness/>);
+
+    expect(screen.getByRole('combobox', { name: '세특 분량 선택' })).toHaveValue('700');
+    await user.selectOptions(screen.getByRole('combobox', { name: '세특 분량 선택' }), 'custom');
+    const customInput = screen.getByRole('spinbutton', { name: '직접 입력 분량(byte)' });
+    await user.clear(customInput);
+    await user.type(customInput, '850');
+    await user.tab();
+    await user.click(screen.getByRole('button', { name: '김학생 세특 생성' }));
+
+    await screen.findByDisplayValue(generatedText);
+    const generationCall = fetch.mock.calls.find(([url]) => String(url).includes('/api/generate-record'));
+    expect(JSON.parse(generationCall[1].body).targetBytes).toBe(850);
+    expect(screen.getByText(new RegExp(`${generatedText.length}자.*850byte`))).toBeInTheDocument();
+});
+
+test('allows a teacher to shorten an existing draft after choosing a lower byte limit', async () => {
+    const overFiveHundredBytes = '가'.repeat(234);
+    const shortenedDraft = '가'.repeat(233);
+    const currentHash = recordSourceHash(assessment, submissions[0]);
+    function LongDraftHarness() {
+        const [records, setRecords] = useState([{ submissionId: 's1', studentId: 'student-1', studentName: '김학생', sourceHash: currentHash, status: 'done', text: overFiveHundredBytes, claims: [], evidenceCriterionIds: [], error: '', approved: false }]);
+        return <RecordsStage lessonPlan={makeGeneratedPlan()} assessment={assessment} students={students} submissions={submissions} records={records} onChange={setRecords}/>;
+    }
+    const user = userEvent.setup();
+    render(<LongDraftHarness/>);
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '세특 분량 선택' }), '500');
+    const draft = screen.getByRole('textbox', { name: '김학생 세특 초안' });
+    fireEvent.change(draft, { target: { value: shortenedDraft } });
+
+    expect(draft).toHaveValue(shortenedDraft);
 });
 
 test('keeps the initial blank editor read-only until the first generated draft arrives', async () => {
@@ -281,7 +318,7 @@ test('Given a queued class generation When the teacher cancels Then no new stude
 
 test('shows typed candidate reasons for stale evidence, length limits, unsupported claims, and expired context', async () => {
     const currentHash = recordSourceHash(assessment, submissions[0]);
-    const base = { submissionId: 's1', studentId: 'student-1', studentName: '김학생', sourceHash: currentHash, status: 'done', text: '현재 교사 문장', error: '', approved: false, candidateText: generatedText, candidateClaims, candidateEvidenceCriterionIds: ['criterion-1'], candidateSourceHash: currentHash, candidateTargetLength: 500 };
+    const base = { submissionId: 's1', studentId: 'student-1', studentName: '김학생', sourceHash: currentHash, status: 'done', text: '현재 교사 문장', error: '', approved: false, candidateText: generatedText, candidateClaims, candidateEvidenceCriterionIds: ['criterion-1'], candidateSourceHash: currentHash, candidateTargetBytes: 700 };
     function ReasonHarness({ initial }) { const [records, setRecords] = useState([initial]); return <RecordsStage lessonPlan={makeGeneratedPlan()} assessment={assessment} students={students} submissions={[submissions[0]]} records={records} onChange={setRecords}/>; }
 
     const staleView = render(<ReasonHarness initial={{ ...base, candidateSourceHash: 'record-v2:stale' }}/>);
@@ -289,9 +326,8 @@ test('shows typed candidate reasons for stale evidence, length limits, unsupport
     staleView.unmount();
 
     const lengthView = render(<ReasonHarness initial={base}/>);
-    await userEvent.setup().clear(screen.getByLabelText('학생별 최대 글자 수'));
-    await userEvent.setup().type(screen.getByLabelText('학생별 최대 글자 수'), '300');
-    expect(screen.getByText('현재 글자 수 제한과 맞지 않는 후보입니다. 현재 제한으로 다시 생성해주세요.')).toHaveAttribute('data-reason', 'length_limit');
+    await userEvent.setup().selectOptions(screen.getByRole('combobox', { name: '세특 분량 선택' }), '500');
+    expect(screen.getByText('현재 분량 설정과 맞지 않는 후보입니다. 현재 설정으로 다시 생성해주세요.')).toHaveAttribute('data-reason', 'length_limit');
     lengthView.unmount();
 
     const unsupportedView = render(<ReasonHarness initial={{ ...base, candidateClaims: [] }}/>);

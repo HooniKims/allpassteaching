@@ -77,7 +77,7 @@ test('keeps the last valid rubric while an unapplied point draft is being edited
     await user.clear(points); await user.type(points, '20');
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).toBeEnabled();
 });
 
 test('requires explicit teacher confirmation and revokes it after editing', async () => {
@@ -276,13 +276,27 @@ test('전체 재생성 후보를 받은 뒤 현재 평가를 수정하면 후보
     expect(taskName).toHaveValue('교사가 수정한 현재 과제');
 });
 
-test('학생당 안내 표지를 끄면 표지 편집기와 표지 전용 내보내기를 숨긴다', () => {
+test('안내문과 제출용 수행평가지를 구분해 저장하고 안내문을 끄면 안내문 내보내기를 숨긴다', () => {
     const lessonPlan = makeGeneratedPlan();
+    render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    expect(screen.getByRole('button', { name: '학생 안내문 PDF 저장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '학생 안내문 HWPX 저장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '제출용 수행평가지 PDF 저장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '제출용 수행평가지 HWPX 저장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '실제 수행평가지 편집' })).toBeInTheDocument();
+    expect(screen.getByLabelText('문항 1 유형')).toHaveValue('table-chart');
+    expect(screen.getByDisplayValue('뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.')).toBeInTheDocument();
+
+    document.body.innerHTML = '';
     const value = { ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false, includeStudentCover: false };
     render(<AssessmentStage lessonPlan={lessonPlan} value={value} request={{ ...request, includeStudentCover: false }} onRequestChange={() => {}} onChange={() => {}}/>);
 
     expect(screen.queryByRole('heading', { name: '학생용 수행평가 안내 표지' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '표지만 PDF 저장' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '학생 안내문 PDF 저장' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '제출용 수행평가지 PDF 저장' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).not.toBeInTheDocument();
     expect(screen.getByText('학생당 안내 표지를 사용하지 않습니다.')).toBeInTheDocument();
 });
 
@@ -291,7 +305,7 @@ test('표지 미리보기는 과목·전이 목표·GRASPS·제출 조건·준�
     render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
     const preview = screen.getByRole('region', { name: '학생용 안내 표지 미리보기' });
 
-    for (const content of ['과학', '새로운 식물을 관찰할 때도', '학교 화단 식물의 건강 상태', '식물 탐구자', '학급 친구', '수업 시간 40분', '식물 표본', '식물을 훼손하지 않는다']) {
+    for (const content of ['과학', '새로운 식물을 관찰할 때도', '관찰 근거를 사용해 식물 기관의 구조와 기능', '학교 화단 식물의 건강 상태', '식물 탐구자', '학급 친구', '관찰 근거가 담긴 한 쪽 탐구 보고서', '관찰 사실과 해석을 구분하고', '수업 시간 40분', '식물 표본', '식물을 훼손하지 않는다']) {
         expect(within(preview).getByText(new RegExp(content))).toBeInTheDocument();
     }
 });
@@ -320,11 +334,11 @@ test('교사가 전체 총점과 수준 수를 적용하면 평가와 authoritat
     await user.clear(total); await user.type(total, '60');
     await user.click(screen.getByRole('button', { name: '전체 총점과 배점 적용' }));
     expect(screen.getByTestId('request-total')).toHaveTextContent('60');
-    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).toBeEnabled();
 
     await user.click(screen.getByRole('button', { name: '성취수준 추가' }));
     expect(screen.getByTestId('request-levels')).toHaveTextContent('5');
-    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).toBeEnabled();
 });
 
 test('적용할 수 없는 전체 총점은 기존 평가와 request를 그대로 보존한다', async () => {
@@ -360,7 +374,7 @@ test('영역 총점 적용도 전체 총점·과정 비중·수준별 점수를 
     expect(screen.getByTestId('request-total')).toHaveTextContent('105');
     expect(screen.getByTestId('request-process')).toHaveTextContent('19');
     expect(screen.getByLabelText('관찰 근거 탁월 점수')).toHaveValue(45);
-    expect(screen.getByRole('button', { name: '수행평가 전체 PDF 저장' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).toBeEnabled();
 });
 
 test('적용할 수 없는 영역 총점은 기존 평가와 request를 그대로 보존한다', async () => {
@@ -421,7 +435,7 @@ test('표지 PDF가 한 페이지를 넘으면 서버의 구체적인 수정 안
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code: 'cover_overflow', message: '학생 안내 표지는 한 페이지에 들어가야 합니다. 표지 문구를 줄여주세요.' }, { status: 422 })));
     render(<AssessmentStage lessonPlan={lessonPlan} value={{ ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false }} request={request} onRequestChange={() => {}} onChange={() => {}}/>);
 
-    await user.click(screen.getByRole('button', { name: '표지만 PDF 저장' }));
+    await user.click(screen.getByRole('button', { name: '학생 안내문 PDF 저장' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('표지 문구를 줄여주세요');
     expect(screen.getByLabelText('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
@@ -454,4 +468,23 @@ test('교사가 고친 루브릭을 네 가지 형식으로 내려받을 수 있
     expect(createObjectURL).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:rubric');
     expect(click).toHaveBeenCalled();
+});
+
+test('수행과제 편집기는 선택한 평가 방식에만 GRASPS 용어를 사용한다', () => {
+    const lessonPlan = makeGeneratedPlan();
+    const backwardAssessment = { ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false };
+    const first = render(<AssessmentStage lessonPlan={lessonPlan} value={backwardAssessment} request={{ ...request, assessmentApproachId: 'backward-design' }} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    expect(screen.getByText(/선택한 평가 설계 방식에 맞게 목표·역할·대상·상황·산출물·성공 기준/)).toBeInTheDocument();
+    expect(screen.queryByText(/GRASPS의 목표/)).not.toBeInTheDocument();
+    expect(screen.getByText('평가 목표')).toBeInTheDocument();
+    expect(screen.queryByText('평가 목표(G)')).not.toBeInTheDocument();
+
+    first.unmount();
+    const graspsAssessment = structuredClone(backwardAssessment);
+    graspsAssessment.generationSettings.assessmentApproachId = 'authentic-performance';
+    render(<AssessmentStage lessonPlan={lessonPlan} value={graspsAssessment} request={{ ...request, assessmentApproachId: 'authentic-performance' }} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    expect(screen.getByText(/GRASPS의 목표·역할·대상·상황·산출물·성공 기준/)).toBeInTheDocument();
+    expect(screen.getByText('평가 목표(G)')).toBeInTheDocument();
 });

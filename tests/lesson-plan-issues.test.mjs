@@ -64,8 +64,8 @@ test('falls back to a human-readable top-level label and the original issue mess
 
     // Then
     expect(formatted).toEqual({
-        label: '수업 모형',
-        message: '수업 모형: 문자열 형식이어야 합니다.',
+        label: '수업 설계',
+        message: '수업 설계: 문자열 형식이어야 합니다.',
     });
 });
 

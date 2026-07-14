@@ -29,6 +29,16 @@ test('source hashes use the full canonical SHA-256 digest', () => {
     expect(sourceHash(value)).toBe(`src-${expected}`);
 });
 
+test('persists the selected record byte target and defaults older workspaces to 700byte', () => {
+    const project = { ...createEmptyWorkflow(), recordTargetBytes: 850 };
+    saveWorkflow(project);
+    expect(loadWorkflow()).toMatchObject({ recordTargetBytes: 850 });
+
+    window.localStorage.clear();
+    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 4, data: { activeProcess: 'records' } }));
+    expect(loadWorkflow()).toMatchObject({ recordTargetBytes: 700 });
+});
+
 test('local persistence keeps structured results for refresh but never selected PDF objects', () => {
     const project = {
         ...createEmptyWorkflow(),
@@ -127,6 +137,24 @@ test('교사가 확정한 총점·수준 수와 같은 수행평가 계약을 �
     expect(loaded.assessmentRequest).toMatchObject({ totalPoints: 60, levelCount: 5 });
     expect(loaded.assessment.totalPoints).toBe(60);
     expect(loaded.assessment.rubric.levels).toHaveLength(5);
+});
+
+test('이전 GRASPS 결과에 목표와 성공 기준이 없으면 백워드 설계 내용으로 채운다', () => {
+    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 4, data: {
+        activeProcess: 'assessment',
+        assessment: {
+            backwardDesign: {
+                transferGoal: '새로운 식물을 관찰해 구조와 기능을 설명한다.',
+                teacherIntent: { desiredResult: '기관의 구조와 기능을 설명한다.', evidenceOfSuccess: '관찰 근거를 들어 설명한다.' },
+            },
+            task: { title: '식물 관찰', situation: '학교 화단', role: '식물 연구원', audience: '학급 친구', product: '관찰 보고서' },
+        },
+    } }));
+
+    expect(loadWorkflow().assessment.task).toMatchObject({
+        goal: '새로운 식물을 관찰해 구조와 기능을 설명한다.',
+        successCriteria: '관찰 근거를 들어 설명한다.',
+    });
 });
 
 test('migrates the earlier activeStage name and supplies empty collections', () => {

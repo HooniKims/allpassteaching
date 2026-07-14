@@ -3,7 +3,7 @@ export function makeWorksheet() {
         formatId: 'inquiry-experiment',
         formatName: '탐구·실험 기록지',
         selectionReason: '가설을 세우고 관찰 증거로 결론을 내리는 수업 흐름에 맞습니다.',
-        standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.' }],
+        standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.', subject: '과학' }],
         generationRequest: {
             additionalRequirements: '',
             questionTypes: ['descriptive'],
@@ -74,14 +74,37 @@ export function makeAssessment() {
         task: {
             title: '식물 기관 탐구 보고서 만들기',
             standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.' }],
+            goal: '관찰 근거를 사용해 식물 기관의 구조와 기능을 설명한다.',
             situation: '학교 화단 식물의 건강 상태를 설명해야 한다.',
             role: '식물 탐구자',
             audience: '학급 친구',
             product: '관찰 근거가 담긴 한 쪽 탐구 보고서',
+            successCriteria: '관찰 사실과 해석을 구분하고 구조와 기능의 관계를 근거로 설명한다.',
             procedure: ['기관별 특징을 관찰한다.', '관찰 기록 초안을 작성한다.', '피드백을 받아 구조와 기능 설명을 수정한다.'],
             conditions: ['수업 시간 40분', '관찰 기록을 근거로 사용'],
             materials: ['식물 표본', '돋보기', '기록지'],
             cautions: ['식물을 훼손하지 않는다.'],
+        },
+        studentSheet: {
+            document: {
+                title: '식물 기관 탐구 수행평가지',
+                instructions: '각 문항에 관찰한 사실과 해석을 구분하여 기록하세요.',
+                studentFields: ['학년·반', '번호', '이름'],
+                sections: [
+                    { id: 'performance-section-1', title: '관찰 기록과 초안', purpose: '기관별 관찰 증거를 기록하고 설명의 초안을 작성한다.', questions: [
+                        { id: 'performance-q-1', type: 'table-chart', prompt: '뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.', responseAreaHeight: 180, standardCodes: ['6과11-02'] },
+                        { id: 'performance-q-2', type: 'descriptive', prompt: '관찰한 특징을 근거로 각 기관의 구조와 기능의 관계를 설명하세요.', responseLines: 8, standardCodes: ['6과11-02'] },
+                    ] },
+                    { id: 'performance-section-2', title: '피드백 반영과 최종 설명', purpose: '피드백을 반영해 설명을 고치고 수정 이유를 밝힌다.', questions: [
+                        { id: 'performance-q-3', type: 'descriptive', prompt: '받은 피드백, 수정한 내용, 그렇게 고친 이유를 구체적으로 쓰세요.', responseLines: 8, standardCodes: ['6과11-02'] },
+                    ] },
+                ],
+            },
+            teacherKey: { answers: [
+                { questionId: 'performance-q-1', answer: '기관별로 관찰한 생김새가 구체적으로 기록되어 있는지 확인한다.' },
+                { questionId: 'performance-q-2', answer: '관찰 사실을 구조와 기능의 관계를 설명하는 근거로 사용했는지 확인한다.' },
+                { questionId: 'performance-q-3', answer: '피드백 전후의 변화와 수정 이유가 함께 제시되어 있는지 확인한다.' },
+            ] },
         },
         cover: {
             title: '식물 기관 탐구 수행평가 안내',

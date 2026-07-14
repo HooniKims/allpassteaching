@@ -6,7 +6,7 @@ import { generationDraft, makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 
 test('shows the approved four-step navigation', () => {
     render(<LessonPlanWorkspace />);
-    for (const name of ['수업 정보', '성취기준', '수업 모형', '지도안 완성']) expect(screen.getByText(name)).toBeInTheDocument();
+    for (const name of ['수업 정보', '성취기준', '수업 설계', '지도안 완성']) expect(screen.getByText(name)).toBeInTheDocument();
 });
 
 test('moves from a generated plan to completed earlier steps and back without deleting the plan', async () => {

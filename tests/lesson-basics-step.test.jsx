@@ -16,7 +16,11 @@ const legacyBasics = { schoolLevel: '', grade: '', subject: '', mode: 'single', 
 
 function BasicsHarness({ initialValue = legacyBasics, onChange = () => {} }) {
     const [value, setValue] = useState(initialValue);
-    return <LessonBasicsStep value={value} onChange={next => { setValue(next); onChange(next); }} onNext={() => {}}/>;
+    return <LessonBasicsStep value={value} onChange={next => setValue(current => {
+        const resolved = typeof next === 'function' ? next(current) : next;
+        onChange(resolved);
+        return resolved;
+    })} onNext={() => {}}/>;
 }
 
 function deferred() {
@@ -182,11 +186,11 @@ test('ignores a late generation response after navigating back', async () => {
     await user.click(await screen.findByRole('button', { name: '지도안 생성하기' }));
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     await user.click(screen.getByRole('button', { name: '이전' }));
-    expect(screen.getByRole('heading', { name: '수업의 흐름을 선택해주세요' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '수업의 흐름이나 설계 틀을 선택해주세요' })).toBeInTheDocument();
 
     await act(async () => { pending.resolve(Response.json({ plan: makeGeneratedPlan() })); await pending.promise; });
 
-    expect(screen.getByRole('heading', { name: '수업의 흐름을 선택해주세요' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '수업의 흐름이나 설계 틀을 선택해주세요' })).toBeInTheDocument();
 });
 
 test('aborts an active generation request when the workspace unmounts', async () => {

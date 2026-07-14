@@ -14,10 +14,12 @@ test.each(instructionModels)('$name has a complete local guide and source docume
     expect(guide.sources.length).toBeGreaterThan(0);
     expect(guide.sources.every(source => /^https:\/\//.test(source.url))).toBe(true);
     expect(markdown).toContain(`id: ${model.id}`);
-    expect(markdown).toContain('verifiedAt: 2026-07-11');
+    const verifiedAt = markdown.match(/verifiedAt: (\d{4}-\d{2}-\d{2})/)?.[1];
+    expect(verifiedAt).toBeTruthy();
+    expect(verifiedAt.localeCompare('2026-07-11')).toBeGreaterThanOrEqual(0);
     expect(markdown).toMatch(/https:\/\//);
 });
 
 test('throws for an unknown instruction model guide', () => {
-    expect(() => instructionModelGuide('unknown-model')).toThrow('지원하지 않는 수업 모형');
+    expect(() => instructionModelGuide('unknown-model')).toThrow('지원하지 않는 수업 설계');
 });

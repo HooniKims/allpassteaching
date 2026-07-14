@@ -146,6 +146,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     test.setTimeout(120_000);
     let ocrCalls = 0;
     const recordCalls = new Map();
+    const recordTargetBytes = [];
     const consoleErrors = [];
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     const uploadedPageCounts = [];
@@ -171,6 +172,7 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.route('**/api/authorize-record-generation', route => route.fulfill({ json: { context: { payload: { version: 1 }, token: 'a'.repeat(64) } } }));
     await page.route('**/api/generate-record', route => {
         const body = route.request().postDataJSON();
+        recordTargetBytes.push(body.targetBytes);
         const studentName = body.student.name;
         const call = (recordCalls.get(studentName) ?? 0) + 1;
         recordCalls.set(studentName, call);
@@ -250,9 +252,14 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     }
 
     await page.getByRole('tab', { name: /세특/ }).click();
+    await expect(page.getByLabel('세특 분량 선택')).toHaveValue('700');
+    await page.getByLabel('세특 분량 선택').selectOption('custom');
+    await page.getByLabel('직접 입력 분량(byte)').fill('850');
+    await page.getByLabel('직접 입력 분량(byte)').press('Tab');
     await page.getByRole('button', { name: '미생성 학생 전체 생성' }).click();
     await expect(page.getByRole('textbox', { name: /세특 초안/ })).toHaveCount(2);
-    await expect(page.getByText(`${recordText.length}자 / 500자`)).toHaveCount(2);
+    await expect(page.getByText(`${recordText.length}자 · ${new TextEncoder().encode(recordText).byteLength}byte / 850byte`)).toHaveCount(2);
+    expect(recordTargetBytes).toEqual([850, 850]);
     await expect(page.getByRole('region', { name: '김학생 기록 근거' })).toContainText('6과11-02');
     await expect(page.getByRole('region', { name: '김학생 기록 근거' })).toContainText('피드백 반영 과정의 근거가 드러납니다.');
 

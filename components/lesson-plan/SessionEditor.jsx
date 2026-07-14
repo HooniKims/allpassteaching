@@ -27,6 +27,7 @@ export function SessionEditor({ session, onChange }) {
                 <col className="process-table__student" />
                 <col className="process-table__minutes" />
                 <col className="process-table__notes" />
+                <col className="process-table__remarks" />
             </colgroup>
             <thead>
                 <tr>
@@ -36,6 +37,7 @@ export function SessionEditor({ session, onChange }) {
                     <th id={headerId('student')} scope="col">학생 활동</th>
                     <th id={headerId('minutes')} scope="col">시간</th>
                     <th id={headerId('notes')} scope="col">자료·유의점</th>
+                    <th id={headerId('remarks')} scope="col">비고</th>
                 </tr>
             </thead>
             <tbody>
@@ -62,6 +64,9 @@ export function SessionEditor({ session, onChange }) {
                             <ActivityField label={`${prefix} 자료 및 유의점`} value={stage.materialsAndNotes ?? []} onChange={event => updateStage(index, 'materialsAndNotes', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'materialsAndNotes', normalizeEditorLines(event.target.value))} />
                             <ActivityField label={`${prefix} 지원 사항`} value={stage.supportNotes ?? []} onChange={event => updateStage(index, 'supportNotes', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'supportNotes', normalizeEditorLines(event.target.value))} />
                         </td>
+                        <td data-label="비고" headers={`${rowHeaderId} ${headerId('remarks')}`}>
+                            <ActivityField label={`${prefix} 비고`} value={stage.remarks ?? []} onChange={event => updateStage(index, 'remarks', splitEditorLines(event.target.value))} onBlur={event => updateStage(index, 'remarks', normalizeEditorLines(event.target.value))} />
+                        </td>
                     </tr>;
                 })}
             </tbody>
@@ -69,7 +74,7 @@ export function SessionEditor({ session, onChange }) {
                 <tr>
                     <th id={headerId('total')} scope="row" colSpan="4">단계 시간 합계</th>
                     <td data-label="합계" headers={`${headerId('total')} ${headerId('minutes')}`}><strong className={total === session.sessionMinutes ? '' : 'time-error'}>총 {total}분</strong></td>
-                    <td data-label="차시 시간" headers={`${headerId('total')} ${headerId('minutes')}`}>기준 {session.sessionMinutes}분</td>
+                    <td colSpan="2" data-label="차시 시간" headers={`${headerId('total')} ${headerId('minutes')}`}>기준 {session.sessionMinutes}분</td>
                 </tr>
             </tfoot>
         </table>

@@ -76,6 +76,21 @@ test('rejects unknown question types, unknown standards, and orphan teacher answ
     expect(worksheetOutputSchema.safeParse(orphanAnswer).success).toBe(false);
 });
 
+test('rejects a worksheet when a selected achievement standard is not linked to any question', () => {
+    // Given
+    const worksheet = makeWorksheet();
+    worksheet.standards.push({ code: '6수04-02', text: '자료를 수집하여 그래프로 나타내고 해석할 수 있다.', subject: '수학' });
+
+    // When
+    const result = worksheetOutputSchema.safeParse(worksheet);
+
+    // Then
+    expect(result.success).toBe(false);
+    expect(result.error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: ['standards'], message: expect.stringContaining('6수04-02') }),
+    ]));
+});
+
 test('validates free-text worksheet generation requests with selected question types', () => {
     const result = worksheetGenerationRequestSchema.safeParse({
         additionalRequirements: '표를 읽고 근거를 쓰는 문항을 포함해 주세요.',

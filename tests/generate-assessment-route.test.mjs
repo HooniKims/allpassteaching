@@ -34,6 +34,20 @@ test('repairs a rubric whose point total is not 100', async () => {
     expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+test('학생 문제지는 생성됐지만 교사용 채점 참고를 누락한 AI 결과도 문제지를 버리지 않고 보완한다', async () => {
+    const generated = makeAssessment();
+    delete generated.studentSheet.teacherKey;
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(generated))));
+
+    const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest }));
+    const body = await response.json();
+    const questionIds = body.assessment.studentSheet.document.sections.flatMap(section => section.questions.map(question => question.id));
+
+    expect(response.status).toBe(200);
+    expect(body.assessment.studentSheet.teacherKey.answers.map(answer => answer.questionId)).toEqual(questionIds);
+});
+
 test('rejects generation when the required desired result is empty', async () => {
     vi.stubGlobal('fetch', vi.fn());
 

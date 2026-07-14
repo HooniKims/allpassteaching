@@ -14,6 +14,7 @@ import { hasUnsupportedGrowthInference } from '@/lib/record-schema';
 import { recordContextIncludesSubmission, verifyRecordContext } from '@/lib/record-context-token';
 import { canonicalJson } from '@/lib/source-hash';
 import { parseBoundedJsonRequest, publicValidationIssues, requestBoundaryError } from '@/lib/api-request-boundary';
+import { MAX_RECORD_TARGET_BYTES, MIN_RECORD_TARGET_BYTES, normalizeRecordTargetBytes, recordUtf8ByteLength } from '@/lib/record-length';
 
 const noStoreHeaders = { 'Cache-Control': 'no-store' };
 const json = (body, init = {}) => Response.json(body, { ...init, headers: { ...init.headers, ...noStoreHeaders } });
@@ -53,8 +54,9 @@ const recordContextSchema = z.object({
 const requestSchema = z.object({
     lessonPlan: lessonPlanSchema, assessment: approvedAssessmentSchema, roster: z.array(studentSchema).min(1).max(50),
     recordContext: recordContextSchema, student: studentSchema, submission: submissionSchema,
-    targetLength: z.number().int().min(300).max(1000).default(500),
-}).strict();
+    targetBytes: z.number().int().min(MIN_RECORD_TARGET_BYTES).max(MAX_RECORD_TARGET_BYTES).optional(),
+    targetLength: z.number().int().min(MIN_RECORD_TARGET_BYTES).max(1000).optional(),
+}).strict().transform(value => ({ ...value, targetBytes: value.targetBytes ?? normalizeRecordTargetBytes(value.targetLength) }));
 
 const claimSchema = z.object({
     text: z.string().trim().min(1).max(1000),
@@ -64,7 +66,7 @@ const claimSchema = z.object({
     sourceRefs: z.array(z.object({ criterionId: z.string().min(1).max(300), elementId: z.string().min(1).max(300), page: z.number().int().min(1).max(10000) }).strict()).min(1).max(15),
 }).strict();
 
-function parseRecord(content, targetLength, evidence) {
+function parseRecord(content, targetBytes, evidence) {
     try {
         const value = JSON.parse(content);
         const parsedClaims = z.object({ claims: z.array(claimSchema).min(1).max(10) }).strict().safeParse(value);
@@ -120,7 +122,7 @@ function parseRecord(content, targetLength, evidence) {
         const record = { text: parsedClaims.data.claims.map(claim => claim.text).join(' '), claims: parsedClaims.data.claims, evidenceCriterionIds: [...new Set(parsedClaims.data.claims.flatMap(claim => claim.criterionIds))] };
         const parsed = recordOutputSchema.safeParse({ text: record.text });
         if (!parsed.success) return { success: false, value, issues: parsed.error.issues };
-        if (record.text.length > targetLength) return { success: false, value, issues: [{ path: ['text'], message: `${targetLength}자 이내로 작성해야 합니다.` }] };
+        if (recordUtf8ByteLength(record.text) > targetBytes) return { success: false, value, issues: [{ path: ['text'], message: `${targetBytes}byte 이내로 작성해야 합니다.` }] };
         return { success: true, data: record };
     } catch (error) { return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] }; }
 }
@@ -155,10 +157,10 @@ export async function POST(request) {
     const evidence = recordEvidenceBundle(input.assessment, input.submission);
     try {
         const first = await chatContent({ messages: recordMessages(input), timeoutMs: 60000 });
-        let checked = parseRecord(first, input.targetLength, evidence);
+        let checked = parseRecord(first, input.targetBytes, evidence);
         if (!checked.success) {
             const repaired = await chatContent({ messages: repairRecordMessages(input, checked.value, checked.issues), timeoutMs: 60000 });
-            checked = parseRecord(repaired, input.targetLength, evidence);
+            checked = parseRecord(repaired, input.targetBytes, evidence);
         }
         if (!checked.success) return json({ code: 'invalid_generation', message: '세특 초안의 길이와 기록 문체를 복구하지 못했습니다.', issues: publicValidationIssues(checked.issues) }, { status: 422 });
         return json({ record: checked.data });

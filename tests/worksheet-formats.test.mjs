@@ -10,3 +10,9 @@ test('defines complete, unique worksheet formats including teacher overrides', (
     expect(new Set(worksheetFormats.map(item => item.id)).size).toBe(worksheetFormats.length);
     expect(worksheetFormats.every(item => item.name && item.sections.length >= 3 && item.guide && item.easyDescription)).toBe(true);
 });
+
+test('recommends worksheet formats that match integrated and edtech lesson design', () => {
+    expect(recommendWorksheetFormat({ id: 'integrated' }).id).toBe('integrated-connections');
+    expect(recommendWorksheetFormat({ id: 'tpack' }).id).toBe('blended-learning');
+    expect(recommendWorksheetFormat({ id: 'samr' }).id).toBe('blended-learning');
+});

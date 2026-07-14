@@ -4,6 +4,7 @@ import { assessmentOutputSchema } from '@/lib/assessment-schema';
 import { assessmentRequestSchema } from '@/lib/assessment-request';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { assessmentMessages, repairAssessmentMessages } from '@/lib/workflow-prompts';
+import { upgradeAssessmentStudentSheet } from '@/lib/assessment-student-sheet';
 
 const requestSchema = z.object({ lessonPlan: lessonPlanSchema, assessmentRequest: assessmentRequestSchema });
 
@@ -66,7 +67,7 @@ function parseAssessment(content, lessonPlan, assessmentRequest) {
     try {
         const rawValue = JSON.parse(content);
         const teacherOwnedValue = reconcileTeacherOwnedFields(rawValue, lessonPlan, assessmentRequest);
-        const value = reconcileEvidenceMap(teacherOwnedValue);
+        const value = reconcileEvidenceMap(upgradeAssessmentStudentSheet(teacherOwnedValue));
         const parsed = assessmentOutputSchema.safeParse(value);
         if (!parsed.success) return { success: false, value, issues: parsed.error.issues };
         if (JSON.stringify(parsed.data.backwardDesign.teacherIntent) !== JSON.stringify(assessmentRequest.teacherIntent)) return { success: false, value, issues: [{ path: ['backwardDesign', 'teacherIntent'], message: '교사가 입력한 도착점과 증거 질문을 정확히 보존해야 합니다.' }] };

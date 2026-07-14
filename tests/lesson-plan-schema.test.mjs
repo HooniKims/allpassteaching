@@ -14,8 +14,24 @@ test('표준 과정안 필드를 포함한 완전한 지도안을 검증한다',
         teacherQuestions: expect.any(Array),
         expectedStudentResponses: expect.any(Array),
         supportNotes: expect.any(Array),
+        remarks: expect.any(Array),
     });
     expect(parsed.assessment[0]).toMatchObject({ method: expect.any(String), levelFeedback: expect.any(Object) });
+    expect(parsed.detailedPlan).toMatchObject({
+        teacherIntent: expect.any(String),
+        unitOverview: expect.any(String),
+        unitSequence: expect.any(Array),
+    });
+});
+
+test('기존 지도안의 비고 누락은 빈 배열로 보완하고 입력한 비고는 보존한다', () => {
+    const legacy = makeGeneratedPlan();
+    delete legacy.sessions[0].stages[0].remarks;
+    const withRemarks = makeGeneratedPlan();
+    withRemarks.sessions[0].stages[0].remarks = ['모둠별 관찰 도구를 미리 배부한다.'];
+
+    expect(lessonPlanSchema.parse(legacy).sessions[0].stages[0].remarks).toEqual([]);
+    expect(lessonPlanSchema.parse(withRemarks).sessions[0].stages[0].remarks).toEqual(['모둠별 관찰 도구를 미리 배부한다.']);
 });
 
 test('행정 정보의 빈 문자열을 허용하고 누락된 하위 필드는 빈 문자열로 채운다', () => {
@@ -62,7 +78,7 @@ test('accepts lesson-plan collection boundaries', () => {
         order: index + 1,
     }));
     const templateStage = plan.sessions[0].stages[1];
-    for (const key of ['teacherActivities', 'studentActivities', 'teacherQuestions', 'expectedStudentResponses', 'supportNotes', 'materialsAndNotes']) {
+    for (const key of ['teacherActivities', 'studentActivities', 'teacherQuestions', 'expectedStudentResponses', 'supportNotes', 'materialsAndNotes', 'remarks']) {
         templateStage[key] = Array.from({ length: LESSON_PLAN_LIMITS.stageItems }, () => '활동 내용');
     }
     plan.sessions[0].stages = Array.from({ length: LESSON_PLAN_LIMITS.stages }, () => ({

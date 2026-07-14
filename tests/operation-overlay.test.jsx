@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { OperationProvider, useOperation } from '@/components/workflow/OperationProvider.jsx';
+import { OperationOverlay } from '@/components/workflow/OperationOverlay.jsx';
 
 function deferred() {
     let resolve;
@@ -74,7 +75,7 @@ test('Given the overlay is visible When the provider unmounts Then cleanup does 
     expect(vi.getTimerCount()).toBe(timerCountBeforeUnmount - 1);
 });
 
-test('Given an opaque request When it lasts one second Then phase and approximate ETA are announced without a fake percent', async () => {
+test('Given an opaque request When it lasts one second Then neutral AI progress is announced without vendor or cost language', async () => {
     // Given
     vi.useFakeTimers();
     const task = deferred();
@@ -86,8 +87,9 @@ test('Given an opaque request When it lasts one second Then phase and approximat
 
     // Then
     expect(screen.getByTestId('operation-overlay')).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: '작업 진행 상태' })).toHaveTextContent('Upstage 응답 대기');
-    expect(screen.getByText(/예상 시간/)).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '작업 진행 상태' })).toHaveTextContent('AI가 생성 중입니다.');
+    expect(screen.queryByText(/Upstage|비용|요금|5초 뒤/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/예상 시간|남음|처리 중/)).not.toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
     await act(async () => task.resolve('완료됨'));

@@ -36,6 +36,17 @@ test('explains the selected worksheet format and makes the recommendation rule v
     expect(screen.getByLabelText('선택한 학습지 형식 안내')).toHaveTextContent('탐구·실험 기록지');
 });
 
+test('SAMR 선택 시 학습지를 수업 단계가 아니라 설계 틀과 실제 활동으로 설명한다', () => {
+    const lessonPlan = makeGeneratedPlan({ instructionModel: { id: 'samr', name: 'SAMR 에듀테크 설계', reason: '과제 변화를 점검함' } });
+
+    render(<WorksheetStage lessonPlan={lessonPlan} value={null} onChange={vi.fn()}/>);
+
+    expect(screen.getByRole('heading', { name: '설계 틀과 학습 활동에 맞는 학습지를 만들어요' })).toBeInTheDocument();
+    expect(screen.getByText(/설계 점검의 의도와 실제 학생 활동/)).toBeInTheDocument();
+    expect(screen.getByText(/선택한 설계 틀과 연결해 둔 기본 형식입니다/)).toBeInTheDocument();
+    expect(screen.queryByText(/수업 모형의 사고 과정/)).not.toBeInTheDocument();
+});
+
 test('lets the teacher edit worksheet questions and answer keys', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

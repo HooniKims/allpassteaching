@@ -36,8 +36,8 @@ test('이전 지도안을 표준 과정안 계약으로 정규화한다', () => 
     expect(normalized.sessions[0].nextSessionConnection).toBe('다음 학습과 연결할 내용을 입력하세요.');
     expect(normalized.sessions[0].stages[0]).toMatchObject({
         learningElement: '도입',
-        teacherQuestions: ['질문을 제시한다.'],
-        expectedStudentResponses: ['예상한다.'],
+        teacherQuestions: ['문제 인식: 질문을 제시한다.'],
+        expectedStudentResponses: ['문제 인식: 관찰할 문제를 확인한다.'],
         supportNotes: [],
     });
     expect(normalized.assessment[0]).toMatchObject({

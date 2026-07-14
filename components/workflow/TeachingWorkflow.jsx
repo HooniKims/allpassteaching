@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LessonPlanWorkspace } from '@/components/lesson-plan/LessonPlanWorkspace.jsx';
 import { clearDraft } from '@/lib/draft-store';
 import { clearWorkflow, createEmptyWorkflow, loadWorkflow, saveWorkflow } from '@/lib/workflow-store';
+import { normalizeRecordTargetBytes } from '@/lib/record-length';
 import { workflowProcessStatuses } from '@/lib/workflow-lineage';
 import { reviseSubmission } from '@/lib/grading-generation.js';
 import { removeStudentFromProject, replaceProjectRoster } from '@/lib/student-roster.js';
@@ -16,7 +17,7 @@ import { SubmissionFileProvider, useSubmissionFiles } from './SubmissionFileProv
 import { OperationProvider } from './OperationProvider.jsx';
 
 const prerequisiteContent = {
-    worksheet: { title: '먼저 지도안을 완성해주세요', description: '학습지는 지도안의 성취기준, 활동, 수업 모형을 바탕으로 만듭니다.', actionLabel: '지도안으로 이동', target: 'lesson' },
+    worksheet: { title: '먼저 지도안을 완성해주세요', description: '학습지는 지도안의 성취기준, 활동, 수업 설계를 바탕으로 만듭니다.', actionLabel: '지도안으로 이동', target: 'lesson' },
     assessment: { title: '먼저 지도안을 완성해주세요', description: '수행평가와 루브릭은 지도안의 성취기준과 학습 활동이 필요합니다.', actionLabel: '지도안으로 이동', target: 'lesson' },
     grading: { title: '먼저 수행평가와 루브릭을 완성해주세요', description: '학생 제출물은 교사가 확인한 루브릭을 기준으로 채점합니다.', actionLabel: '수행평가로 이동', target: 'assessment' },
     records: { title: '먼저 학생별 채점 결과를 승인해주세요', description: '세특은 승인된 수행 증거만 사용해 작성합니다.', actionLabel: 'OCR·채점으로 이동', target: 'grading' },
@@ -24,7 +25,7 @@ const prerequisiteContent = {
 
 function StagePlaceholder({ process }) {
     const copy = {
-        worksheet: ['학습지', '지도안과 수업 모형에 맞는 학습지를 생성하고 편집합니다.'],
+        worksheet: ['학습지', '지도안과 수업 설계에 맞는 학습지를 생성하고 편집합니다.'],
         assessment: ['수행평가', '성취기준에 맞는 수행과제와 4수준 루브릭을 만듭니다.'],
         grading: ['OCR·채점', '학생 PDF를 일괄 처리하고 루브릭 근거를 검토합니다.'],
         records: ['세특', '승인된 수행 증거로 과목별 세부능력 및 특기사항을 작성합니다.'],
@@ -103,6 +104,7 @@ function TeachingWorkflowContent() {
         return { ...current, submissions, records: current.records.filter(record => submissionIds.has(record.submissionId)) };
     }), []);
     const updateRecords = useCallback(updater => setProject(current => ({ ...current, records: typeof updater === 'function' ? updater(current.records) : updater })), []);
+    const updateRecordTargetBytes = useCallback(value => setProject(current => ({ ...current, recordTargetBytes: normalizeRecordTargetBytes(value) })), []);
     const updateStudents = useCallback(updater => setProject(current => replaceProjectRoster(current, typeof updater === 'function' ? updater(current.students) : updater)), []);
     const deleteStudent = useCallback(studentId => {
         const submissionIds = [];
@@ -132,7 +134,7 @@ function TeachingWorkflowContent() {
                                 : activeProcess === 'grading'
                                     ? <OcrGradingStage assessment={project.assessment} students={project.students} submissions={project.submissions} records={project.records} onStudentsChange={updateStudents} onDeleteStudent={deleteStudent} onChange={updateSubmissions}/>
                                     : activeProcess === 'records'
-                                        ? <RecordsStage lessonPlan={project.lessonSnapshot.plan} assessment={project.assessment} students={project.students} submissions={project.submissions} records={project.records} onChange={updateRecords}/>
+                                        ? <RecordsStage lessonPlan={project.lessonSnapshot.plan} assessment={project.assessment} students={project.students} submissions={project.submissions} records={project.records} recordTargetBytes={project.recordTargetBytes} onTargetBytesChange={updateRecordTargetBytes} onChange={updateRecords}/>
                                         : <StagePlaceholder process={activeProcess}/>
                     }
                 </div>

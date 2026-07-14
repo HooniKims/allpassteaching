@@ -61,6 +61,10 @@ export function RubricEditor({ value, request, onRequestChange, onChange }) {
     const [error, setError] = useState('');
     const [totalDraft, setTotalDraft] = useState(String(value.totalPoints));
     const [pointDrafts, setPointDrafts] = useState(() => Object.fromEntries(value.rubric.criteria.map(criterion => [criterion.id, String(criterion.maxPoints)])));
+    const usesGrasps = (value.generationSettings?.assessmentApproachId ?? request.assessmentApproachId) === 'authentic-performance';
+    const taskFieldLabels = usesGrasps
+        ? ['평가 목표(G)', '학생 역할(R)', '공유 대상(A)', '상황(S)', '산출물(P)', '성공 기준(S)']
+        : ['평가 목표', '학생 역할', '공유 대상', '상황', '산출물', '성공 기준'];
     const pointContractFingerprint = value.rubric.criteria.map(criterion => `${criterion.id}:${criterion.maxPoints}`).join('|');
     useEffect(() => setTotalDraft(String(value.totalPoints)), [value.totalPoints]);
     useEffect(() => setPointDrafts(Object.fromEntries(value.rubric.criteria.map(criterion => [criterion.id, String(criterion.maxPoints)]))), [pointContractFingerprint]);
@@ -200,7 +204,8 @@ export function RubricEditor({ value, request, onRequestChange, onChange }) {
     return <div className="structured-editor assessment-editor">
         <section className="document-section"><h2>수행과제</h2>
             <label>과제명<input value={value.task.title} onChange={event => updateTask({ title: event.target.value })}/></label>
-            <div className="field-grid field-grid--two"><label>상황<textarea rows="3" value={value.task.situation} onChange={event => updateTask({ situation: event.target.value })}/></label><label>학생 역할<textarea rows="3" value={value.task.role} onChange={event => updateTask({ role: event.target.value })}/></label><label>공유 대상<textarea rows="3" value={value.task.audience} onChange={event => updateTask({ audience: event.target.value })}/></label><label>산출물<textarea rows="3" value={value.task.product} onChange={event => updateTask({ product: event.target.value })}/></label></div>
+            <p className="section-help">{usesGrasps ? 'GRASPS의 목표·역할·대상·상황·산출물·성공 기준을 교사가 직접 다듬을 수 있습니다.' : '선택한 평가 설계 방식에 맞게 목표·역할·대상·상황·산출물·성공 기준을 직접 다듬을 수 있습니다.'}</p>
+            <div className="field-grid field-grid--two"><label>{taskFieldLabels[0]}<textarea aria-label="평가 목표" rows="3" value={value.task.goal ?? ''} onChange={event => updateTask({ goal: event.target.value })}/></label><label>{taskFieldLabels[1]}<textarea aria-label="학생 역할" rows="3" value={value.task.role} onChange={event => updateTask({ role: event.target.value })}/></label><label>{taskFieldLabels[2]}<textarea aria-label="공유 대상" rows="3" value={value.task.audience} onChange={event => updateTask({ audience: event.target.value })}/></label><label>{taskFieldLabels[3]}<textarea aria-label="상황" rows="3" value={value.task.situation} onChange={event => updateTask({ situation: event.target.value })}/></label><label>{taskFieldLabels[4]}<textarea aria-label="산출물" rows="3" value={value.task.product} onChange={event => updateTask({ product: event.target.value })}/></label><label>{taskFieldLabels[5]}<textarea aria-label="성공 기준" rows="3" value={value.task.successCriteria ?? ''} onChange={event => updateTask({ successCriteria: event.target.value })}/></label></div>
             <div className="field-grid field-grid--two">{[['수행 절차', 'procedure'], ['제출 조건', 'conditions'], ['준비물', 'materials'], ['유의점', 'cautions']].map(([label, key]) => <label key={key}>{label} <span className="optional">한 줄에 하나</span><textarea rows="4" value={value.task[key].join('\n')} onChange={event => updateTask({ [key]: splitLines(event.target.value) })}/></label>)}</div>
         </section>
         <section className="document-section"><div className="section-heading"><div><h2>점수형 분석적 루브릭</h2><p>전체 총점, 영역별 총점, 급간과 수준별 점수를 교사가 직접 바꿀 수 있습니다.</p></div><button type="button" className="secondary-button" onClick={addCriterion} disabled={value.rubric.criteria.length >= 15}>평가영역 추가</button></div>

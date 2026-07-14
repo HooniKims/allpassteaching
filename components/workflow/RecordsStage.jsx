@@ -4,6 +4,7 @@ import { recordSourceHash, submissionIsApprovedFor } from '@/lib/workflow-lineag
 import { RecordDraftComparison } from './RecordDraftComparison.jsx';
 import { RecordEvidencePanel } from './RecordEvidencePanel.jsx';
 import { useOperation } from './OperationProvider.jsx';
+import { DEFAULT_RECORD_TARGET_BYTES, MAX_RECORD_TARGET_BYTES, MIN_RECORD_TARGET_BYTES, RECORD_TARGET_BYTE_PRESETS, normalizeRecordTargetBytes, recordUtf8ByteLength } from '@/lib/record-length';
 
 function upsert(collection, value) {
     return collection.some(item => item.submissionId === value.submissionId)
@@ -13,31 +14,34 @@ function upsert(collection, value) {
 
 const candidateMessages = Object.freeze({
     stale_evidence: '현재 승인 근거가 후보 생성 시점과 달라졌습니다. 새 근거로 다시 생성해주세요.',
-    length_limit: '현재 글자 수 제한과 맞지 않는 후보입니다. 현재 제한으로 다시 생성해주세요.',
+    length_limit: '현재 분량 설정과 맞지 않는 후보입니다. 현재 설정으로 다시 생성해주세요.',
     unsupported_claim: '승인 근거로 확인되지 않은 주장이 있어 이 후보를 적용할 수 없습니다.',
     expired_context: '생성 권한 확인 시간이 만료된 후보입니다. 현재 상태를 다시 확인해 생성해주세요.',
 });
 
-function candidateIssueFor(record, currentSourceHash, targetLength) {
+function candidateIssueFor(record, currentSourceHash, targetBytes) {
     if (!record?.candidateText) return null;
     if (record.candidateInvalidCode && candidateMessages[record.candidateInvalidCode]) return { code: record.candidateInvalidCode, message: record.candidateInvalidMessage || candidateMessages[record.candidateInvalidCode] };
     if (record.candidateSourceHash !== currentSourceHash) return { code: 'stale_evidence', message: candidateMessages.stale_evidence };
-    if (record.candidateTargetLength !== targetLength || record.candidateText.length > targetLength) return { code: 'length_limit', message: candidateMessages.length_limit };
+    if (record.candidateTargetBytes !== targetBytes || recordUtf8ByteLength(record.candidateText) > targetBytes) return { code: 'length_limit', message: candidateMessages.length_limit };
     if (!record.candidateClaims?.length) return { code: 'unsupported_claim', message: candidateMessages.unsupported_claim };
     return null;
 }
 
-export function RecordsStage({ lessonPlan, assessment, students = [], submissions, records, onChange }) {
+export function RecordsStage({ lessonPlan, assessment, students = [], submissions, records, recordTargetBytes = DEFAULT_RECORD_TARGET_BYTES, onTargetBytesChange = () => {}, onChange }) {
     const { cancelActive, runBatchOperation } = useOperation();
     const rosterById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
     const approved = submissions.filter(item => rosterById.has(item.studentId) && submissionIsApprovedFor(assessment, item));
-    const [targetLength, setTargetLength] = useState(500);
+    const savedTargetBytes = normalizeRecordTargetBytes(recordTargetBytes);
+    const [targetPreset, setTargetPreset] = useState(() => RECORD_TARGET_BYTE_PRESETS.includes(savedTargetBytes) ? String(savedTargetBytes) : 'custom');
+    const [customTargetBytes, setCustomTargetBytes] = useState(String(savedTargetBytes));
     const [busy, setBusy] = useState(false);
     const [copyMessage, setCopyMessage] = useState('');
     const [batchMessage, setBatchMessage] = useState('');
     const mounted = useRef(true);
     const abortController = useRef(null);
     const recordFor = id => records.find(item => item.submissionId === id);
+    const targetBytes = useMemo(() => targetPreset === 'custom' ? normalizeRecordTargetBytes(customTargetBytes) : normalizeRecordTargetBytes(targetPreset), [customTargetBytes, targetPreset]);
     useEffect(() => {
         mounted.current = true;
         return () => {
@@ -91,14 +95,14 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
                     if (combinedSignal.aborted) throw new DOMException('작업 취소', 'AbortError');
                     const response = await fetch('/api/generate-record', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: combinedSignal,
-                        body: JSON.stringify({ lessonPlan, assessment, roster: students, recordContext, student, submission, targetLength }),
+                        body: JSON.stringify({ lessonPlan, assessment, roster: students, recordContext, student, submission, targetBytes }),
                     });
                     const body = await response.json().catch(() => ({}));
                     if (!response.ok) { const failure = new Error(body.message || '세특 초안을 만들지 못했습니다.'); failure.code = body.code; throw failure; }
-                    if (typeof body?.record?.text !== 'string' || !body.record.text.trim() || body.record.text.length > targetLength) { const failure = new Error('생성 결과 형식을 확인하지 못했습니다. 다시 시도해주세요.'); failure.code = 'unsupported_claim'; throw failure; }
+                    if (typeof body?.record?.text !== 'string' || !body.record.text.trim() || recordUtf8ByteLength(body.record.text) > targetBytes) { const failure = new Error('생성 결과 형식을 확인하지 못했습니다. 다시 시도해주세요.'); failure.code = 'unsupported_claim'; throw failure; }
                     merge(identity, current => hadRecord
-                        ? { status: 'done', regenerationStatus: 'done', error: '', candidateInvalidCode: '', candidateInvalidMessage: '', previousText: current?.text ?? '', candidateText: body.record.text, candidateClaims: body.record.claims ?? [], candidateEvidenceCriterionIds: body.record.evidenceCriterionIds ?? [], candidateSourceHash: nextSourceHash, candidateTargetLength: targetLength }
-                        : { sourceHash: nextSourceHash, status: 'done', regenerationStatus: '', text: body.record.text, claims: body.record.claims ?? [], evidenceCriterionIds: body.record.evidenceCriterionIds ?? [], previousText: '', candidateText: '', candidateClaims: [], candidateEvidenceCriterionIds: [], candidateSourceHash: '', candidateTargetLength: 0, error: '', approved: false });
+                        ? { status: 'done', regenerationStatus: 'done', error: '', candidateInvalidCode: '', candidateInvalidMessage: '', previousText: current?.text ?? '', candidateText: body.record.text, candidateClaims: body.record.claims ?? [], candidateEvidenceCriterionIds: body.record.evidenceCriterionIds ?? [], candidateSourceHash: nextSourceHash, candidateTargetBytes: targetBytes }
+                        : { sourceHash: nextSourceHash, status: 'done', regenerationStatus: '', text: body.record.text, claims: body.record.claims ?? [], evidenceCriterionIds: body.record.evidenceCriterionIds ?? [], previousText: '', candidateText: '', candidateClaims: [], candidateEvidenceCriterionIds: [], candidateSourceHash: '', candidateTargetBytes: 0, error: '', approved: false });
                     if (mounted.current) setBatchMessage(hadRecord ? `${student.name} 새 초안을 비교할 수 있습니다.` : `${student.name} 세특 초안이 생성되었습니다.`);
                 } catch (error) {
                     const cancelled = error instanceof DOMException && error.name === 'AbortError';
@@ -142,7 +146,7 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
             {failed.length > 0 && <button type="button" className="secondary-button" disabled={busy} onClick={() => generateBatch(failed)}>실패 학생만 다시 시도</button>}
             {busy && <button type="button" className="secondary-button" onClick={cancelBatch}>작업 취소</button>}
         </div></header>
-        <div className="record-settings"><label>학생별 최대 글자 수<input aria-label="학생별 최대 글자 수" disabled={busy} type="number" min="300" max="1000" step="50" value={targetLength} onChange={event => setTargetLength(Math.min(1000, Math.max(300, Number(event.target.value) || 500)))}/></label><p>기본 500자이며 300–1000자 사이에서 조절할 수 있습니다.</p></div>
+        <div className="record-settings"><label>세특 분량<select aria-label="세특 분량 선택" disabled={busy} value={targetPreset} onChange={event => { const value = event.target.value; setTargetPreset(value); if (value === 'custom') setCustomTargetBytes(String(targetBytes)); else onTargetBytesChange(normalizeRecordTargetBytes(value)); }}>{RECORD_TARGET_BYTE_PRESETS.map(value => <option key={value} value={value}>{value}byte{value === DEFAULT_RECORD_TARGET_BYTES ? ' (기본)' : ''}</option>)}<option value="custom">직접 입력</option></select></label>{targetPreset === 'custom' && <label>직접 입력 분량(byte)<input aria-label="직접 입력 분량(byte)" disabled={busy} type="number" min={MIN_RECORD_TARGET_BYTES} max={MAX_RECORD_TARGET_BYTES} step="10" inputMode="numeric" value={customTargetBytes} onChange={event => setCustomTargetBytes(event.target.value)} onBlur={() => { const nextTargetBytes = normalizeRecordTargetBytes(customTargetBytes); setCustomTargetBytes(String(nextTargetBytes)); onTargetBytesChange(nextTargetBytes); }}/></label>}<p>기본 700byte이며 300–1500byte 사이에서 정합니다. 한글은 보통 한 글자당 3byte로 계산되어 700byte는 약 230자 안팎입니다.</p></div>
         {batchMessage && <p className="status-line" role="status" aria-live="polite">{batchMessage}</p>}
         {copyMessage && <p className="status-line" role="status">{copyMessage}</p>}
         <div className="record-list">{approved.map(submission => {
@@ -150,16 +154,17 @@ export function RecordsStage({ lessonPlan, assessment, students = [], submission
             const student = rosterById.get(submission.studentId);
             const currentSourceHash = recordSourceHash(assessment, submission);
             const stale = Boolean(record?.text && record.sourceHash !== currentSourceHash);
-            const candidateIssue = candidateIssueFor(record, currentSourceHash, targetLength);
+            const candidateIssue = candidateIssueFor(record, currentSourceHash, targetBytes);
+            const recordBytes = recordUtf8ByteLength(record?.text);
             return <article className="record-item" key={submission.id}>
                 <div className="record-item__head"><div><strong>{student.name}</strong><span>현재 명단 · 승인된 수행평가 근거</span></div>{!record && <button type="button" disabled={busy} onClick={() => generateBatch([submission])}>{student.name} 세특 생성</button>}</div>
                 <RecordEvidencePanel assessment={assessment} submission={submission} studentName={student.name}/>
                 {stale && <p className="stale-notice"><strong>이전 채점 결과로 생성됨</strong><span>현재 글은 유지되며 새 근거로 다시 생성할 수 있습니다.</span></p>}
                 {record?.error && <p className="item-error" role="alert">{record.error}</p>}
-                {record && <><label className="record-text-field">{student.name} 세특 초안<textarea rows="7" value={record.text ?? ''} disabled={record.status === 'generating'} maxLength={targetLength} onChange={event => updateRecord(submission.id, { text: event.target.value, claims: [], evidenceCriterionIds: [], approved: false })}/></label>
-                    <RecordDraftComparison studentName={student.name} record={record} candidateIssue={candidateIssue} onApply={() => { updateRecord(submission.id, { previousText: '', text: record.candidateText, claims: record.candidateClaims ?? [], evidenceCriterionIds: record.candidateEvidenceCriterionIds ?? [], sourceHash: record.candidateSourceHash, candidateText: '', candidateClaims: [], candidateEvidenceCriterionIds: [], candidateSourceHash: '', candidateTargetLength: 0, candidateInvalidCode: '', candidateInvalidMessage: '', regenerationStatus: '', error: '', approved: false }); setBatchMessage(`${student.name} 새 초안을 적용했습니다.`); }} onKeep={() => { updateRecord(submission.id, { previousText: '', candidateText: '', candidateClaims: [], candidateEvidenceCriterionIds: [], candidateSourceHash: '', candidateTargetLength: 0, candidateInvalidCode: '', candidateInvalidMessage: '', regenerationStatus: '', status: 'done', error: '' }); setBatchMessage(`${student.name} 기존 문장을 유지했습니다.`); }}/>
+                {record && <><label className="record-text-field">{student.name} 세특 초안<textarea rows="7" value={record.text ?? ''} disabled={record.status === 'generating'} maxLength={MAX_RECORD_TARGET_BYTES} onChange={event => { const nextBytes = recordUtf8ByteLength(event.target.value); if (nextBytes > targetBytes && nextBytes >= recordBytes) { setBatchMessage(`${student.name} 세특은 현재 ${targetBytes}byte를 넘길 수 없습니다.`); return; } updateRecord(submission.id, { text: event.target.value, claims: [], evidenceCriterionIds: [], approved: false }); }}/></label>
+                    <RecordDraftComparison studentName={student.name} record={record} candidateIssue={candidateIssue} onApply={() => { updateRecord(submission.id, { previousText: '', text: record.candidateText, claims: record.candidateClaims ?? [], evidenceCriterionIds: record.candidateEvidenceCriterionIds ?? [], sourceHash: record.candidateSourceHash, candidateText: '', candidateClaims: [], candidateEvidenceCriterionIds: [], candidateSourceHash: '', candidateTargetBytes: 0, candidateInvalidCode: '', candidateInvalidMessage: '', regenerationStatus: '', error: '', approved: false }); setBatchMessage(`${student.name} 새 초안을 적용했습니다.`); }} onKeep={() => { updateRecord(submission.id, { previousText: '', candidateText: '', candidateClaims: [], candidateEvidenceCriterionIds: [], candidateSourceHash: '', candidateTargetBytes: 0, candidateInvalidCode: '', candidateInvalidMessage: '', regenerationStatus: '', status: 'done', error: '' }); setBatchMessage(`${student.name} 기존 문장을 유지했습니다.`); }}/>
                     {!record.claims?.length && record.text && <p className="record-lineage-note">직접 수정되어 AI 근거 연결이 해제되었습니다. 다시 생성하면 근거를 재연결할 수 있습니다.</p>}
-                    <div className="record-item__footer"><span>{(record.text ?? '').length}자 / {targetLength}자</span><div><button type="button" className="secondary-button" disabled={busy} onClick={() => generateBatch([submission])}>{student.name} 다시 생성</button><button type="button" className="secondary-button" disabled={!record.text} onClick={() => copyRecord(record)}>복사</button><button type="button" disabled={stale || !record.text || !record.claims?.length} onClick={() => updateRecord(submission.id, { approved: !record.approved })}>{record.approved ? '확인 완료 취소' : '교사 확인 완료'}</button></div></div></>}
+                    <div className="record-item__footer"><span>{(record.text ?? '').length}자 · {recordBytes}byte / {targetBytes}byte</span><div><button type="button" className="secondary-button" disabled={busy} onClick={() => generateBatch([submission])}>{student.name} 다시 생성</button><button type="button" className="secondary-button" disabled={!record.text} onClick={() => copyRecord(record)}>복사</button><button type="button" disabled={stale || !record.text || recordBytes > targetBytes || !record.claims?.length} onClick={() => updateRecord(submission.id, { approved: !record.approved })}>{record.approved ? '확인 완료 취소' : '교사 확인 완료'}</button></div></div></>}
             </article>;
         })}</div>
         {!approved.length && <p className="empty-state">현재 학생 명단과 연결된 승인 채점이 없습니다. OCR·채점 단계에서 학생별 근거를 확인하고 승인해주세요.</p>}

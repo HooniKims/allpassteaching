@@ -6,9 +6,23 @@ describe('백워드 설계 수행평가 계약', () => {
     test('Given 교사가 정한 총점과 과정 비중 When 완성된 평가를 검증하면 Then 총점·과정 배점·수준 점수 사다리를 허용한다', () => {
         const assessment = makeAssessment();
 
-        expect(assessmentOutputSchema.safeParse(assessment).success).toBe(true);
+        const parsed = assessmentOutputSchema.safeParse(assessment);
+
+        expect(parsed.success).toBe(true);
+        expect(parsed.data.task.goal).toBe(assessment.task.goal);
+        expect(parsed.data.task.successCriteria).toBe(assessment.task.successCriteria);
         expect(assessment.scoring.processTargetPoints).toBe(20);
         expect(assessment.rubric.criteria.filter(item => item.kind === 'process').reduce((sum, item) => sum + item.maxPoints, 0)).toBe(20);
+    });
+
+    test('Given GRASPS 수행과제 When 목표나 성공 기준이 빠지면 Then 여섯 요소 계약을 거부한다', () => {
+        const missingGoal = makeAssessment();
+        const missingSuccessCriteria = makeAssessment();
+        delete missingGoal.task.goal;
+        delete missingSuccessCriteria.task.successCriteria;
+
+        expect(assessmentOutputSchema.safeParse(missingGoal).success).toBe(false);
+        expect(assessmentOutputSchema.safeParse(missingSuccessCriteria).success).toBe(false);
     });
 
     test('Given 과정 점수를 포함한 평가 When 과정 영역 합계가 반올림 목표와 다르면 Then 승인을 막는다', () => {
@@ -142,5 +156,17 @@ describe('백워드 설계 수행평가 계약', () => {
 
         expect(assessmentOutputSchema.safeParse(missing).success).toBe(false);
         expect(assessmentOutputSchema.safeParse(duplicate).success).toBe(false);
+    });
+
+    test('Given AI가 예시 문항을 그대로 복사하면 Then 실제 문제지로 승인하지 않는다', () => {
+        const assessment = makeAssessment();
+        assessment.studentSheet.document.sections.forEach(section => section.questions.forEach(question => {
+            question.prompt = `${section.title}에서 학생이 직접 수행하고 기록할 문항`;
+        }));
+
+        const parsed = assessmentOutputSchema.safeParse(assessment);
+
+        expect(parsed.success).toBe(false);
+        expect(parsed.error.issues.some(issue => issue.message.includes('구체적인 실제 문항'))).toBe(true);
     });
 });

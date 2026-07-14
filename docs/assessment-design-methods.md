@@ -1,13 +1,13 @@
 # 수행평가 설계 방식 레퍼런스
 
-작성일: 2026-07-13
+최종 확인일: 2026-07-14
 
 이 문서는 올패스 티칭의 `수행평가 설계 방식` 선택지를 위한 설계 참고 자료다. 방식은 우열이 아니라, 성취기준·학생이 보여줄 증거·수업 기간에 따라 선택하는 출발점이다. 모든 방식은 성취기준 연결, 관찰 가능한 증거, 교사의 최종 판단을 공통으로 유지한다.
 
 | 방식 | 핵심 증거 | 적합한 상황 | 생성 시 반드시 남길 자료 |
 | --- | --- | --- | --- |
 | 백워드 설계 | 도착점에 맞는 복수의 증거 | 단원 전체의 이해와 전이 | 목표, 성공 증거, 수행·지원 계획 |
-| 실제적 수행과제 | 실제 맥락에서의 적용 | 역할·청중·상황이 있는 과제 | 역할, 청중, 산출물, 성공 기준 |
+| GRASPS 실제적 수행과제 | 실제 맥락에서의 적용 | 역할·청중·상황이 있는 과제 | 목표(G), 역할(R), 청중(A), 상황(S), 산출물(P), 성공 기준(S) |
 | 프로젝트 기반 | 탐구·제작·비평·수정·공유 | 여러 차시 프로젝트 | 핵심 질문, 중간 산출물, 성찰 |
 | 탐구·문제해결 | 문제 정의와 근거 기반 해결 | 과학·수학·사회 탐구 | 가설/전략, 자료, 해석, 검증 |
 | 포트폴리오 성장 | 시간에 따른 산출물과 성찰 | 수정 과정과 성장 확인 | 초기본, 피드백, 수정본, 선택 이유 |
@@ -20,10 +20,12 @@
 - 과정 증거는 지각, 말투, 호감도 같은 태도 추정이 아니라 초안·관찰 기록·발표 기록·피드백·수정본처럼 확인 가능한 자료여야 한다.
 - 자기·동료 평가는 학생이 기준을 이해하고 수정하는 자료로 활용하되, 점수 확정은 교사의 원본 확인과 판단을 거친다.
 - 방식 선택 뒤에도 총점, 성취수준, 루브릭, 학생 안내 표지와 OCR 채점 과정은 기존 워크플로우를 그대로 사용한다.
+- GRASPS의 여섯 요소는 각각 학생이 이해할 수 있는 문장으로 제시하며, 성공 기준은 루브릭의 영역·수준과 직접 연결한다.
 
 ## 참고 자료
 
 - 교육부는 2022 개정 교육과정에서 학생 참여형·주도형 수업 및 학습 과정 중시 평가를 제시했다. <https://www.moe.go.kr/boardCnts/viewRenew.do?boardID=294&boardSeq=93459&lev=0&searchType=null&statusY=>
 - Wiggins와 McTighe의 Understanding by Design은 원하는 결과, 수용 가능한 증거, 학습 계획의 역방향 설계를 설명한다. <https://www.ascd.org/el/articles/the-fundamentals-of-backward-planning>
+- ASCD의 실제적 평가 자료는 수행과제를 목표, 역할, 청중, 상황, 산출물·수행, 성공 기준으로 구성하는 GRASPS 틀을 안내한다. <https://www.ascd.org/el/articles/assessing-deeper-learning-after-a-year-of-change>
 - PBLWorks는 프로젝트의 탐구·학생 선택·성찰·비평과 수정, 그리고 루브릭 활용을 강조한다. <https://www.pblworks.org/download-project-based-learning-rubrics>
 - Cornell Center for Teaching Innovation은 자기평가와 동료평가를 기준의 이해, 성찰, 피드백 역량을 위한 구조화된 과정으로 안내한다. <https://teaching.cornell.edu/teaching-resources/assessment-evaluation/self-assessment> · <https://teaching.cornell.edu/teaching-resources/assessing-student-learning/peer-assessment>
