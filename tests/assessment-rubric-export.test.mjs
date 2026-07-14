@@ -82,6 +82,7 @@ test('exports the teacher-edited rubric in PDF, HWPX, DOCX, and Excel', async ()
     expect(headerXml).toContain('face="Paperlogy"');
     expect(sectionXml).toContain('교사가 고친 관찰 근거');
     expect(sectionXml).toContain('교사가 직접 고친 탁월 수준 설명');
+    expect(sectionXml).not.toContain('<hp:linesegarray');
     const rubricTable = [...section.getElementsByTagName('hp:tbl')].at(-1);
     expect(Number(rubricTable.getAttribute('colCnt'))).toBe(2);
     for (const row of [...rubricTable.getElementsByTagName('hp:tr')]) {

@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { expect, test } from 'vitest';
 import { buildHwpx } from '@/lib/export/hwpx';
+import { buildSimpleHwpx } from '@/lib/export/simple-hwpx';
 import { makeGeneratedPlan, makeTwoSessionPlan } from './fixtures/lesson-plan.mjs';
 
 const PROCESS_WIDTHS = [5500, 9000, 23020, 5000];
@@ -23,8 +24,8 @@ function parseXml(xml) {
     return document;
 }
 
-async function unpackHwpx(plan) {
-    const bytes = await buildHwpx(plan);
+async function unpackHwpx(plan, builder = buildHwpx) {
+    const bytes = await builder(plan);
     const zip = await JSZip.loadAsync(bytes);
     const headerXml = await zip.file('Contents/header.xml').async('string');
     const sectionXml = await zip.file('Contents/section0.xml').async('string');
@@ -75,6 +76,23 @@ test('builds a well-formed HWPX package with a first uncompressed mimetype entry
     expect(new TextDecoder().decode(bytes.subarray(30, 30 + nameLength))).toBe('mimetype');
     expect(header.documentElement.tagName).toBe('hh:head');
     expect(section.documentElement.tagName).toBe('hs:sec');
+});
+
+test('builds a table-free simple HWPX while keeping the core lesson content', async () => {
+    // Given a complete lesson plan that needs a layout-safe alternative
+    const plan = makeGeneratedPlan();
+
+    // When the simple HWPX builder creates a document
+    const { section, sectionXml } = await unpackHwpx(plan, buildSimpleHwpx);
+
+    // Then the package uses ordinary paragraphs without tables or stale layout caches
+    expect(elements(section, 'hp:tbl')).toHaveLength(0);
+    expect(sectionXml).not.toContain('<hp:linesegarray');
+    for (const text of [
+        '교수·학습 과정안', '수업 개요', '[6과11-02] 식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.',
+        '1차시 · 식물 기관 관찰 (40분)', '교사 활동: 질문을 제시한다.', '학생 활동: 예상한다.',
+        '과정중심평가', '관찰 결과 설명 · 관찰 및 산출물 확인', '관찰 증거: 관찰 기록지', '수업 후 성찰', '학생이 증거를 바탕으로 설명했는가?',
+    ]) expect(section.documentElement.textContent).toContain(text);
 });
 
 test('keeps every header collection count equal to its actual element count', async () => {

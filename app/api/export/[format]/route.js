@@ -1,6 +1,7 @@
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { buildDocx } from '@/lib/export/docx';
 import { buildHwpx } from '@/lib/export/hwpx';
+import { buildSimpleHwpx } from '@/lib/export/simple-hwpx';
 import { buildPdf } from '@/lib/export/pdf';
 
 const exporters = { docx: { build: buildDocx, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, hwpx: { build: buildHwpx, type: 'application/hwp+zip' }, pdf: { build: buildPdf, type: 'application/pdf' } };
@@ -31,6 +32,8 @@ export async function POST(request, { params }) {
     }
     const parsed = lessonPlanSchema.safeParse(value);
     if (!parsed.success) return Response.json({ code: 'invalid_plan', message: '지도안 입력 내용을 확인해주세요.', issues: parsed.error.issues }, { status: 400 });
-    const bytes = await exporter.build(parsed.data); const filename = encodeURIComponent(`${parsed.data.title}.${format}`);
+    const variant = new URL(request.url).searchParams.get('variant');
+    const build = format === 'hwpx' && variant === 'simple' ? buildSimpleHwpx : exporter.build;
+    const bytes = await build(parsed.data); const filename = encodeURIComponent(`${parsed.data.title}.${format}`);
     return new Response(bytes, { headers: { 'Content-Type': exporter.type, 'Content-Disposition': `attachment; filename*=UTF-8''${filename}` } });
 }

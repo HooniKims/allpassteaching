@@ -73,4 +73,5 @@ test('builds a complete, editable student HWPX package without teacher-only cont
     expect(headerXml).toContain('face="Paperlogy"');
     expect(sectionXml).toContain('관찰 &amp; 비교 &lt;설명&gt;');
     expect(sectionXml).not.toContain('교사용 예시 답안');
+    expect(sectionXml).not.toContain('<hp:linesegarray');
 });

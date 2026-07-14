@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import { describe, expect, test } from 'vitest';
 import { MAX_EXPORT_REQUEST_BYTES, POST } from '@/app/api/export/[format]/route';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
@@ -12,6 +13,22 @@ describe('lesson plan export route', () => {
             expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(1000);
         });
     }
+
+    test('exports the simple HWPX variant with an HWPX filename', async () => {
+        // Given a teacher chooses the table-free HWPX download
+        const request = new Request('http://localhost/api/export/hwpx?variant=simple', { method: 'POST', body: JSON.stringify(makeGeneratedPlan()) });
+
+        // When the export route receives the request
+        const response = await POST(request, { params: Promise.resolve({ format: 'hwpx' }) });
+
+        // Then it returns a normal HWPX attachment whose section has no table layout
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const zip = await JSZip.loadAsync(bytes);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toContain('application/hwp+zip');
+        expect(response.headers.get('content-disposition')).toContain('.hwpx');
+        expect(await zip.file('Contents/section0.xml').async('string')).not.toContain('<hp:tbl');
+    });
 
     test('rejects an unsupported format', async () => {
         const response = await POST(new Request('http://localhost/api/export/txt', { method: 'POST', body: '{' }), { params: Promise.resolve({ format: 'txt' }) });

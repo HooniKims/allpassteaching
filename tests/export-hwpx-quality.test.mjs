@@ -81,6 +81,14 @@ test('builds byte-identical ZIP packages when the system clock advances by three
     }
 });
 
+test('does not retain stale Hancom line-layout caches in a generated lesson plan', async () => {
+    // Given a lesson plan built from the shared HWPX template
+    const { sectionXml } = await unpackHwpx(makeGeneratedPlan());
+
+    // Then Hancom can calculate the line layout from the generated content instead of a template cache
+    expect(sectionXml).not.toContain('<hp:linesegarray');
+});
+
 test('preserves CRLF, LF, CR, and tab as explicit OWPML inline controls', async () => {
     // Given supported embedded whitespace controls
     const plan = makeGeneratedPlan({ essentialQuestion: '줄시작\r\n줄중간\t탭뒤\rCR뒤\n줄끝' });

@@ -63,12 +63,14 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
             window.alert(`입력 내용을 확인해주세요. ${formattedIssue.message}`);
             return;
         }
+        const isSimpleHwpx = format === 'hwpx-simple';
+        const exportFormat = isSimpleHwpx ? 'hwpx' : format;
         setExporting(true);
         try {
-            await runOperation({ kind: 'lesson-export', label: `${format.toUpperCase()} 지도안 파일 저장`, phase: 'serverWaiting', cancelable: true }, async ({ signal }) => {
+            await runOperation({ kind: 'lesson-export', label: `${isSimpleHwpx ? '간편 HWPX' : exportFormat.toUpperCase()} 지도안 파일 저장`, phase: 'serverWaiting', cancelable: true }, async ({ signal }) => {
                 let response;
                 try {
-                    response = await fetch(`/api/export/${format}`, {
+                    response = await fetch(`/api/export/${exportFormat}${isSimpleHwpx ? '?variant=simple' : ''}`, {
                         method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checked.data),
                     });
                 } catch (error) {
@@ -88,7 +90,7 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
                 const url = URL.createObjectURL(await response.blob());
                 const anchor = document.createElement('a');
                 anchor.href = url;
-                anchor.download = `${value.title}.${format}`;
+                anchor.download = `${value.title}.${exportFormat}`;
                 anchor.click();
                 URL.revokeObjectURL(url);
             });
@@ -117,7 +119,8 @@ export function LessonPlanEditor({ plan, originalPlan = plan, onChange }) {
                 <label className="export-format">
                     <span className="sr-only">내보내기 형식</span>
                     <select aria-label="내보내기 형식" value={format} onChange={event => setFormat(event.target.value)}>
-                        <option value="hwpx">한글 HWPX</option>
+                        <option value="hwpx">한글 HWPX (표 형식)</option>
+                        <option value="hwpx-simple">간편 HWPX (표 없음)</option>
                         <option value="docx">Word DOCX</option>
                         <option value="pdf">PDF</option>
                     </select>

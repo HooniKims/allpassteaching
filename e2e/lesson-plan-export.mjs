@@ -51,4 +51,24 @@ export async function exportAllFormats(page, metadata, editedValues) {
             expect(documentText).not.toContain('다음 학습 연결');
         }
     }
+
+    await page.getByLabel('내보내기 형식').selectOption('hwpx-simple');
+    const simpleResponsePromise = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/export/hwpx' && url.searchParams.get('variant') === 'simple' && response.request().method() === 'POST';
+    });
+    const simpleDownloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: '파일로 저장' }).click();
+    const [simpleResponse, simpleDownload] = await Promise.all([simpleResponsePromise, simpleDownloadPromise]);
+    expect(simpleResponse.status()).toBe(200);
+    expect(simpleResponse.headers()['content-type']).toContain('application/hwp+zip');
+    expect(simpleResponse.headers()['content-disposition']).toContain('.hwpx');
+    expect(simpleDownload.suggestedFilename()).toBe(`${editedValues.lessonTitle}.hwpx`);
+    const simpleBytes = await readFile(await simpleDownload.path());
+    const simpleZip = await JSZip.loadAsync(simpleBytes);
+    const simpleSection = await simpleZip.file('Contents/section0.xml').async('string');
+    expect(simpleSection).not.toContain('<hp:tbl');
+    for (const questionLine of editedValues.teacherQuestion.split('\n')) expect(simpleSection).toContain(questionLine);
+    expect(simpleSection).toContain(editedValues.assessmentMethod);
+    expect(simpleSection).toContain('수업 후 성찰');
 }
