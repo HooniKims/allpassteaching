@@ -126,6 +126,50 @@
 * { box-sizing: border-box; }
 html { scroll-padding-top: 92px; background: var(--color-canvas); color: var(--color-ink); }
 body { margin: 0; min-height: 100vh; font-family: 'Paperlogy', system-ui, sans-serif; font-size: 16px; line-height: 1.55; word-break: keep-all; overflow-wrap: break-word; }
+
+.site-frame { display: flex; min-height: 100vh; flex-direction: column; }
+.site-frame__content { min-width: 0; flex: 1; }
+.site-footer { display: grid; justify-items: center; gap: 5px; padding: 22px 20px 26px; border-top: 1px solid var(--color-border); color: var(--color-muted); text-align: center; }
+.site-footer nav { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.site-footer a { color: var(--color-ink); font-size: 14px; font-weight: 600; text-underline-offset: 4px; }
+.site-footer a:hover { color: var(--color-action-hover); }
+.site-footer p { margin: 0; font-size: 12px; }
+
+.legal-workspace { width: min(880px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0 72px; }
+.legal-document { padding: clamp(28px, 5vw, 56px); border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-surface); }
+.legal-back-link { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 42px; color: var(--color-action-hover); font-size: 14px; font-weight: 600; text-decoration: none; }
+.legal-back-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.legal-header { max-width: 680px; }
+.legal-label { margin: 0 0 8px; color: var(--color-action); font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+.legal-header h1 { margin: 0; color: var(--color-ink); font-size: clamp(36px, 6vw, 56px); line-height: 1.12; letter-spacing: -.035em; }
+.legal-description { margin: 18px 0 0; color: var(--color-muted); font-size: clamp(17px, 2.2vw, 20px); line-height: 1.65; }
+.legal-meta { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 26px 0 0; }
+.legal-meta div { display: flex; gap: 8px; }
+.legal-meta dt, .legal-meta dd { margin: 0; font-size: 13px; }
+.legal-meta dt { color: var(--color-muted); font-weight: 600; }
+.legal-meta dd { color: var(--color-ink); }
+.legal-notice { margin: 40px 0 0; padding: 20px 22px; border: 1px solid var(--color-action-soft-border); border-radius: var(--radius-control); background: var(--color-action-tint); }
+.legal-notice strong { color: var(--color-action-hover); font-size: 14px; }
+.legal-notice p { margin: 6px 0 0; color: var(--color-ink); font-size: 14px; line-height: 1.7; }
+.legal-sections { display: grid; gap: 0; margin-top: 48px; }
+.legal-section { padding: 28px 0; border-top: 1px solid var(--color-border); }
+.legal-section h2 { margin: 0 0 14px; color: var(--color-ink); font-size: 20px; line-height: 1.4; }
+.legal-section p { margin: 0; color: var(--color-ink); font-size: 15px; line-height: 1.85; }
+.legal-section p + p { margin-top: 9px; }
+.legal-document-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 28px; border-top: 1px solid var(--color-border); }
+.legal-document-footer p { margin: 0; color: var(--color-muted); font-size: 14px; }
+.legal-document-footer a { color: var(--color-action-hover); font-size: 14px; font-weight: 700; text-underline-offset: 4px; }
+
+@media (max-width: 640px) {
+    .legal-workspace { width: min(100% - 24px, 880px); padding: 20px 0 36px; }
+    .legal-document { padding: 24px 20px 30px; border-radius: var(--radius-control); }
+    .legal-back-link { margin-bottom: 30px; }
+    .legal-description { line-height: 1.55; }
+    .legal-notice { padding: 16px; }
+    .legal-sections { margin-top: 34px; }
+    .legal-section { padding: 23px 0; }
+    .legal-document-footer { align-items: flex-start; flex-direction: column; gap: 8px; }
+}
 button, input, select, textarea { font: inherit; }
 :focus-visible { outline: 2px solid var(--color-action); outline-offset: 2px; }
 h1, h2, h3, p { text-wrap: pretty; }
@@ -529,7 +573,7 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 @media print {
     @page { size: A4; margin: 0; }
     html, body { background: var(--color-surface); }
-    .process-rail, .workflow-toolbar, .workspace-reset-dialog, .step-nav, .generation-summary, .plan-editor__header, .plan-editor__guidance { display: none !important; }
+    .site-footer, .process-rail, .workflow-toolbar, .workspace-reset-dialog, .step-nav, .generation-summary, .plan-editor__header, .plan-editor__guidance { display: none !important; }
     .workspace, .workspace__main { display: block; width: 100%; padding: 0; }
     .plan-editor, .lesson-document-stack, .lesson-document-session { display: block; width: 100%; padding: 0; }
     .lesson-document-page { min-height: 297mm; margin: 0; padding: 10mm 12mm; border: 0; break-after: page; box-shadow: none; }

@@ -1,4 +1,5 @@
 import Script from 'next/script';
+import { SiteFooter } from '@/components/site/SiteFooter.jsx';
 import './globals.css';
 
 export const metadata = {
@@ -18,7 +19,12 @@ export default function RootLayout({ children }) {
                     <Script src="https://unpkg.com/react-scan/dist/auto.global.js" crossOrigin="anonymous" strategy="beforeInteractive" />
                 </>}
             </head>
-            <body>{children}</body>
+            <body>
+                <div className="site-frame">
+                    <div className="site-frame__content">{children}</div>
+                    <SiteFooter/>
+                </div>
+            </body>
         </html>
     );
 }
