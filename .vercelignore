@@ -1,0 +1,14 @@
+.DS_Store
+.debug-journal.md
+.env
+.env.*
+!.env.example
+.next/
+.omo/
+.superpowers/
+.worktrees/
+_workspace/
+local-notes/
+node_modules/
+playwright-report/
+test-results/
