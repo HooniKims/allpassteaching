@@ -1,4 +1,6 @@
-export const legalEffectiveDate = '2026년 7월 14일';
+export const legalEffectiveDate = '2026년 7월 15일';
+
+export const serviceOperatorContact = '서비스 운영자 및 개인정보 보호책임자: 김형훈 교사(등촌중학교) · 전화: 02-6380-8339 · 이메일: greenguyhh@gmail.com';
 
 export const termsOfService = {
     label: '서비스 이용 안내',
@@ -54,13 +56,20 @@ export const termsOfService = {
             ],
         },
         {
-            title: '제8조 (약관의 변경)',
+            title: '제8조 (서비스 운영자 및 문의)',
+            paragraphs: [
+                serviceOperatorContact,
+                '서비스 이용, 자료 처리 및 권리 침해와 관련한 문의는 위 전화 또는 이메일로 연락할 수 있습니다.',
+            ],
+        },
+        {
+            title: '제9조 (약관의 변경)',
             paragraphs: [
                 '서비스 기능이나 관련 법령이 변경되는 경우 이 약관을 개정할 수 있습니다. 중요한 변경 사항은 적용 전에 서비스 화면을 통해 알립니다.',
             ],
         },
         {
-            title: '제9조 (분쟁 해결)',
+            title: '제10조 (분쟁 해결)',
             paragraphs: [
                 '서비스 이용과 관련한 분쟁은 상호 협의를 통해 해결하는 것을 원칙으로 하며, 협의가 이루어지지 않는 경우 대한민국 법령과 관할 기준을 따릅니다.',
             ],
@@ -149,7 +158,8 @@ export const privacyPolicy = {
         {
             title: '제11조 (개인정보 보호책임자 및 문의)',
             paragraphs: [
-                '개인정보 보호책임자는 김형훈 교사(등촌중학교)이며, 문의 전화는 02-6380-8339입니다. 학교 수업에서 사용한 학생 자료는 담당 교사를 통해서도 문의할 수 있습니다.',
+                serviceOperatorContact,
+                '학교 수업에서 사용한 학생 자료는 담당 교사를 통해서도 문의할 수 있습니다.',
                 '개인정보 침해 상담이 필요한 경우 개인정보침해신고센터(국번 없이 118), 개인정보분쟁조정위원회(1833-6972) 등 관계기관에 도움을 요청할 수 있습니다.',
             ],
         },
