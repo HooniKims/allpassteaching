@@ -3,7 +3,7 @@ import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
 import { assessmentRequestSchema } from '@/lib/assessment-request';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
-import { assessmentMessages, repairAssessmentMessages } from '@/lib/workflow-prompts';
+import { assessmentMessages, createAssessmentFallback, repairAssessmentMessages } from '@/lib/workflow-prompts';
 import { upgradeAssessmentStudentSheet } from '@/lib/assessment-student-sheet';
 
 const requestSchema = z.object({ lessonPlan: lessonPlanSchema, assessmentRequest: assessmentRequestSchema });
@@ -92,6 +92,7 @@ export async function POST(request) {
             const repaired = await chatContent({ messages: repairAssessmentMessages(lessonPlan, assessmentRequest, checked.value, checked.issues), timeoutMs: 60000 });
             checked = parseAssessment(repaired, lessonPlan, assessmentRequest);
         }
+        if (!checked.success) checked = parseAssessment(JSON.stringify(createAssessmentFallback(lessonPlan, assessmentRequest)), lessonPlan, assessmentRequest);
         if (!checked.success) return Response.json({ code: 'invalid_generation', message: '수행평가 형식을 복구하지 못했습니다.', issues: checked.issues }, { status: 422 });
         return Response.json({ assessment: checked.data });
     } catch (error) {

@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { POST } from '@/app/api/generate-assessment/route';
+import { assessmentOutputSchema } from '@/lib/assessment-schema';
 import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 import { makeAssessment } from './fixtures/workflow.mjs';
 
@@ -34,6 +35,27 @@ test('repairs a rubric whose point total is not 100', async () => {
     expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+test('Upstage가 두 번 연속 잘못된 형식을 반환해도 교사 설정을 보존한 수행평가를 생성한다', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion('올바른 수행평가 JSON이 아님'))));
+
+    const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(body.assessment).toMatchObject({
+        assessmentName: assessmentRequest.assessmentName,
+        totalPoints: assessmentRequest.totalPoints,
+        scoring: {
+            includeProcessInScore: assessmentRequest.includeProcessInScore,
+            processWeightPercent: assessmentRequest.processWeightPercent,
+        },
+    });
+    expect(body.assessment.rubric.levels).toHaveLength(assessmentRequest.levelCount);
+    expect(assessmentOutputSchema.safeParse(body.assessment).success).toBe(true);
+});
+
 test('학생 문제지는 생성됐지만 교사용 채점 참고를 누락한 AI 결과도 문제지를 버리지 않고 보완한다', async () => {
     const generated = makeAssessment();
     delete generated.studentSheet.teacherKey;
@@ -57,7 +79,7 @@ test('rejects generation when the required desired result is empty', async () =>
     expect(fetch).not.toHaveBeenCalled();
 });
 
-test('교사가 정한 생성 계약과 다른 AI 결과를 두 번 받아도 변경된 선택으로 200 응답하지 않는다', async () => {
+test('교사가 정한 생성 계약과 다른 AI 결과를 두 번 받아도 변경된 선택은 반환하지 않는다', async () => {
     const requested = {
         ...assessmentRequest,
         assessmentName: '교사 지정 생태 포스터 평가', totalPoints: 60, levelCount: 3,
@@ -73,8 +95,23 @@ test('교사가 정한 생성 계약과 다른 AI 결과를 두 번 받아도 �
 
     const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest: requested }));
 
-    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(response.status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(body.assessment).toMatchObject({
+        assessmentName: requested.assessmentName,
+        totalPoints: requested.totalPoints,
+        visualAnalysisRequired: requested.visualAnalysisRequired,
+        includeStudentCover: requested.includeStudentCover,
+        generationSettings: {
+            outputTypes: requested.outputTypes,
+            answerTypes: requested.answerTypes,
+            stages: requested.stages,
+            additionalRequirements: requested.additionalRequirements,
+        },
+    });
+    expect(body.assessment.rubric.levels).toHaveLength(requested.levelCount);
+    expect(body.assessment.scoring).toMatchObject({ includeProcessInScore: false, processWeightPercent: 0, processTargetPoints: 0 });
 });
 
 test('AI가 덧붙이는 메타데이터보다 교사 평가명·과목·산출물·표지·시각 분석 설정을 정규화해 보존한다', async () => {
