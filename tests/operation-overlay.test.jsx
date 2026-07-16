@@ -75,7 +75,7 @@ test('Given the overlay is visible When the provider unmounts Then cleanup does 
     expect(vi.getTimerCount()).toBe(timerCountBeforeUnmount - 1);
 });
 
-test('Given an opaque request When it lasts one second Then neutral AI progress is announced without vendor or cost language', async () => {
+test('Given an opaque request When it lasts one second Then estimated AI progress is announced without vendor or cost language', async () => {
     // Given
     vi.useFakeTimers();
     const task = deferred();
@@ -83,15 +83,14 @@ test('Given an opaque request When it lasts one second Then neutral AI progress 
     fireEvent.click(screen.getByRole('button', { name: '분석 시작' }));
 
     // When
-    await act(async () => vi.advanceTimersByTime(1_000));
+    await act(async () => vi.advanceTimersByTime(1_250));
 
     // Then
     expect(screen.getByTestId('operation-overlay')).toBeInTheDocument();
     expect(screen.getByRole('status', { name: '작업 진행 상태' })).toHaveTextContent('AI가 생성 중입니다.');
     expect(screen.queryByText(/Upstage|비용|요금|5초 뒤/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/예상 시간|남음|처리 중/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '예상 진행률' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '예상 진행률' }).parentElement).toHaveTextContent(/예상 진행률 \d+%/);
     await act(async () => task.resolve('완료됨'));
 });
 

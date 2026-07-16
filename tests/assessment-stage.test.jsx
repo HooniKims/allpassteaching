@@ -377,6 +377,27 @@ test('영역 총점 적용도 전체 총점·과정 비중·수준별 점수를 
     expect(screen.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' })).toBeEnabled();
 });
 
+test('수준 점수가 0이어도 입력을 비운 뒤 새 점수로 편하게 덮어쓸 수 있다', async () => {
+    const user = userEvent.setup();
+    const lessonPlan = makeGeneratedPlan();
+    function Harness() {
+        const initial = makeAssessment();
+        initial.rubric.criteria[0].levels[3].score = 0;
+        const [assessment, setAssessment] = useState({ ...initial, sourceHash: sourceHash(lessonPlan), approved: false });
+        return <><output data-testid="edited-level-score">{assessment.rubric.criteria[0].levels[3].score}</output><AssessmentStage lessonPlan={lessonPlan} value={assessment} request={request} onRequestChange={() => {}} onChange={setAssessment}/></>;
+    }
+    render(<Harness/>);
+    const score = screen.getByLabelText('관찰 근거 보완 필요 점수');
+
+    await user.clear(score);
+    expect(score).toHaveValue(null);
+    await user.type(score, '7');
+    await user.tab();
+
+    expect(score).toHaveValue(7);
+    expect(screen.getByTestId('edited-level-score')).toHaveTextContent('7');
+});
+
 test('적용할 수 없는 영역 총점은 기존 평가와 request를 그대로 보존한다', async () => {
     const user = userEvent.setup();
     const lessonPlan = makeGeneratedPlan();

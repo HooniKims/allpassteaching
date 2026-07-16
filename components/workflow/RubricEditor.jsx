@@ -61,13 +61,16 @@ export function RubricEditor({ value, request, onRequestChange, onChange }) {
     const [error, setError] = useState('');
     const [totalDraft, setTotalDraft] = useState(String(value.totalPoints));
     const [pointDrafts, setPointDrafts] = useState(() => Object.fromEntries(value.rubric.criteria.map(criterion => [criterion.id, String(criterion.maxPoints)])));
+    const [levelScoreDrafts, setLevelScoreDrafts] = useState(() => Object.fromEntries(value.rubric.criteria.flatMap(criterion => criterion.levels.map(level => [`${criterion.id}:${level.levelId}`, String(level.score)]))));
     const usesGrasps = (value.generationSettings?.assessmentApproachId ?? request.assessmentApproachId) === 'authentic-performance';
     const taskFieldLabels = usesGrasps
         ? ['평가 목표(G)', '학생 역할(R)', '공유 대상(A)', '상황(S)', '산출물(P)', '성공 기준(S)']
         : ['평가 목표', '학생 역할', '공유 대상', '상황', '산출물', '성공 기준'];
     const pointContractFingerprint = value.rubric.criteria.map(criterion => `${criterion.id}:${criterion.maxPoints}`).join('|');
+    const levelScoreFingerprint = value.rubric.criteria.flatMap(criterion => criterion.levels.map(level => `${criterion.id}:${level.levelId}:${level.score}`)).join('|');
     useEffect(() => setTotalDraft(String(value.totalPoints)), [value.totalPoints]);
     useEffect(() => setPointDrafts(Object.fromEntries(value.rubric.criteria.map(criterion => [criterion.id, String(criterion.maxPoints)]))), [pointContractFingerprint]);
+    useEffect(() => setLevelScoreDrafts(Object.fromEntries(value.rubric.criteria.flatMap(criterion => criterion.levels.map(level => [`${criterion.id}:${level.levelId}`, String(level.score)])))), [levelScoreFingerprint]);
     const commit = patch => onChange({ ...value, ...patch });
     const updateTask = patch => commit({ task: { ...value.task, ...patch } });
     const commitCriteria = criteria => commit({ rubric: { ...value.rubric, criteria }, backwardDesign: synchronizeEvidenceMap(value.backwardDesign, criteria) });
@@ -123,6 +126,19 @@ export function RubricEditor({ value, request, onRequestChange, onChange }) {
     const updateLevel = (criterionIndex, levelIndex, patch) => {
         const criterion = value.rubric.criteria[criterionIndex];
         updateCriterion(criterionIndex, { levels: criterion.levels.map((level, current) => current === levelIndex ? { ...level, ...patch } : level) });
+    };
+    const commitLevelScore = (criterionIndex, levelIndex) => {
+        const criterion = value.rubric.criteria[criterionIndex];
+        const level = criterion.levels[levelIndex];
+        const key = `${criterion.id}:${level.levelId}`;
+        const score = Number(levelScoreDrafts[key]);
+        if (!Number.isInteger(score) || score < 0 || score > criterion.maxPoints) {
+            setLevelScoreDrafts(current => ({ ...current, [key]: String(level.score) }));
+            setError(`${criterion.name} ${value.rubric.levels[levelIndex].label} 점수는 0~${criterion.maxPoints}의 정수여야 합니다.`);
+            return;
+        }
+        updateLevel(criterionIndex, levelIndex, { score });
+        setError('');
     };
     const commitLevelDefinitions = definitions => {
         const criteria = value.rubric.criteria.map(criterion => {
@@ -218,7 +234,7 @@ export function RubricEditor({ value, request, onRequestChange, onChange }) {
                 <fieldset className="criterion-standard-links"><legend>연결 성취기준</legend>{value.task.standards.map(standard => <label key={standard.code}><input aria-label={`[${standard.code}] 연결`} type="checkbox" checked={criterion.standardCodes.includes(standard.code)} onChange={() => toggleCriterionStandard(index, standard.code)}/><span><strong>[{standard.code}]</strong> {standard.text}</span></label>)}</fieldset>
                 <button type="button" className="secondary-button" onClick={() => recalculate(index)}>{criterion.name} 급간으로 다시 계산</button>
                 <label>평가 내용<textarea rows="2" value={criterion.description} onChange={event => updateCriterion(index, { description: event.target.value })}/></label><label>관찰 증거<textarea rows="2" value={criterion.evidence} onChange={event => updateCriterion(index, { evidence: event.target.value })}/></label>
-                <div className="rubric-level-grid">{value.rubric.levels.map((definition, levelIndex) => <section key={definition.id}><h3>{definition.label}</h3><label>{criterion.name} {definition.label} 점수<input aria-label={`${criterion.name} ${definition.label} 점수`} type="number" min="0" max={criterion.maxPoints} value={criterion.levels[levelIndex]?.score ?? 0} onChange={event => updateLevel(index, levelIndex, { score: Number(event.target.value) })}/></label><label>수행 기술<textarea rows="3" value={criterion.levels[levelIndex]?.description ?? ''} onChange={event => updateLevel(index, levelIndex, { description: event.target.value })}/></label></section>)}</div>
+                <div className="rubric-level-grid">{value.rubric.levels.map((definition, levelIndex) => { const level = criterion.levels[levelIndex]; const scoreKey = `${criterion.id}:${level.levelId}`; return <section key={definition.id}><h3>{definition.label}</h3><label>{criterion.name} {definition.label} 점수<input aria-label={`${criterion.name} ${definition.label} 점수`} type="number" min="0" max={criterion.maxPoints} value={levelScoreDrafts[scoreKey] ?? ''} onFocus={event => event.currentTarget.select()} onChange={event => setLevelScoreDrafts(current => ({ ...current, [scoreKey]: event.target.value }))} onBlur={() => commitLevelScore(index, levelIndex)} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { event.preventDefault(); setLevelScoreDrafts(current => ({ ...current, [scoreKey]: String(level.score) })); event.currentTarget.select(); } }}/></label><label>수행 기술<textarea rows="3" value={level.description ?? ''} onChange={event => updateLevel(index, levelIndex, { description: event.target.value })}/></label></section>; })}</div>
                 {criterionCandidate?.criterionId === criterion.id && <div className="candidate-panel" role="status"><strong>선택 영역 변경 비교</strong><div className="criterion-comparison"><section><h4>현재 설명</h4><p><strong>{criterionCandidate.original.name}</strong></p><p>{criterionCandidate.original.description}</p><p>증거: {criterionCandidate.original.evidence}</p></section><section><h4>AI 제안 설명</h4><p><strong>{criterionCandidate.value.name}</strong></p><p>{criterionCandidate.value.description}</p><p>증거: {criterionCandidate.value.evidence}</p></section></div><button type="button" onClick={applyCandidate}>이 제안 적용</button><button type="button" className="secondary-button" onClick={() => setCriterionCandidate(null)}>현재 영역 유지</button></div>}
             </fieldset>)}</div>
         </section>

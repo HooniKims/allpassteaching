@@ -6,6 +6,7 @@ import {
     createOperation,
     estimateOperationDuration,
     formatRemainingSeconds,
+    getOperationDisplayProgress,
     getOperationTiming,
     recordOperationDuration,
 } from '@/lib/operation-state';
@@ -65,6 +66,27 @@ test('keeps an opaque Upstage request indeterminate without inventing a percent'
         progress: null,
         progressKind: 'indeterminate',
     });
+});
+
+test('Given an opaque AI request When time passes Then its estimated display percent rises but stops below completion', () => {
+    // Given
+    const operation = createOperation({
+        kind: 'generate',
+        label: '수행평가 생성',
+        phase: 'upstageWaiting',
+        startedAt: 1_000,
+        estimateSeconds: 60,
+    });
+
+    // When
+    const started = getOperationDisplayProgress(operation, 1_000);
+    const halfway = getOperationDisplayProgress(operation, 31_000);
+    const overdue = getOperationDisplayProgress(operation, 121_000);
+
+    // Then
+    expect(started).toEqual({ progress: 1, progressKind: 'estimated', progressLabel: '예상 진행률' });
+    expect(halfway.progress).toBeGreaterThan(started.progress);
+    expect(overdue).toEqual({ progress: 95, progressKind: 'estimated', progressLabel: '예상 진행률' });
 });
 
 test('ignores measured progress while an opaque Upstage request is waiting', () => {

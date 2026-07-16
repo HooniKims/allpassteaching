@@ -1,10 +1,29 @@
-import { beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TeachingWorkflow } from '@/components/workflow/TeachingWorkflow.jsx';
 import { createEmptyWorkflow, WORKFLOW_KEY } from '@/lib/workflow-store';
 
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
+
+afterEach(() => { Element.prototype.scrollIntoView = originalScrollIntoView; vi.restoreAllMocks(); });
+
+test('Given any active process When the teacher selects 맨 위로 Then the process navigation is scrolled into view and focused', async () => {
+    // Given
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    render(<TeachingWorkflow/>);
+
+    // When
+    await user.click(screen.getByRole('button', { name: '지도안 맨 위로' }));
+
+    // Then
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(screen.getByRole('tab', { name: /지도안/ })).toHaveFocus();
+});
 
 test('opens every process but explains the missing prerequisite in context', async () => {
     const user = userEvent.setup();

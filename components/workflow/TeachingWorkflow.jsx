@@ -56,6 +56,7 @@ function TeachingWorkflowContent() {
     const [storageError, setStorageError] = useState('');
     const [lessonWorkspaceKey, setLessonWorkspaceKey] = useState(0);
     const newWorkspaceDialogRef = useRef(null);
+    const processTopRef = useRef(null);
     useEffect(() => {
         setProject(detachRestoredSubmissionFiles(loadWorkflow() ?? createEmptyWorkflow()));
         setHydrated(true);
@@ -114,8 +115,12 @@ function TeachingWorkflowContent() {
         setProject(nextProject);
         setStorageError(saveWorkflow(nextProject) ? '' : '브라우저 저장소에 변경 내용을 저장하지 못했습니다. 브라우저의 사이트 데이터 설정을 확인한 뒤 다시 시도해주세요.');
     }, [project, submissionFiles]);
+    const scrollToProcessTop = () => {
+        processTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById(`process-tab-${activeProcess}`)?.focus({ preventScroll: true });
+    };
     return <div className="teaching-workflow">
-        <ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/>
+        <div ref={processTopRef}><ProcessTabs activeProcess={activeProcess} statuses={statuses} onChange={next => setProject(current => ({ ...current, activeProcess: next }))}/></div>
         <div className="workflow-toolbar"><p>현재 작업은 이 브라우저의 로컬 저장소에 저장됩니다. 공용 기기에서는 <span className="nowrap">새 작업 시작</span>으로 지워주세요.</p>{storageError && <p className="form-alert" role="alert">{storageError}</p>}<button type="button" className="secondary-button" onClick={() => { setStorageError(''); setConfirmNewWorkspace(true); }}>새 작업 시작</button></div>
         <dialog ref={newWorkspaceDialogRef} className="workspace-reset-dialog" role="alertdialog" aria-labelledby="new-workspace-title" onCancel={event => { event.preventDefault(); setConfirmNewWorkspace(false); }}>
             <h2 id="new-workspace-title">새 작업 시작 확인</h2><p>현재 지도안, 학습지, 수행평가, 학생 명단과 채점·세특 기록을 모두 지웁니다. 이 작업은 되돌릴 수 없습니다.</p>
@@ -144,6 +149,7 @@ function TeachingWorkflowContent() {
                     {confirmClear && <div className="privacy-panel__confirm" role="alert"><span>PDF 연결, OCR, 채점, 세특을 모두 삭제할까요? 공용 학생 명단은 유지됩니다.</span><button type="button" className="danger-button" onClick={clearStudentData}>제출·채점·세특 삭제 확인</button><button type="button" className="secondary-button" onClick={() => setConfirmClear(false)}>취소</button></div>}
                 </aside>}
             </main>}
+        <div className="workflow-back-to-top"><button type="button" className="secondary-button" aria-label={`${activeProcessLabel} 맨 위로`} onClick={scrollToProcessTop}>맨 위로</button></div>
     </div>;
 }
 

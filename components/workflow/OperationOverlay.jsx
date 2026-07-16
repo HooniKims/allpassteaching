@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useRef } from 'react';
+import { getOperationDisplayProgress } from '@/lib/operation-state';
 
 const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function OperationOverlay({ operation, now, onCancel }) {
     const panelRef = useRef(null);
+    const displayProgress = getOperationDisplayProgress(operation, now);
     useEffect(() => {
         panelRef.current?.focus();
     }, []);
@@ -33,11 +35,9 @@ export function OperationOverlay({ operation, now, onCancel }) {
                 {operation.isBatch && <span>{operation.completedItems}/{operation.totalItems}명 완료 · 성공 {operation.successItems}명 · 실패 {operation.failureItems}명 · 대기 {operation.pendingItems}명</span>}
                 {operation.currentItem?.label && <span>현재 처리 · {operation.currentItem.label}</span>}
             </div>
-            {operation.progress !== null
-                ? <div className="operation-progress-wrap"><div className="operation-progress" role="progressbar" aria-label={operation.progressLabel} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(operation.progress)}>
-                    <span style={{ transform: `scaleX(${operation.progress / 100})` }}/>
-                </div><b>{Math.round(operation.progress)}%</b></div>
-                : <div className="operation-progress operation-progress--indeterminate" aria-hidden="true"><span/></div>}
+            <div className="operation-progress-wrap"><div className="operation-progress" role="progressbar" aria-label={displayProgress.progressLabel} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(displayProgress.progress)}>
+                <span style={{ transform: `scaleX(${displayProgress.progress / 100})` }}/>
+            </div><b>{displayProgress.progressKind === 'estimated' && <span>예상 진행률 </span>}{Math.round(displayProgress.progress)}%</b></div>
             {cancelAvailable && <button type="button" className="secondary-button" onClick={onCancel}>작업 취소</button>}
         </section>
     </div>;
