@@ -41,3 +41,13 @@ test('uses a configured timeout globally without shortening an explicit 90-secon
     await chatJson({ messages: [], schema: z.object({ ok: z.boolean() }), timeoutMs: 90000 });
     expect(timeout).toHaveBeenLastCalledWith(90000);
 });
+
+test('retries one transient timeout before returning a completion', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn()
+        .mockRejectedValueOnce(new DOMException('The operation timed out', 'TimeoutError'))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), { status: 200 })));
+
+    await expect(chatJson({ messages: [], schema: z.object({ ok: z.boolean() }) })).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
