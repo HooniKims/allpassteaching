@@ -288,6 +288,7 @@ test('안내문과 제출용 수행평가지를 구분해 저장하고 안내문
     expect(screen.getByRole('heading', { name: '실제 수행평가지 편집' })).toBeInTheDocument();
     expect(screen.getByLabelText('문항 1 유형')).toHaveValue('table-chart');
     expect(screen.getByDisplayValue('뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '학생이 작성할 수행평가지 미리보기' })).toHaveTextContent('뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.');
 
     document.body.innerHTML = '';
     const value = { ...makeAssessment(), sourceHash: sourceHash(lessonPlan), approved: false, includeStudentCover: false };

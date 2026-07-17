@@ -48,6 +48,38 @@ function QuestionFields({ question, number, standards, onUpdate }) {
     </>;
 }
 
+function responseGuide(question) {
+    if (question.type === 'multiple-choice-5') return '선택지에서 한 가지를 고르세요.';
+    if (question.type === 'true-false') return '참 또는 거짓을 고르세요.';
+    if (question.type === 'table-chart') return '관찰 결과를 표 또는 그래프로 작성하세요.';
+    if (question.type === 'drawing-diagram') return '그림이나 도표를 작성하세요.';
+    return `${question.responseLines}줄로 생각을 작성하세요.`;
+}
+
+function StudentActivityPreview({ document, mode }) {
+    const isAssessment = mode === 'assessment';
+    const regionName = isAssessment ? '학생이 작성할 수행평가지 미리보기' : '학생이 작성할 학습지 미리보기';
+    const title = isAssessment ? '학생이 작성할 수행평가지 미리보기' : '학생이 작성할 학습지 미리보기';
+    const description = isAssessment ? '학생에게 배부되는 제출용 수행평가지의 발문과 활동입니다. 안내문·루브릭과 별도로 학생이 이 문항에 답합니다.' : '학생에게 배부되는 학습지의 발문과 활동입니다. 학생은 아래 문항에 직접 답하고 기록합니다.';
+    let number = 0;
+    return <section className="student-activity-preview" role="region" aria-label={regionName}>
+        <header><p className="eyebrow">학생용 활동 내용</p><h2>{title}</h2><p>{description}</p></header>
+        <p className="student-activity-preview__instruction"><strong>작성 안내</strong> {document.instructions}</p>
+        {document.sections.map(section => {
+            const start = number + 1;
+            number += section.questions.length;
+            return <section className="student-activity-preview__section" key={section.id}>
+                <h3>{section.title}</h3><p>{section.purpose}</p>
+                <ol start={start}>{section.questions.map(question => <li key={question.id}>
+                    <strong>{question.prompt}</strong>
+                    {question.type === 'multiple-choice-5' && <ul>{question.choices.map(choice => <li key={choice}>{choice}</li>)}</ul>}
+                    <span>{responseGuide(question)}</span>
+                </li>)}</ol>
+            </section>;
+        })}
+    </section>;
+}
+
 export function WorksheetEditor({ value, onChange, mode = 'worksheet' }) {
     const copy = mode === 'assessment'
         ? { title: '실제 수행평가지 편집', titleField: '수행평가지 제목', section: '수행 영역', purpose: '수행 목적', defaultSection: '새 수행 영역', answer: '교사 채점 참고', addSection: '수행 영역 추가' }
@@ -101,6 +133,7 @@ export function WorksheetEditor({ value, onChange, mode = 'worksheet' }) {
     const moveQuestion = (sectionIndex, questionIndex, target) => updateSection(sectionIndex, { questions: move(value.document.sections[sectionIndex].questions, questionIndex, target) });
     let questionNumber = 0;
     return <div className="structured-editor worksheet-editor">
+        <StudentActivityPreview document={value.document} mode={mode}/>
         <section className="document-section"><h2>{copy.title}</h2><p className="section-help">학생이 실제로 작성할 문항, 응답 공간과 연결 성취기준을 수정할 수 있습니다.</p><label>{copy.titleField}<input value={value.document.title} onChange={event => updateDocument({ title: event.target.value })}/></label><label>학생 안내<textarea rows="3" value={value.document.instructions} onChange={event => updateDocument({ instructions: event.target.value })}/></label><label>학생 정보란 <span className="optional">쉼표로 구분</span><input value={value.document.studentFields.join(', ')} onChange={event => updateDocument({ studentFields: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })}/></label></section>
         {value.document.sections.map((section, sectionIndex) => <section className="document-section" key={section.id}>
             <div className="document-section__heading section-heading"><strong>{sectionIndex + 1}. {copy.section}</strong><div className="compact-actions"><button type="button" className="secondary-button" disabled={sectionIndex === 0} aria-label={`${ordinal(sectionIndex)} 번째 섹션 위로 이동`} onClick={() => updateSections(move(value.document.sections, sectionIndex, sectionIndex - 1))}>위로</button><button type="button" className="secondary-button" disabled={sectionIndex === value.document.sections.length - 1} aria-label={`${ordinal(sectionIndex)} 번째 섹션 아래로 이동`} onClick={() => updateSections(move(value.document.sections, sectionIndex, sectionIndex + 1))}>아래로</button><button type="button" className="secondary-button" disabled={value.document.sections.length >= WORKSHEET_LIMITS.sections || value.teacherKey.answers.length + section.questions.length > WORKSHEET_LIMITS.answers} aria-label={`${ordinal(sectionIndex)} 번째 섹션 복제`} onClick={() => duplicateSection(sectionIndex)}>복제</button><button type="button" className="text-button" disabled={value.document.sections.length === 1} aria-label={`${ordinal(sectionIndex)} 번째 섹션 삭제`} onClick={() => removeSection(sectionIndex)}>삭제</button></div></div>

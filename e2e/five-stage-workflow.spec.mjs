@@ -186,17 +186,24 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.getByRole('tab', { name: /학습지/ }).click();
     await page.getByRole('button', { name: '학습지 생성하기' }).click();
     await expect(page.getByLabel('학습지 제목')).toHaveValue('식물의 구조와 기능 탐구 학습지');
+    await expect(page.getByRole('region', { name: '학생이 작성할 학습지 미리보기' })).toContainText('식물의 각 기관은 어떤 일을 할까요?');
     await expectPdfDownload(page, () => page.getByRole('button', { name: '학생용 PDF' }).click(), '식물의 구조와 기능 탐구 학습지');
     await expectPdfDownload(page, () => page.getByRole('button', { name: '교사용 PDF' }).click(), '교사용 예시 답안');
+    await page.getByRole('region', { name: '학생이 작성할 학습지 미리보기' }).screenshot({ path: '.omo/evidence/task-12-worksheet-student-activity.png' });
+    await page.screenshot({ path: '.omo/evidence/task-11-worksheet.png', fullPage: true });
 
     await page.getByRole('tab', { name: /수행평가/ }).click();
     await page.getByLabel('이 평가를 마친 학생이 무엇을 이해하고, 스스로 해낼 수 있길 바라나요?').fill('식물 기관의 구조와 기능을 관찰 근거로 설명한다.');
     await page.getByLabel('평가 이름').fill('식물 기관 탐구 수행평가');
     await page.getByRole('button', { name: '수행평가 생성하기' }).click();
     await expect(page.getByLabel('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
+    await expect(page.getByRole('region', { name: '학생이 작성할 수행평가지 미리보기' })).toContainText('뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.');
     await page.getByRole('button', { name: '수행평가·루브릭 확인 완료' }).click();
-    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '표지만 PDF 저장' }).click(), makeVisualAssessment().cover.title)).toBe(1);
-    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '수행평가 전체 PDF 저장' }).click(), makeVisualAssessment().task.title)).toBeGreaterThan(1);
+    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '학생 안내문 PDF 저장' }).click(), makeVisualAssessment().cover.title)).toBe(1);
+    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '제출용 수행평가지 PDF 저장' }).click(), '뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.')).toBeGreaterThan(0);
+    expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '안내문과 수행평가지 전체 PDF 저장' }).click(), makeVisualAssessment().task.title)).toBeGreaterThan(1);
+    await page.getByRole('region', { name: '학생이 작성할 수행평가지 미리보기' }).screenshot({ path: '.omo/evidence/task-12-assessment-student-activity.png' });
+    await page.screenshot({ path: '.omo/evidence/task-11-assessment.png', fullPage: true });
 
     await page.getByRole('tab', { name: /OCR·채점/ }).click();
     const template = await downloadBytes(page, () => page.getByRole('button', { name: 'Excel 입력 양식 받기' }).click());
@@ -273,9 +280,9 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     for (const width of [375, 768, 1280]) {
         await page.setViewportSize({ width, height: 900 });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        await page.evaluate(() => document.querySelectorAll('nextjs-portal, #react-scan-root, .ph-no-capture').forEach(element => element.remove()));
         const responsiveAxe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
         expect(responsiveAxe.violations.map(item => item.id)).toEqual([]);
-        await page.evaluate(() => document.querySelectorAll('nextjs-portal').forEach(element => element.remove()));
         await page.screenshot({ path: width === 375 ? '.omo/evidence/task-11-records.png' : `.omo/evidence/task-11-records-${width}.png`, fullPage: true });
     }
     await page.getByRole('button', { name: '김학생 새 초안 적용' }).click();

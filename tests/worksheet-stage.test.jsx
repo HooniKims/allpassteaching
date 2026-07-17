@@ -59,6 +59,7 @@ test('lets the teacher edit worksheet questions and answer keys', async () => {
     const prompt = screen.getByLabelText('문항 1');
     await user.clear(prompt); await user.type(prompt, '새 탐구 질문');
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ document: expect.objectContaining({ sections: expect.arrayContaining([expect.objectContaining({ questions: expect.arrayContaining([expect.objectContaining({ prompt: '새 탐구 질문' })]) })]) }) }));
+    expect(screen.getByRole('region', { name: '학생이 작성할 학습지 미리보기' })).toHaveTextContent('새 탐구 질문');
     expect(screen.getByText('이전 지도안으로 생성됨')).toBeInTheDocument();
 });
 
