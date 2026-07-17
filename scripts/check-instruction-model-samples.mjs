@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { instructionModels } from '../data/instruction-models.js';
-import { validateInstructionModelAlignment } from '../lib/instruction-model-alignment.js';
+import { labelInstructionModelActivities, validateInstructionModelAlignment } from '../lib/instruction-model-alignment.js';
 import { lessonPlanSchema } from '../lib/lesson-plan-schema.js';
 import { chatContent, UpstageError } from '../lib/upstage/client.js';
 import { lessonPlanMessages, repairLessonPlanMessages } from '../lib/upstage/prompts.js';
@@ -44,20 +44,21 @@ function inspectPlan(content, draft) {
     }
     const parsed = lessonPlanSchema.safeParse(value);
     if (!parsed.success) return { success: false, value, issues: parsed.error.issues, missingStages: [], failureReason: 'schema' };
-    const alignment = validateInstructionModelAlignment(parsed.data, draft.instructionModel);
-    const identityMatches = parsed.data.instructionModel.id === draft.instructionModel.id
-        && parsed.data.instructionModel.name === draft.instructionModel.name;
-    const standardMatches = parsed.data.standards.length === 1
-        && parsed.data.standards[0].code === draft.standards[0].code
-        && parsed.data.standards[0].text === draft.standards[0].text;
-    const basicsMatch = parsed.data.schoolLevel === draft.basics.schoolLevel
-        && parsed.data.grade === draft.basics.grade
-        && parsed.data.subject === draft.basics.subject
-        && Object.entries(draft.basics.metadata).every(([key, expected]) => parsed.data.metadata[key] === expected);
-    const sessionMatches = parsed.data.sessions.length === 1
-        && parsed.data.sessions[0].sessionMinutes === 40;
+    const plan = labelInstructionModelActivities(parsed.data, draft.instructionModel);
+    const alignment = validateInstructionModelAlignment(plan, draft.instructionModel);
+    const identityMatches = plan.instructionModel.id === draft.instructionModel.id
+        && plan.instructionModel.name === draft.instructionModel.name;
+    const standardMatches = plan.standards.length === 1
+        && plan.standards[0].code === draft.standards[0].code
+        && plan.standards[0].text === draft.standards[0].text;
+    const basicsMatch = plan.schoolLevel === draft.basics.schoolLevel
+        && plan.grade === draft.basics.grade
+        && plan.subject === draft.basics.subject
+        && Object.entries(draft.basics.metadata).every(([key, expected]) => plan.metadata[key] === expected);
+    const sessionMatches = plan.sessions.length === 1
+        && plan.sessions[0].sessionMinutes === 40;
     const contractMatches = identityMatches && standardMatches && basicsMatch && sessionMatches;
-    if (alignment.success && contractMatches) return { success: true, plan: parsed.data, missingStages: [], failureReason: null };
+    if (alignment.success && contractMatches) return { success: true, plan, missingStages: [], failureReason: null };
     const missingStages = alignment.missingStages;
     const failureReason = !alignment.success ? 'alignment'
         : !identityMatches ? 'instructionModel'
