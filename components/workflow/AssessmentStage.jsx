@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { assessmentRequestSchema } from '@/lib/assessment-request';
+import { assessmentRequestSchema, integratedAssessmentScoreIssue } from '@/lib/assessment-request';
 import { sourceHash } from '@/lib/source-hash';
 import { assessmentOutputSchema, unresolvedBlockingAlignmentIssues } from '@/lib/assessment-schema';
 import { downloadFilename } from '@/lib/download-filename';
@@ -58,7 +58,9 @@ export function AssessmentStage({ lessonPlan, value: storedValue, request, onReq
     const stale = Boolean(value && value.sourceHash !== currentSourceHash);
     const total = value?.rubric.criteria.reduce((sum, criterion) => sum + (Number(criterion.maxPoints) || 0), 0) ?? 0;
     const validation = value ? assessmentOutputSchema.safeParse(value) : null;
-    const requestValid = assessmentRequestSchema.safeParse(request).success;
+    const requestValidation = assessmentRequestSchema.safeParse(request);
+    const integratedScoreIssue = requestValidation.success && lessonPlan.instructionModel.id === 'integrated' ? integratedAssessmentScoreIssue(requestValidation.data) : null;
+    const requestValid = requestValidation.success && !integratedScoreIssue;
     const blockingIssues = unresolvedBlockingAlignmentIssues(value);
     const requestedGenerationSettings = { outputTypes: request.outputTypes, answerTypes: request.answerTypes, stages: request.stages, additionalRequirements: request.additionalRequirements, assessmentApproachId: request.assessmentApproachId ?? 'backward-design' };
     const valueGenerationSettings = value?.generationSettings && { ...value.generationSettings, assessmentApproachId: value.generationSettings.assessmentApproachId ?? 'backward-design' };
@@ -113,7 +115,7 @@ export function AssessmentStage({ lessonPlan, value: storedValue, request, onReq
     return <section className="workflow-stage workflow-stage--wide">
         <header className="workflow-stage__header"><div><p className="eyebrow">3단계 · 수행평가</p><h1>성취기준에 맞는 수행평가를 설계해요</h1><p>학생이 도달할 이해와 증거를 먼저 정하고, 수행과제·피드백 과정·점수형 루브릭을 거꾸로 설계합니다.</p></div></header>
         <BackwardDesignForm lessonPlan={lessonPlan} value={request} onChange={onRequestChange}/>
-        <div className="generation-toolbar"><p>{requestValid ? '필수 도착점이 입력되었습니다.' : '첫 번째 질문과 생성 옵션을 확인해주세요.'}</p><button type="button" disabled={!requestValid || status.type === 'loading' || operationActive} onClick={generate}>{value ? '수행평가 다시 생성' : '수행평가 생성하기'}</button></div>
+        <div className="generation-toolbar"><p>{integratedScoreIssue?.message ?? (requestValid ? '필수 도착점이 입력되었습니다.' : '첫 번째 질문과 생성 옵션을 확인해주세요.')}</p><button type="button" disabled={!requestValid || status.type === 'loading' || operationActive} onClick={generate}>{value ? '수행평가 다시 생성' : '수행평가 생성하기'}</button></div>
         {stale && <p className="stale-notice" role="status"><strong>이전 지도안으로 생성됨</strong><span>현재 편집본은 유지됩니다. 바뀐 지도안으로 다시 생성할 수 있습니다.</span></p>}
         {status.message && <p className={`status-line status-line--${status.type}`} role={status.type === 'error' ? 'alert' : 'status'}>{status.message}</p>}
         {candidate && <aside className="candidate-panel" aria-label="새 수행평가 후보"><span className="status-pill">적용 전 후보</span><h2>{candidate.assessment.task.title}</h2><p>{candidate.assessment.backwardDesign.transferGoal}</p><div className="row-actions"><button type="button" onClick={applyCandidate}>새 후보 적용</button><button type="button" className="secondary-button" onClick={() => setCandidate(null)}>현재안 유지</button></div></aside>}

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AssessmentStage } from '@/components/workflow/AssessmentStage.jsx';
-import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
+import { makeGeneratedPlan, makeLanguageScienceIntegratedPlan } from './fixtures/lesson-plan.mjs';
 import { makeAssessment } from './fixtures/workflow.mjs';
 import { sourceHash } from '@/lib/source-hash';
 
@@ -35,6 +35,15 @@ test('평가 방식과 세 질문을 보여주고 첫 질문 전에는 제안과
     expect(screen.getByLabelText('학생이 시도하고, 피드백을 받아 고쳐나가는 과정에서 무엇을 확인하고 싶나요?')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '평가 설계 AI 초안 제안' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '수행평가 생성하기' })).toBeDisabled();
+});
+
+test('융합 평가에서 세 평가영역 점수를 만들 수 없으면 생성 전에 이유를 안내한다', () => {
+    const impossibleRequest = { ...request, totalPoints: 8, levelCount: 5, includeProcessInScore: false, processWeightPercent: 0 };
+
+    render(<AssessmentStage lessonPlan={makeLanguageScienceIntegratedPlan()} value={null} request={impossibleRequest} onRequestChange={() => {}} onChange={() => {}}/>);
+
+    expect(screen.getByRole('button', { name: '수행평가 생성하기' })).toBeDisabled();
+    expect(screen.getByText('5수준 융합 루브릭은 결과 평가영역 3개에 각각 최소 4점이 필요하므로 결과 배점은 최소 12점이어야 합니다.')).toBeInTheDocument();
 });
 
 test('교사가 평가 설계 방식을 바꾸면 다음 생성 요청에 보존한다', async () => {

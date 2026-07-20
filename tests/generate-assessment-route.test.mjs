@@ -73,6 +73,33 @@ test('국어와 과학 융합 수행평가 폴백은 교과별 근거와 통합 
     expect(questionStandards.some(codes => codes.includes('6국03-04') && codes.includes('6과16-01'))).toBe(true);
 });
 
+test('생성 가능한 최소 배점의 융합 수행평가도 폴백으로 세 평가영역을 만든다', async () => {
+    const lessonPlan = makeLanguageScienceIntegratedPlan();
+    const lowPointRequest = { ...assessmentRequest, totalPoints: 9, levelCount: 4, includeProcessInScore: false, processWeightPercent: 0 };
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion('올바른 수행평가 JSON이 아님'))));
+
+    const response = await POST(request({ lessonPlan, assessmentRequest: lowPointRequest }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(body.assessment.rubric.criteria.filter(criterion => criterion.kind === 'outcome').map(criterion => criterion.maxPoints)).toEqual([3, 3, 3]);
+});
+
+test('세 평가영역 점수를 만들 수 없는 융합 수행평가는 모델 호출 전에 거부한다', async () => {
+    const lessonPlan = makeLanguageScienceIntegratedPlan();
+    const impossibleRequest = { ...assessmentRequest, totalPoints: 8, levelCount: 5, includeProcessInScore: false, processWeightPercent: 0 };
+    vi.stubGlobal('fetch', vi.fn());
+
+    const response = await POST(request({ lessonPlan, assessmentRequest: impossibleRequest }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(body.issues).toEqual(expect.arrayContaining([expect.objectContaining({ path: ['assessmentRequest', 'totalPoints'] })]));
+});
+
 test('학생 문제지는 생성됐지만 교사용 채점 참고를 누락한 AI 결과도 문제지를 버리지 않고 보완한다', async () => {
     const generated = makeAssessment();
     delete generated.studentSheet.teacherKey;

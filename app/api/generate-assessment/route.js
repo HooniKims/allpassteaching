@@ -1,14 +1,18 @@
 import { z } from 'zod';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
-import { assessmentRequestSchema } from '@/lib/assessment-request';
+import { assessmentRequestSchema, integratedAssessmentScoreIssue } from '@/lib/assessment-request';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { assessmentMessages, repairAssessmentMessages } from '@/lib/workflow-prompts';
 import { createAssessmentFallback } from '@/lib/assessment-fallback';
 import { upgradeAssessmentStudentSheet } from '@/lib/assessment-student-sheet';
 import { integrationEvidenceIssues } from '@/lib/integration-evidence';
 
-const requestSchema = z.object({ lessonPlan: lessonPlanSchema, assessmentRequest: assessmentRequestSchema });
+const requestSchema = z.object({ lessonPlan: lessonPlanSchema, assessmentRequest: assessmentRequestSchema }).superRefine(({ lessonPlan, assessmentRequest }, context) => {
+    if (lessonPlan.instructionModel.id !== 'integrated') return;
+    const issue = integratedAssessmentScoreIssue(assessmentRequest);
+    if (issue) context.addIssue({ code: 'custom', path: ['assessmentRequest', ...issue.path], message: issue.message });
+});
 
 function reconcileTeacherOwnedFields(value, lessonPlan, assessmentRequest) {
     return {
