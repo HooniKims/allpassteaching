@@ -41,29 +41,32 @@ export function ProcessTabs({ activeProcess, statuses, onChange }) {
         tabsRef.current[nextIndex]?.focus();
     };
     return <nav ref={railRef} className="process-rail" aria-label="교수·학습·평가·기록 프로세스">
-        <div className="process-tabs" role="tablist" aria-label="5단계 프로세스">
-            {teachingProcesses.map((process, index) => {
-                const status = statuses[process.id] ?? 'prerequisite';
-                const statusDescriptionId = `process-tab-${process.id}-status-help`;
-                return <button
-                    key={process.id}
-                    ref={element => { tabsRef.current[index] = element; }}
-                    id={`process-tab-${process.id}`}
-                    className={`process-tab process-tab--${status}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeProcess === process.id}
-                    aria-controls={`process-panel-${process.id}`}
-                    aria-describedby={statusDescriptionId}
-                    tabIndex={activeProcess === process.id ? 0 : -1}
-                    onKeyDown={event => moveFocus(event, index)}
-                    onClick={() => onChange(process.id)}
-                >
-                    <span className="process-tab__number" aria-hidden="true">{process.number}</span>
-                    <span className="process-tab__copy"><strong>{process.label}</strong><small title={statusDescriptions[status]}>{statusLabels[status]}</small></span>
-                    <span id={statusDescriptionId} className="sr-only">{statusDescriptions[status]}</span>
-                </button>;
-            })}
+        <div className="process-rail__inner">
+            <span className="process-signature" role="img" aria-label="by HooniKim"><span aria-hidden="true">by</span><strong aria-hidden="true">HooniKim</strong></span>
+            <div className="process-tabs" role="tablist" aria-label="5단계 프로세스">
+                {teachingProcesses.map((process, index) => {
+                    const status = statuses[process.id] ?? 'prerequisite';
+                    const statusDescriptionId = `process-tab-${process.id}-status-help`;
+                    return <button
+                        key={process.id}
+                        ref={element => { tabsRef.current[index] = element; }}
+                        id={`process-tab-${process.id}`}
+                        className={`process-tab process-tab--${status}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeProcess === process.id}
+                        aria-controls={`process-panel-${process.id}`}
+                        aria-describedby={statusDescriptionId}
+                        tabIndex={activeProcess === process.id ? 0 : -1}
+                        onKeyDown={event => moveFocus(event, index)}
+                        onClick={() => onChange(process.id)}
+                    >
+                        <span className="process-tab__number" aria-hidden="true">{process.number}</span>
+                        <span className="process-tab__copy"><strong>{process.label}</strong><small title={statusDescriptions[status]}>{statusLabels[status]}</small></span>
+                        <span id={statusDescriptionId} className="sr-only">{statusDescriptions[status]}</span>
+                    </button>;
+                })}
+            </div>
         </div>
     </nav>;
 }

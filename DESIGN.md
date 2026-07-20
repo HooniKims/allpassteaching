@@ -38,7 +38,7 @@ A quiet teacher workbench: warm paper canvas, white working sheet, charcoal text
 
 ## 5. Typography
 
-Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, buttons/section headings 600, and page titles 700. Base text is 16px/1.55; helper text never falls below 13px. Korean display copy uses balanced wrapping and prose uses pretty wrapping where supported.
+Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, buttons/section headings 600, and page titles 700. Base text is 16px/1.55; helper text never falls below 13px. Korean display copy uses balanced wrapping and prose uses pretty wrapping where supported. The creator wordmark alone uses locally hosted Caveat 700 as a compact handwritten signature; product copy remains Paperlogy.
 
 ## 6. Layout and Primitives
 
@@ -51,7 +51,7 @@ Paperlogy v1.001 is locally hosted. Body uses 400, interactive labels 500, butto
 - ChoiceTile is a card only because the full container is selectable; informational sections have no card chrome.
 - SelectionExplainer appears once directly below a selected lesson model or assessment approach. It translates the term into one plain Korean sentence and shows the typical flow with arrows; optional details remain in the individual choice and no modal interrupts selection.
 - FlowSequence keeps each Korean stage and its preceding arrow or separator together so narrow screens wrap only between complete meaning units. Time-ordered flows use arrows; unordered design checks use middle dots.
-- ProcessTabs always expose all five processes and pair color with `완료`, `검토 필요`, or `선행 단계 필요` text. `검토 필요`에는 결과가 없거나, 앞 단계 변경으로 다시 생성 또는 교사 확인이 필요하다는 설명을 연결한다. Arrow keys move focus; selecting a blocked process shows a prerequisite explanation instead of silently redirecting.
+- ProcessTabs always expose all five processes and pair color with `완료`, `검토 필요`, or `선행 단계 필요` text. The upper-left creator wordmark occupies its own rail column, never overlays a tab, and scrolls with the compact mobile rail. `검토 필요`에는 결과가 없거나, 앞 단계 변경으로 다시 생성 또는 교사 확인이 필요하다는 설명을 연결한다. Arrow keys move focus; selecting a blocked process shows a prerequisite explanation instead of silently redirecting.
 - StructuredEditor uses white document sections separated by rules. Repeated sections have explicit add/remove controls and preserve visible labels; it does not become a dashboard card grid.
 - BackwardDesignForm leads with three full-width plain-language questions, a slim green rule, contextual examples, and a separate compact configuration grid. The first question is visibly required; AI suggestions fill editable fields rather than replacing teacher intent.
 - AssessmentApproachPicker precedes the design questions as a compact, selectable ChoiceTile group. It explains the selected method’s evidence focus and suitable use without obscuring the shared teacher questions or creating a dashboard card grid.

@@ -32,6 +32,12 @@ test('renders all five processes with text statuses and allows blocked tabs to b
     expect(onChange).toHaveBeenCalledWith('records');
 });
 
+test('renders the creator wordmark in the upper process rail', () => {
+    render(<ProcessTabs activeProcess="lesson" statuses={statuses} onChange={() => {}}/>);
+
+    expect(screen.getByLabelText('by HooniKim')).toBeVisible();
+});
+
 test('explains that review needed can mean a missing, changed, or unconfirmed stage result', () => {
     render(<ProcessTabs activeProcess="lesson" statuses={statuses} onChange={() => {}}/>);
 

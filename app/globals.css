@@ -2,6 +2,7 @@
 @font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-5Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
 @font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-6SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'Paperlogy'; src: url('/fonts/paperlogy/Paperlogy-7Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Caveat'; src: url('/fonts/caveat/Caveat-700.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 
 :root {
     color-scheme: light;
@@ -223,7 +224,12 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .subject-mapping-list small { margin-top: 3px; color: var(--color-muted); font-weight: 400; }
 .teaching-workflow { min-height: 100vh; }
 .process-rail { position: sticky; z-index: 10; top: 0; padding: 10px clamp(16px, 4vw, 48px); background: rgba(246, 245, 242, .96); border-bottom: 1px solid var(--color-border); }
-.process-tabs { width: min(100%, 1120px); margin: 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.process-rail__inner { width: min(100%, 1240px); display: grid; grid-template-columns: clamp(128px, 12vw, 160px) minmax(0, 1fr); align-items: stretch; gap: 12px; margin: 0 auto; }
+.process-signature { position: relative; display: flex; align-items: baseline; align-self: center; justify-content: center; gap: 2px; color: var(--color-action-hover); font-family: 'Caveat', 'Bradley Hand', cursive; font-size: 27px; font-weight: 700; line-height: 1; white-space: nowrap; transform: rotate(-3deg); transform-origin: center; }
+.process-signature > span { color: var(--color-muted); font-size: .68em; }
+.process-signature > strong { font: inherit; }
+.process-signature::after { position: absolute; right: 3px; bottom: -5px; width: 72%; height: 2px; border-radius: 999px; background: var(--color-action); content: ''; opacity: .55; transform: rotate(-1deg); }
+.process-tabs { width: 100%; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .workflow-toolbar { width: min(100% - 40px, 1120px); display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 16px auto -16px; }.workflow-toolbar p { margin: 0; color: var(--color-muted); font-size: 13px; }.workflow-toolbar button { flex: 0 0 auto; }
 .workflow-back-to-top { width: min(100% - 40px, 1120px); display: flex; justify-content: flex-end; margin: -48px auto 0; padding: 0 0 32px; }
 .process-tab { position: relative; min-width: 0; min-height: 58px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; color: var(--color-muted); background: transparent; border: 0; border-right: 1px solid var(--color-border); border-radius: 0; text-align: left; }
