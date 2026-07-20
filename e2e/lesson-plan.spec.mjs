@@ -313,15 +313,21 @@ test('직접 입력 과목을 공식 과목에 연결해 생성한다', async ({
 
 test('융합수업은 두 교과 성취기준을 각각 선택하고 약안·세안을 전환한다', async ({ page }, testInfo) => {
     await mockApis(page);
-    await completeBasics(page);
+    await page.goto('/');
+    await page.getByLabel('학교급').selectOption('elementary');
+    await page.getByLabel('학년').selectOption('6');
+    await page.getByLabel('융합 수업').check();
+    await page.getByLabel('주교과').selectOption('과학');
+    await page.getByLabel('연계 교과').selectOption('수학');
+    await page.getByLabel('수업할 개념 및 내용').fill('식물의 구조와 기능을 수학 자료와 연결해 탐구한다.');
+    await page.getByRole('button', { name: /성취기준 찾기/ }).click();
     await page.getByRole('button', { name: 'AI로 추천받기' }).click();
     await page.getByLabel(`${standard.code} ${standard.text}`).check();
     await page.getByRole('button', { name: /수업 설계 선택/ }).click();
 
-    await page.getByLabel('융합수업 선택').check();
     const nextButton = page.getByRole('button', { name: '지도안 생성 →' });
     await expect(nextButton).toBeDisabled();
-    await page.getByLabel('융합 연계 교과').selectOption('수학');
+    await expect(page.getByText('수학', { exact: true })).toBeVisible();
     await page.getByLabel('연계 교과 성취기준 검색').fill('6수04-02');
     const secondaryStandard = page.getByLabel(/수학 6수04-02 자료를 수집하여 띠그래프나 원그래프로 나타내고 해석할 수 있다/);
     await expect(secondaryStandard).toBeVisible();
@@ -353,14 +359,14 @@ test('고등학교 표시 과목과 교육과정 원본 과목명이 달라도 �
     await page.goto('/');
     await page.getByLabel('학교급').selectOption('high');
     await page.getByLabel('학년').selectOption('1');
-    await page.getByLabel('과목').selectOption('공통수학1');
+    await page.getByLabel('융합 수업').check();
+    await page.getByLabel('주교과').selectOption('공통수학1');
+    await page.getByLabel('연계 교과').selectOption('통합과학1');
     await page.getByLabel('수업할 개념 및 내용').fill('운동 자료를 함수와 그래프로 나타내고 과학적으로 해석한다.');
     await page.getByRole('button', { name: /성취기준 찾기/ }).click();
     await page.getByRole('button', { name: 'AI로 추천받기' }).click();
     await page.getByLabel(`${standard.code} ${standard.text}`).check();
     await page.getByRole('button', { name: /수업 설계 선택/ }).click();
-    await page.getByLabel('융합수업 선택').check();
-    await page.getByLabel('융합 연계 교과').selectOption('통합과학1');
     await page.getByLabel('연계 교과 성취기준 검색').fill('10과탐1-02-01');
     await page.getByLabel(/통합과학1 10과탐1-02-01/).check();
     await page.getByRole('button', { name: '지도안 생성 →' }).click();

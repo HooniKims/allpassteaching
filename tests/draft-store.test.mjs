@@ -68,6 +68,16 @@ test('migrates a version-one generated draft with date normalization and a gener
     expect(loaded.generatedFrom).toBeTruthy();
     expect(loaded.maxReached).toBe(4);
 });
+test('migrates a legacy integrated draft to preserve both chosen subjects', () => {
+    const basics = { schoolLevel: 'elementary', grade: '6', subject: '과학', displaySubject: '과학', mappedSubjects: ['과학'], mode: 'single', sessions: 1, intent: '식물 자료를 수학적으로 해석한다.', studentNeeds: '' };
+    const instructionModel = { id: 'integrated', name: '융합수업', stages: ['공통 맥락·문제'], integrationSubject: '수학', integrationStandards: [{ code: '6수04-02', text: '자료를 해석한다.', subject: '수학' }] };
+    window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 3, basics, standards: [{ code: '6과11-02', text: '식물을 관찰한다.', subject: '과학' }], instructionModel } }));
+
+    expect(loadDraft()).toMatchObject({
+        basics: { lessonType: 'integrated', integrationSubject: '수학' },
+        instructionModel: { id: 'integrated', integrationSubject: '수학', integrationStandards: instructionModel.integrationStandards },
+    });
+});
 test('clears a saved draft', () => { saveDraft({ step: 1 }); clearDraft(); expect(loadDraft()).toBeNull(); });
 test('moves a legacy session draft into local storage', () => {
     window.sessionStorage.setItem('allpass.lesson-plan', JSON.stringify({ version: 2, data: { step: 1, basics: { studentNeeds: '김학생 지원 정보' } } }));

@@ -10,13 +10,14 @@ import { LessonPlanEditor } from './LessonPlanEditor.jsx';
 import { GenerationSummary } from './GenerationSummary.jsx';
 import { buildLessonPlanGenerationRequest, createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
+import { instructionModels } from '@/data/instruction-models';
 
-const emptyBasics = { schoolLevel: 'middle', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
+const emptyBasics = { schoolLevel: 'middle', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], lessonType: 'single', integrationSubject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
 const emptyDraft = { step: 1, maxReached: 1, basics: emptyBasics, standards: [] };
 function hasDraftContent(draft) {
     const basics = draft.basics ?? {};
     return Boolean(draft.plan || draft.instructionModel || draft.standards?.length || draft.step > 1 || draft.maxReached > 1
-        || basics.schoolLevel !== 'middle' || basics.grade || basics.subject || basics.displaySubject || basics.mappedSubjects?.length
+        || basics.schoolLevel !== 'middle' || basics.grade || basics.subject || basics.displaySubject || basics.mappedSubjects?.length || basics.lessonType === 'integrated' || basics.integrationSubject
         || basics.mode === 'multi' || basics.sessions !== 1 || basics.intent?.trim() || basics.studentNeeds?.trim()
         || Object.values(normalizeLessonMetadata(basics.metadata)).some(Boolean));
 }
@@ -91,11 +92,19 @@ export function LessonPlanWorkspace({ onDraftChange = () => {} }) {
         const basics = typeof nextBasics === 'function' ? nextBasics(current.basics) : nextBasics;
         const previousScope = JSON.stringify([current.basics.schoolLevel, current.basics.grade, current.basics.mappedSubjects]);
         const nextScope = JSON.stringify([basics.schoolLevel, basics.grade, basics.mappedSubjects]);
-        if (previousScope === nextScope) return { ...current, basics };
-        const instructionModel = current.instructionModel?.id === 'integrated'
-            ? { ...current.instructionModel, integrationSubject: '', integrationStandards: [] }
-            : current.instructionModel;
-        return { ...current, basics, standards: [], instructionModel };
+        const scopeChanged = previousScope !== nextScope;
+        const integrationChanged = current.basics.lessonType !== basics.lessonType || current.basics.integrationSubject !== basics.integrationSubject;
+        const integratedModel = instructionModels.find(item => item.id === 'integrated');
+        const instructionModel = basics.lessonType === 'integrated'
+            ? {
+                ...integratedModel,
+                integrationSubject: basics.integrationSubject ?? '',
+                integrationStandards: current.instructionModel?.id === 'integrated' && !scopeChanged && !integrationChanged
+                    ? current.instructionModel.integrationStandards ?? []
+                    : [],
+            }
+            : current.instructionModel?.id === 'integrated' ? undefined : current.instructionModel;
+        return { ...current, basics, ...(scopeChanged ? { standards: [] } : {}), instructionModel };
     });
     if (!ready) return <main className="workspace" aria-busy="true">
         <section className="workspace__main"><p role="status">저장된 수업 정보를 불러오는 중입니다.</p></section>

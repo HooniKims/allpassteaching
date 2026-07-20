@@ -3,8 +3,10 @@ import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
 import { assessmentRequestSchema } from '@/lib/assessment-request';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
-import { assessmentMessages, createAssessmentFallback, repairAssessmentMessages } from '@/lib/workflow-prompts';
+import { assessmentMessages, repairAssessmentMessages } from '@/lib/workflow-prompts';
+import { createAssessmentFallback } from '@/lib/assessment-fallback';
 import { upgradeAssessmentStudentSheet } from '@/lib/assessment-student-sheet';
+import { integrationEvidenceIssues } from '@/lib/integration-evidence';
 
 const requestSchema = z.object({ lessonPlan: lessonPlanSchema, assessmentRequest: assessmentRequestSchema });
 
@@ -73,6 +75,15 @@ function parseAssessment(content, lessonPlan, assessmentRequest) {
         if (JSON.stringify(parsed.data.backwardDesign.teacherIntent) !== JSON.stringify(assessmentRequest.teacherIntent)) return { success: false, value, issues: [{ path: ['backwardDesign', 'teacherIntent'], message: '교사가 입력한 도착점과 증거 질문을 정확히 보존해야 합니다.' }] };
         const contractIssues = teacherContractIssues(parsed.data, assessmentRequest);
         if (contractIssues.length) return { success: false, value, issues: contractIssues };
+        const outcomeCriteria = parsed.data.rubric.criteria.filter(criterion => criterion.kind === 'outcome');
+        const criterionIssues = integrationEvidenceIssues(lessonPlan, outcomeCriteria);
+        const questions = parsed.data.studentSheet.document.sections.flatMap(section => section.questions);
+        const questionIssues = integrationEvidenceIssues(lessonPlan, questions);
+        const integrationIssues = [...criterionIssues.map(issue => ({ ...issue, path: ['rubric', 'criteria'] })), ...questionIssues.map(issue => ({ ...issue, path: ['studentSheet', 'document', 'sections'] }))];
+        if (integrationIssues.length) return { success: false, value, issues: integrationIssues.map(issue => ({
+            path: issue.path,
+            message: issue.kind === 'disciplinary' ? `${issue.subject} 교과의 고유한 수행 증거가 필요합니다.` : '두 교과의 근거를 연결한 통합 수행 증거가 필요합니다.',
+        })) };
         return { success: true, data: parsed.data };
     } catch (error) {
         return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] };

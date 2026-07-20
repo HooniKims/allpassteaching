@@ -25,7 +25,7 @@ function availableSubjects(basics) {
         });
 }
 
-export function IntegrationStandardsPicker({ basics, primaryStandards, value, onChange }) {
+export function IntegrationStandardsPicker({ basics, primaryStandards, value, integrationSubject, onChange }) {
     const { runOperation } = useOperation();
     const [query, setQuery] = useState(basics.intent);
     const [recommendations, setRecommendations] = useState([]);
@@ -33,7 +33,7 @@ export function IntegrationStandardsPicker({ basics, primaryStandards, value, on
     const [message, setMessage] = useState('');
     const activeRecommendation = useRef(null);
     const subjects = useMemo(() => availableSubjects(basics), [basics]);
-    const selectedSubject = value.integrationSubject ?? '';
+    const selectedSubject = integrationSubject ?? value.integrationSubject ?? '';
     const selectedStandards = value.integrationStandards ?? [];
     const maximumSecondaryStandards = Math.max(0, 10 - primaryStandards.length);
     const selectionLimitReached = selectedStandards.length >= maximumSecondaryStandards;
@@ -112,12 +112,12 @@ export function IntegrationStandardsPicker({ basics, primaryStandards, value, on
             <div><p className="eyebrow">융합 교과 연결</p><h3 id="integration-standards-title">두 번째 교과와 성취기준을 선택해주세요</h3></div>
             <p><strong>{basics.displaySubject || basics.subject}</strong> 성취기준 {primaryStandards.length}개는 이미 선택되어 있습니다.</p>
         </div>
-        <label className="integration-standards__subject">연계 교과
+        {integrationSubject ? <p className="integration-standards__subject"><span>연계 교과</span><strong>{selectedSubject}</strong></p> : <label className="integration-standards__subject">연계 교과
             <select aria-label="융합 연계 교과" value={selectedSubject} onChange={event => selectSubject(event.target.value)}>
                 <option value="">선택</option>
                 {subjects.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
-        </label>
+        </label>}
         {selectedSubject && <>
             <aside className="standards-selection-summary" role="status" aria-live="polite" aria-label="선택한 연계 교과 성취기준">
                 <div><strong>{selectedSubject} 성취기준</strong><span>{selectedStandards.length ? `${selectedStandards.length}개 선택 · 두 교과 합계 ${primaryStandards.length + selectedStandards.length}/10개` : maximumSecondaryStandards ? '연계 교과 성취기준을 1개 이상 선택해주세요.' : '주교과 성취기준을 9개 이하로 줄여야 연계 교과 기준을 선택할 수 있습니다.'}</span></div>

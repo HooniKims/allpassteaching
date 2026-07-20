@@ -40,6 +40,18 @@ export function makeTwoSessionPlan() {
     return { ...plan, sessions: [...plan.sessions, secondSession] };
 }
 
+export function makeLanguageScienceIntegratedPlan() {
+    return makeGeneratedPlan({
+        title: '생태계 보전 제안문 쓰기',
+        subject: '국어',
+        standards: [
+            { code: '6국03-04', text: '적절한 근거와 알맞은 표현을 사용하여 주장하는 글을 쓴다.', subject: '국어' },
+            { code: '6과16-01', text: '생태계 구성 요소의 관계를 이해하고 환경 보전의 필요성을 설명할 수 있다.', subject: '과학' },
+        ],
+        instructionModel: { id: 'integrated', name: '융합수업', reason: '두 교과의 근거를 연결한 공동 제안문을 만든다.' },
+    });
+}
+
 export const generationDraft = {
     basics: { schoolLevel: 'elementary', grade: '5', subject: '과학', subjectMode: 'official', displaySubject: '과학', mappedSubjects: ['과학'], mode: 'single', sessions: 1, sessionMinutes: 40, intent: '식물 기관을 관찰하고 구조와 기능을 설명한다.', studentNeeds: '', metadata: { date: '', period: '', place: '', className: '', teacherName: '' } },
     standards: [{ code: '6과11-02', text: '식물의 각 기관의 구조를 관찰하고 기능을 알아보는 실험을 수행한다.', subject: '과학' }],

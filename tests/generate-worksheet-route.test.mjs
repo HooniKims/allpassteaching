@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { POST } from '@/app/api/generate-worksheet/route';
-import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
+import { makeGeneratedPlan, makeLanguageScienceIntegratedPlan } from './fixtures/lesson-plan.mjs';
 import { makeWorksheet } from './fixtures/workflow.mjs';
 
 afterEach(() => { vi.restoreAllMocks(); delete process.env.UPSTAGE_API_KEY; });
@@ -53,4 +53,34 @@ test('repairs generated output that omits a requested type or changes canonical 
     expect(body.worksheet.standards).toEqual(makeGeneratedPlan().standards);
     expect(body.worksheet.document.sections.flatMap(section => section.questions).map(question => question.type)).toContain('multiple-choice-5');
     expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('국어와 과학 융합 학습지는 각 교과 문항과 두 근거를 연결하는 문항을 모두 제공한다', async () => {
+    const lessonPlan = makeLanguageScienceIntegratedPlan();
+    const generationRequest = { additionalRequirements: '', questionTypes: ['table-chart', 'descriptive', 'self-assessment'] };
+    const generated = makeWorksheet();
+    generated.formatId = 'integrated-connections';
+    generated.formatName = '융합 연결·적용지';
+    generated.standards = lessonPlan.standards;
+    generated.generationRequest = generationRequest;
+    generated.document.sections = [{
+        id: 'section-1', title: '교과별 근거', purpose: '각 교과의 근거를 확인한다.', questions: [
+            { id: 'q-language', type: 'descriptive', prompt: '주장과 근거를 정리하세요.', responseLines: 4, standardCodes: ['6국03-04'] },
+            { id: 'q-science', type: 'descriptive', prompt: '생태계 관계를 설명하세요.', responseLines: 4, standardCodes: ['6과16-01'] },
+        ],
+    }];
+    generated.teacherKey.answers = [
+        { questionId: 'q-language', answer: '주장과 근거의 연결을 확인한다.' },
+        { questionId: 'q-science', answer: '생태계 구성 요소의 관계를 확인한다.' },
+    ];
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(generated))));
+
+    const response = await POST(request({ lessonPlan, selectedFormatId: 'integrated-connections', generationRequest }));
+    const body = await response.json();
+    const questions = body.worksheet.document.sections.flatMap(section => section.questions);
+
+    expect(response.status).toBe(200);
+    expect(questions.some(question => question.standardCodes.includes('6국03-04') && question.standardCodes.includes('6과16-01'))).toBe(true);
+    expect(questions.find(question => question.standardCodes.includes('6국03-04') && question.standardCodes.includes('6과16-01')).type).toBe('descriptive');
 });

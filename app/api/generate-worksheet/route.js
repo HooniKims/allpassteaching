@@ -4,6 +4,8 @@ import { worksheetGenerationRequestSchema, worksheetOutputSchema } from '@/lib/w
 import { worksheetFormats, worksheetFormatById } from '@/lib/worksheet-formats';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { repairWorksheetMessages, worksheetMessages } from '@/lib/workflow-prompts';
+import { createWorksheetFallback } from '@/lib/worksheet-fallback';
+import { integrationEvidenceIssues } from '@/lib/integration-evidence';
 
 const requestSchema = z.object({ lessonPlan: lessonPlanSchema, selectedFormatId: z.enum(worksheetFormats.map(item => item.id)), generationRequest: worksheetGenerationRequestSchema });
 
@@ -19,6 +21,12 @@ function parseWorksheet(content, lessonPlan, selectedFormatId, generationRequest
         const generatedTypes = new Set(parsed.data.document.sections.flatMap(section => section.questions).map(question => question.type));
         const missingType = generationRequest.questionTypes.find(type => !generatedTypes.has(type));
         if (missingType) return { success: false, value, issues: [{ path: ['document', 'sections'], message: `${missingType} 유형 문항이 생성 결과에 없습니다.` }] };
+        const questions = parsed.data.document.sections.flatMap(section => section.questions);
+        const integrationIssues = integrationEvidenceIssues(lessonPlan, questions);
+        if (integrationIssues.length) return { success: false, value, issues: integrationIssues.map(issue => ({
+            path: ['document', 'sections'],
+            message: issue.kind === 'disciplinary' ? `${issue.subject} 교과의 고유한 관점과 방법을 확인하는 문항이 필요합니다.` : '두 교과의 근거를 함께 사용해 통합 설명이나 공동 산출물을 만드는 문항이 필요합니다.',
+        })) };
         return { success: true, data: parsed.data };
     } catch (error) {
         return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] };
@@ -38,6 +46,7 @@ export async function POST(request) {
             const repaired = await chatContent({ messages: repairWorksheetMessages(lessonPlan, selectedFormatId, generationRequest, checked.value, checked.issues), timeoutMs: 60000 });
             checked = parseWorksheet(repaired, lessonPlan, selectedFormatId, generationRequest);
         }
+        if (!checked.success) checked = parseWorksheet(JSON.stringify(createWorksheetFallback(lessonPlan, selectedFormatId, generationRequest)), lessonPlan, selectedFormatId, generationRequest);
         if (!checked.success) return Response.json({ code: 'invalid_generation', message: '학습지 형식을 복구하지 못했습니다.', issues: checked.issues }, { status: 422 });
         return Response.json({ worksheet: checked.data });
     } catch (error) {

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { POST } from '@/app/api/generate-assessment/route';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
-import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
+import { makeGeneratedPlan, makeLanguageScienceIntegratedPlan } from './fixtures/lesson-plan.mjs';
 import { makeAssessment } from './fixtures/workflow.mjs';
 
 afterEach(() => { vi.restoreAllMocks(); delete process.env.UPSTAGE_API_KEY; });
@@ -54,6 +54,23 @@ test('Upstage가 두 번 연속 잘못된 형식을 반환해도 교사 설정�
     });
     expect(body.assessment.rubric.levels).toHaveLength(assessmentRequest.levelCount);
     expect(assessmentOutputSchema.safeParse(body.assessment).success).toBe(true);
+});
+
+test('국어와 과학 융합 수행평가 폴백은 교과별 근거와 통합 근거를 따로 채점한다', async () => {
+    const lessonPlan = makeLanguageScienceIntegratedPlan();
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion('올바른 수행평가 JSON이 아님'))));
+
+    const response = await POST(request({ lessonPlan, assessmentRequest: { ...assessmentRequest, assessmentName: '생태계 보전 제안문' } }));
+    const body = await response.json();
+    const outcomeCriteria = body.assessment.rubric.criteria.filter(criterion => criterion.kind === 'outcome');
+    const questionStandards = body.assessment.studentSheet.document.sections.flatMap(section => section.questions.map(question => question.standardCodes));
+
+    expect(response.status).toBe(200);
+    expect(outcomeCriteria.some(criterion => criterion.standardCodes.length === 1 && criterion.standardCodes[0] === '6국03-04')).toBe(true);
+    expect(outcomeCriteria.some(criterion => criterion.standardCodes.length === 1 && criterion.standardCodes[0] === '6과16-01')).toBe(true);
+    expect(outcomeCriteria.some(criterion => criterion.standardCodes.includes('6국03-04') && criterion.standardCodes.includes('6과16-01'))).toBe(true);
+    expect(questionStandards.some(codes => codes.includes('6국03-04') && codes.includes('6과16-01'))).toBe(true);
 });
 
 test('학생 문제지는 생성됐지만 교사용 채점 참고를 누락한 AI 결과도 문제지를 버리지 않고 보완한다', async () => {

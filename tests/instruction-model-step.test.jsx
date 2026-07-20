@@ -12,6 +12,13 @@ test('shows three recommendations but allows another catalog model', async () =>
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ id: 'cooperative' }));
 });
 
+test('a first-step normal lesson cannot switch to the integrated model later', () => {
+    const basics = { schoolLevel: 'elementary', grade: '5', subject: '과학', displaySubject: '과학', mappedSubjects: ['과학'], lessonType: 'single', intent: '식물의 구조와 기능을 탐구한다' };
+    render(<InstructionModelStep basics={basics} lessonIntent={basics.intent} selected={null} onChange={() => {}} onBack={() => {}} onNext={() => {}}/>);
+
+    expect(screen.queryByRole('radio', { name: '융합수업 선택' })).not.toBeInTheDocument();
+});
+
 function IntegratedSelectionHarness() {
     const [selected, setSelected] = useState(null);
     const basics = { schoolLevel: 'elementary', grade: '5', subject: '과학', displaySubject: '과학', mappedSubjects: ['과학'], intent: '식물 구조를 수학적 자료와 연결해 탐구한다' };
@@ -32,6 +39,16 @@ test('융합수업은 두 번째 교과와 그 교과 성취기준을 별도로 
 
     expect(screen.getByRole('status', { name: '선택한 연계 교과 성취기준' })).toHaveTextContent('1개 선택 · 두 교과 합계 2/10개');
     expect(screen.getByRole('button', { name: '지도안 생성 →' })).toBeEnabled();
+});
+
+test('first-step fusion selection skips the redundant model card and goes straight to secondary standards', () => {
+    const basics = { schoolLevel: 'elementary', grade: '5', subject: '과학', displaySubject: '과학', mappedSubjects: ['과학'], lessonType: 'integrated', integrationSubject: '수학', intent: '식물 구조를 수학 자료와 연결해 탐구한다' };
+    const selected = { id: 'integrated', name: '융합수업', stages: ['공통 맥락·문제'], integrationSubject: '수학', integrationStandards: [] };
+    render(<InstructionModelStep basics={basics} primaryStandards={[{ code: '6과11-02', text: '식물 기관을 관찰한다.', subject: '과학' }]} lessonIntent={basics.intent} selected={selected} onChange={() => {}} onBack={() => {}} onNext={() => {}}/>);
+
+    expect(screen.getByRole('heading', { name: '두 교과 성취기준을 연결해주세요' })).toBeVisible();
+    expect(screen.queryByRole('radio', { name: '융합수업 선택' })).not.toBeInTheDocument();
+    expect(screen.getByText('수학', { exact: true })).toBeVisible();
 });
 
 function HighSchoolIntegratedHarness() {

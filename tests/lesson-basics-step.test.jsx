@@ -60,6 +60,31 @@ test('does not advance without required lesson information', async () => {
     expect(screen.getByRole('alert')).toHaveTextContent('필수 정보를 확인해주세요');
 });
 
+test('lets a teacher choose both subjects for an integrated lesson on the first step', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<BasicsHarness initialValue={{
+        ...legacyBasics,
+        schoolLevel: 'elementary',
+        grade: '5',
+        subject: '과학',
+        displaySubject: '과학',
+        mappedSubjects: ['과학'],
+        intent: '식물의 구조와 기능을 수학 자료와 연결해 탐구한다',
+    }} onChange={onChange}/>);
+
+    await user.click(screen.getByRole('radio', { name: '융합 수업' }));
+
+    expect(screen.getByLabelText('주교과')).toHaveValue('과학');
+    expect(screen.getByLabelText('연계 교과')).toBeVisible();
+    await user.selectOptions(screen.getByLabelText('연계 교과'), '수학');
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+        lessonType: 'integrated',
+        integrationSubject: '수학',
+    }));
+});
+
 test('renders optional document metadata with empty defaults for a legacy draft', () => {
     render(<BasicsHarness/>);
 
