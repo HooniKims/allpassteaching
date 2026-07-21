@@ -18,3 +18,16 @@ test('build script reads the renamed curriculum source folder', async () => {
     expect(source).toContain("const SOURCE_ROOT = '2022_Revised_National_Curriculum';");
     expect(source).not.toContain('복사본');
 });
+
+test('generated catalog contains separated middle-school social and history areas', async () => {
+    // Given
+    const catalog = JSON.parse(await readFile('data/curriculum.json', 'utf8'));
+
+    // When
+    const middleSocial = catalog.filter(item => item.schoolLevel === 'middle' && item.subject === '사회');
+
+    // Then
+    expect(middleSocial.some(item => item.code.startsWith('9사(지리)') && item.subjectArea === '지리')).toBe(true);
+    expect(middleSocial.some(item => item.code.startsWith('9사(일사)') && item.subjectArea === '일반사회')).toBe(true);
+    expect(middleSocial.some(item => item.code.startsWith('9역') && item.subjectArea === '역사')).toBe(true);
+});

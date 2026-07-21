@@ -22,3 +22,17 @@ test('classifies middle and high school code families', () => {
         { schoolLevel: 'high', gradeBand: '10-12' },
     ]);
 });
+
+test('괄호가 있는 중학교 사회 코드를 교과 내 영역과 함께 추출한다', () => {
+    // Given
+    const source = '### Page 23\n[9사(지리)01-01] 다양한 지도와 지리 정보 기술을 활용하여 위치를 표현한다.\n[9사(일사)08-01] 인권의 의미와 기본권의 내용을 탐구한다.';
+
+    // When
+    const records = extractStandards(source, { subject: '사회', sourceFile: 'social.md' });
+
+    // Then
+    expect(records.map(({ code, subjectArea }) => ({ code, subjectArea }))).toEqual([
+        { code: '9사(지리)01-01', subjectArea: '지리' },
+        { code: '9사(일사)08-01', subjectArea: '일반사회' },
+    ]);
+});
