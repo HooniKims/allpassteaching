@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
     }, draft);
 });
 
-test('빠른 작업은 숨기고 느린 불투명 작업·취소를 정직하게 표시한다', async ({ page }, testInfo) => {
+test('빠른 작업은 숨기고 느린 작업의 예상 진행률·취소를 정직하게 표시한다', async ({ page }, testInfo) => {
     let call = 0;
     let releaseSlowRoute;
     const slowRouteReleased = new Promise(resolve => { releaseSlowRoute = resolve; });
@@ -46,10 +46,10 @@ test('빠른 작업은 숨기고 느린 불투명 작업·취소를 정직하게
         const dialog = page.getByRole('dialog', { name: '수업 지도안 생성' });
         await expect(dialog).toBeVisible();
         await expect(dialog.getByRole('status', { name: '작업 진행 상태' })).toContainText('AI가 생성 중입니다.');
-        await expect(dialog).not.toContainText(/Upstage|비용|요금|5초 뒤/);
-        await expect(dialog.getByRole('progressbar')).toHaveCount(0);
-        await expect(dialog).not.toContainText('%');
-        await expect(dialog).not.toContainText(/예상 시간|남음|처리 중/);
+        const dialogText = await dialog.textContent();
+        expect(dialogText).not.toMatch(/Upstage|비용|요금|5초 뒤|예상 시간|남음|처리 중/);
+        expect(dialogText).toMatch(/예상 진행률 \d+%/);
+        expect(await dialog.getByRole('progressbar', { name: '예상 진행률' }).count()).toBe(1);
         expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
         await page.keyboard.press('Tab');
         expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
@@ -64,7 +64,8 @@ test('빠른 작업은 숨기고 느린 불투명 작업·취소를 정직하게
     await page.getByRole('button', { name: '지도안 다시 생성' }).click();
     const cancelDialog = page.getByRole('dialog', { name: '수업 지도안 생성' });
     await expect(cancelDialog).toBeVisible();
-    await expect(cancelDialog.locator('.operation-progress--indeterminate > span')).toHaveCSS('animation-name', 'none');
+    const reducedTransitionSeconds = await cancelDialog.locator('.operation-progress > span').evaluate(element => Number.parseFloat(getComputedStyle(element).transitionDuration));
+    expect(reducedTransitionSeconds).toBeLessThan(0.001);
     await page.keyboard.press('Escape');
     await expect(cancelDialog).toBeVisible();
     await expect(page.getByText(/작업을 취소했습니다/)).toHaveCount(0);
