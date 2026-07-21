@@ -12,6 +12,7 @@ beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); }
 function fullWorkflow() {
     const plan = makeGeneratedPlan();
     const assessment = { ...makeAssessment(), sourceHash: sourceHash(plan), approved: true };
+    const { studentSheet, cover, approved, ...assessmentDesign } = structuredClone(assessment);
     const grading = {
         criteria: assessment.rubric.criteria.map(criterion => ({
             criterionId: criterion.id,
@@ -45,6 +46,7 @@ function fullWorkflow() {
         },
         worksheet: { ...makeWorksheet(), sourceHash: sourceHash(plan) },
         assessmentRequest: request,
+        assessmentDesign,
         assessment,
         students: [{ id: 'student-a', grade: '2', className: '3', number: 7, name: '김하늘' }],
         submissions: [submission],
@@ -53,24 +55,24 @@ function fullWorkflow() {
     };
 }
 
-test('version 4 allowlist round-trips every workflow subtree the current app consumes', () => {
+test('version 5 allowlist round-trips every workflow subtree the current app consumes', () => {
     const project = fullWorkflow();
 
     saveWorkflow(project);
 
     expect(loadWorkflow()).toEqual(project);
     expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).version).toBe(WORKFLOW_VERSION);
-    expect(WORKFLOW_VERSION).toBe(4);
+    expect(WORKFLOW_VERSION).toBe(5);
 });
 
-test('an already-clean full version 2 project migrates to version 4 without changing any allowed data', () => {
+test('an already-clean full version 2 project migrates to version 5 without changing any allowed data', () => {
     const project = fullWorkflow();
     window.sessionStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 2, data: project }));
 
     const loaded = loadWorkflow();
 
     expect(loaded).toEqual(project);
-    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY))).toMatchObject({ version: 4, data: project });
+    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY))).toMatchObject({ version: 5, data: project });
 });
 
 test('worksheet authoring metadata and all ten question variants survive the private workflow allowlist', () => {

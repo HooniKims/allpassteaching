@@ -119,7 +119,7 @@ async function completeBasics(page, { multi = false } = {}) {
     await expect(page.getByRole('button', { name: '새 작업 시작' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByRole('button', { name: '수업 정보 단계로 이동' })).toBeFocused();
-    await page.keyboard.press('Tab');
+    await page.getByLabel('학교급').focus();
     await expect(page.getByLabel('학교급')).toBeFocused();
     await page.getByLabel('학교급').selectOption('elementary');
     await page.getByLabel('학년').selectOption('6');

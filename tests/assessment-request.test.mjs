@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { assessmentRequestSchema, createDefaultAssessmentRequest } from '@/lib/assessment-request';
+import { assessmentRequestForLesson, assessmentRequestSchema, createDefaultAssessmentRequest } from '@/lib/assessment-request';
+import { makeGeneratedPlan } from './fixtures/lesson-plan.mjs';
 
 const validRequest = () => ({ ...createDefaultAssessmentRequest(), assessmentName: '탐구 보고서', teacherIntent: { desiredResult: '관찰 근거로 설명한다.', evidenceOfSuccess: '', growthProcess: '' } });
 
@@ -25,4 +26,13 @@ test('accepts a six-point total for two four-level outcome criteria', () => {
 
 test('accepts the default score and process setting for a four-level rubric', () => {
     expect(assessmentRequestSchema.safeParse(validRequest()).success).toBe(true);
+});
+
+test('지도안에서 빈 평가 이름과 교사 질문을 자동 완성한다', () => {
+    const result = assessmentRequestForLesson(makeGeneratedPlan(), createDefaultAssessmentRequest());
+
+    expect(result.assessmentName).toContain('수행평가');
+    expect(result.teacherIntent.desiredResult).not.toBe('');
+    expect(result.teacherIntent.evidenceOfSuccess).not.toBe('');
+    expect(assessmentRequestSchema.safeParse(result).success).toBe(true);
 });

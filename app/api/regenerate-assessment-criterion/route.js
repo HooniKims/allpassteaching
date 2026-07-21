@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { assessmentOutputSchema } from '@/lib/assessment-schema';
+import { assessmentDesignSchema, assessmentOutputSchema } from '@/lib/assessment-schema';
 import { mergeRegeneratedCriterion } from '@/lib/rubric-score';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { criterionRegenerationMessages } from '@/lib/workflow-prompts';
 
-const requestSchema = z.object({ assessment: assessmentOutputSchema, criterionId: z.string().trim().min(1).max(300) });
+const requestSchema = z.object({ assessment: z.union([assessmentOutputSchema, assessmentDesignSchema]), criterionId: z.string().trim().min(1).max(300) });
 const wordingSchema = z.object({
     name: z.string().trim().min(1).max(300), description: z.string().trim().min(1).max(5000), standardCodes: z.array(z.string().trim().min(1).max(300)).min(1).max(10),
     kind: z.enum(['outcome', 'process']), evidence: z.string().trim().min(1).max(5000),

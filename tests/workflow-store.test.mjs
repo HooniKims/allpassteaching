@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { createEmptyWorkflow, loadWorkflow, saveWorkflow, WORKFLOW_KEY, WORKFLOW_VERSION } from '@/lib/workflow-store';
 import { canonicalJson, sourceHash } from '@/lib/source-hash';
+import { makeAssessment } from './fixtures/workflow.mjs';
 
 beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -126,6 +127,18 @@ test('평가 요청의 세 질문과 생성 옵션을 현재 탭에 보존한다
     expect(loadWorkflow().assessmentRequest).toMatchObject({ teacherIntent: { desiredResult: '관찰 근거로 설명한다.' }, totalPoints: 60 });
 });
 
+test('이전 완성본에서 학생 문서를 제외한 편집용 수행평가 설계를 복원한다', () => {
+    const assessment = makeAssessment();
+    window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 4, data: { activeProcess: 'assessment', assessment } }));
+
+    const loaded = loadWorkflow();
+
+    expect(loaded.assessmentDesign.task).toEqual(assessment.task);
+    expect(loaded.assessmentDesign.rubric).toEqual(assessment.rubric);
+    expect(loaded.assessmentDesign).not.toHaveProperty('studentSheet');
+    expect(loaded.assessmentDesign).not.toHaveProperty('cover');
+});
+
 test('교사가 확정한 총점·수준 수와 같은 수행평가 계약을 함께 보존한다', () => {
     const project = createEmptyWorkflow();
     project.assessmentRequest = { ...project.assessmentRequest, totalPoints: 60, levelCount: 5 };
@@ -162,7 +175,7 @@ test('migrates the earlier activeStage name and supplies empty collections', () 
 
     const loaded = loadWorkflow();
 
-    expect(WORKFLOW_VERSION).toBe(4);
+    expect(WORKFLOW_VERSION).toBe(5);
     expect(loaded).toMatchObject({ activeProcess: 'worksheet', worksheet: { title: '기존 학습지' }, students: [], submissions: [], records: [] });
 });
 
@@ -183,8 +196,8 @@ test('Given a clean version 2 development rubric When loading Then it upgrades t
     const loaded = loadWorkflow();
     const stored = JSON.parse(window.localStorage.getItem(WORKFLOW_KEY));
 
-    expect(loaded).toEqual(project);
-    expect(stored.version).toBe(4);
+    expect(loaded).toMatchObject({ ...project, assessmentDesign: { title: '개발형 수행평가', totalPoints: 10, rubric: project.assessment.rubric } });
+    expect(stored.version).toBe(5);
     expect(loaded.assessment).not.toHaveProperty('requiresAssessmentRegeneration');
 });
 
@@ -217,7 +230,7 @@ test('Given a version 2 fixed rubric When loading Then it preserves legacy descr
         ] }] },
     });
     expect(loaded.submissions[0]).toMatchObject({ studentId: null, needsStudentLink: true, approved: false, approvalRevoked: true });
-    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).version).toBe(4);
+    expect(JSON.parse(window.localStorage.getItem(WORKFLOW_KEY)).version).toBe(5);
 });
 
 test('Given a local write failure When saving Then it reports failure and does not delete the session recovery copy', () => {

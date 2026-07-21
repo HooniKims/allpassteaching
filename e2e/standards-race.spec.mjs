@@ -26,7 +26,7 @@ test('검색어가 바뀌면 늦게 도착한 이전 AI 추천을 무시한다',
     await firstStarted;
 
     // When query B replaces query A before A resolves
-    await page.getByLabel('성취기준 검색').fill('빛의 성질');
+    await page.getByLabel('성취기준 검색', { exact: true }).fill('빛의 성질');
     releaseFirst();
 
     // Then B direct results remain clean and B can request its own recommendation

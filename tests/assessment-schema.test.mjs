@@ -1,8 +1,20 @@
 import { describe, expect, test } from 'vitest';
 import { assessmentOutputSchema } from '@/lib/assessment-schema';
+import * as assessmentSchemas from '@/lib/assessment-schema';
 import { makeAssessment } from './fixtures/workflow.mjs';
 
 describe('백워드 설계 수행평가 계약', () => {
+    test('Given 학생 문서가 없는 설계 When 설계 계약을 검증하면 Then 수행과제와 루브릭만으로 유효하다', () => {
+        // Given
+        const { studentSheet: _studentSheet, cover: _cover, ...design } = makeAssessment();
+
+        // When
+        const parsed = assessmentSchemas.assessmentDesignSchema?.safeParse(design);
+
+        // Then
+        expect(parsed?.success).toBe(true);
+    });
+
     test('Given 교사가 정한 총점과 과정 비중 When 완성된 평가를 검증하면 Then 총점·과정 배점·수준 점수 사다리를 허용한다', () => {
         const assessment = makeAssessment();
 

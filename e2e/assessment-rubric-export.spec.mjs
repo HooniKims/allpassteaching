@@ -55,8 +55,9 @@ test.beforeEach(async ({ page }) => {
 test('실제적 수행과제는 배운 내용의 실제 상황 적용을 쉬운 말로 안내한다', async ({ page }) => {
     await page.goto('/');
 
+    await page.getByText('세부 설정', { exact: true }).click();
     await page.getByRole('radio', { name: /실제적 수행과제/ }).click();
-    await expect(page.locator('.assessment-approach-picker__selected')).toContainText('학생이 실제와 비슷한 역할과 상황에서 배운 내용을 실제 상황에 적용해 보게 하는 평가예요.');
+    await expect(page.locator('.assessment-approach-picker__selected')).toContainText('학생이 실제와 비슷한 역할과 상황에서 배운 지식과 기능을 적용하는 평가예요.');
 });
 
 test('AI 복구용 루브릭도 수준별 관찰 가능한 수행 기술을 편집 표에 구분해 보여준다', async ({ page }) => {

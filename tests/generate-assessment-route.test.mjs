@@ -240,3 +240,38 @@ test('지원 상한인 15개 평가영역을 실제 생성 API 계약으로 통�
     expect(response.status).toBe(200);
     expect((await response.json()).assessment.rubric.criteria).toHaveLength(15);
 });
+
+test('설계 단계는 학생용 문서 없이 편집 가능한 수행과제와 루브릭만 반환한다', async () => {
+    // Given
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(makeAssessment())));
+
+    // When
+    const response = await POST(request({ phase: 'design', lessonPlan: makeGeneratedPlan(), assessmentRequest }));
+    const body = await response.json();
+
+    // Then
+    expect(response.status).toBe(200);
+    expect(body.assessmentDesign).toMatchObject({ task: { title: makeAssessment().task.title, product: assessmentRequest.outputTypes.join(', ') }, rubric: makeAssessment().rubric });
+    expect(body.assessmentDesign).not.toHaveProperty('studentSheet');
+    expect(body.assessmentDesign).not.toHaveProperty('cover');
+});
+
+test('학생 문서 단계는 교사가 확정한 설계를 바꾸지 않고 완성본을 만든다', async () => {
+    // Given
+    const full = makeAssessment();
+    const { studentSheet, cover, ...assessmentDesign } = full;
+    assessmentDesign.task.title = '교사가 수정한 생태 탐구 과제';
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion({ studentSheet, cover })));
+
+    // When
+    const response = await POST(request({ phase: 'student-sheet', lessonPlan: makeGeneratedPlan(), assessmentDesign }));
+    const body = await response.json();
+
+    // Then
+    expect(response.status).toBe(200);
+    expect(body.assessment.task.title).toBe('교사가 수정한 생태 탐구 과제');
+    expect(body.assessment.rubric).toEqual(assessmentDesign.rubric);
+    expect(body.assessment.studentSheet).toEqual(studentSheet);
+});

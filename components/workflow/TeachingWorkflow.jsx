@@ -135,7 +135,7 @@ function TeachingWorkflowContent() {
                         : activeProcess === 'worksheet'
                             ? <WorksheetStage lessonPlan={project.lessonSnapshot.plan} value={project.worksheet} onChange={worksheet => setProject(current => ({ ...current, worksheet }))}/>
                             : activeProcess === 'assessment'
-                                ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} value={project.assessment} request={project.assessmentRequest} onRequestChange={assessmentRequest => setProject(current => ({ ...current, assessmentRequest }))} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
+                                ? <AssessmentStage lessonPlan={project.lessonSnapshot.plan} design={project.assessmentDesign} value={project.assessment} request={project.assessmentRequest} onDesignChange={assessmentDesign => setProject(current => ({ ...current, assessmentDesign }))} onRequestChange={assessmentRequest => setProject(current => ({ ...current, assessmentRequest }))} onChange={assessment => setProject(current => ({ ...current, assessment }))}/>
                                 : activeProcess === 'grading'
                                     ? <OcrGradingStage assessment={project.assessment} students={project.students} submissions={project.submissions} records={project.records} onStudentsChange={updateStudents} onDeleteStudent={deleteStudent} onChange={updateSubmissions}/>
                                     : activeProcess === 'records'

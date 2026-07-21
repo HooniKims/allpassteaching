@@ -10,6 +10,7 @@ import { AssessmentCoverEditor } from './AssessmentCoverEditor.jsx';
 import { AssessmentSheetEditor } from './AssessmentSheetEditor.jsx';
 import { OperationBusyError, useOperation } from './OperationProvider.jsx';
 import { upgradeAssessmentStudentSheet } from '@/lib/assessment-student-sheet';
+import { AssessmentDesignStage } from './AssessmentDesignStage.jsx';
 
 async function downloadAssessment(kind, format, value, signal) {
     const response = await fetch(`/api/export-workflow/${kind}?format=${format}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
@@ -47,7 +48,8 @@ async function downloadRubric(format, value, signal) {
     URL.revokeObjectURL(url);
 }
 
-export function AssessmentStage({ lessonPlan, value: storedValue, request, onRequestChange, onChange }) {
+export function AssessmentStage({ lessonPlan, design, value: storedValue, request, onDesignChange, onRequestChange, onChange }) {
+    if (typeof onDesignChange === 'function') return <AssessmentDesignStage lessonPlan={lessonPlan} design={design} value={storedValue} request={request} onDesignChange={onDesignChange} onRequestChange={onRequestChange} onChange={onChange}/>;
     const value = useMemo(() => upgradeAssessmentStudentSheet(storedValue), [storedValue]);
     const { active: operationActive, runOperation } = useOperation();
     const [status, setStatus] = useState({ type: 'idle', message: '' });

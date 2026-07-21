@@ -152,7 +152,13 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     const uploadedPageCounts = [];
     const uploadedVisualModes = [];
     await page.route('**/api/generate-worksheet', route => route.fulfill({ json: { worksheet: makeWorksheet() } }));
-    await page.route('**/api/generate-assessment', route => route.fulfill({ json: { assessment: makeVisualAssessment() } }));
+    await page.route('**/api/generate-assessment', route => {
+        const assessment = makeVisualAssessment();
+        const { studentSheet, cover, ...assessmentDesign } = assessment;
+        return route.request().postDataJSON().phase === 'design'
+            ? route.fulfill({ json: { assessmentDesign } })
+            : route.fulfill({ json: { assessment } });
+    });
     await page.route('**/api/ocr', async route => {
         uploadedPageCounts.push((await PDFDocument.load(uploadedPdf(route.request()))).getPageCount());
         uploadedVisualModes.push(uploadedFormValue(route.request(), 'visualAnalysis'));
@@ -193,10 +199,9 @@ test('지도안에서 세특까지 두 학생의 5단계 흐름을 완주한다'
     await page.screenshot({ path: '.omo/evidence/task-11-worksheet.png', fullPage: true });
 
     await page.getByRole('tab', { name: /수행평가/ }).click();
-    await page.getByLabel('이 평가를 마친 학생이 무엇을 이해하고, 스스로 해낼 수 있길 바라나요?').fill('식물 기관의 구조와 기능을 관찰 근거로 설명한다.');
-    await page.getByLabel('평가 이름').fill('식물 기관 탐구 수행평가');
-    await page.getByRole('button', { name: '수행평가 생성하기' }).click();
+    await page.getByRole('button', { name: 'AI로 수행평가 초안 만들기' }).click();
     await expect(page.getByLabel('과제명')).toHaveValue('식물 기관 탐구 보고서 만들기');
+    await page.getByRole('button', { name: '이 설계로 수행평가지 만들기' }).click();
     await expect(page.getByRole('region', { name: '학생이 작성할 수행평가지 미리보기' })).toContainText('뿌리, 줄기, 잎에서 관찰한 특징을 표에 기록하세요.');
     await page.getByRole('button', { name: '수행평가·루브릭 확인 완료' }).click();
     expect(await expectPdfDownload(page, () => page.getByRole('button', { name: '학생 안내문 PDF 저장' }).click(), makeVisualAssessment().cover.title)).toBe(1);
