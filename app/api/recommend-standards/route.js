@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import catalog from '@/data/curriculum.json';
 import { searchStandards } from '@/lib/curriculum/search';
+import { subjectAreasForSelection } from '@/lib/curriculum/scope';
 import { chatJson, UpstageError } from '@/lib/upstage/client';
 import { standardsRecommendationMessages } from '@/lib/upstage/prompts';
 
@@ -18,7 +19,8 @@ const responseSchema = z.object({ recommendations: z.array(z.object({ code: z.st
 export async function POST(request) {
     const parsed = requestSchema.safeParse(await request.json());
     if (!parsed.success) return Response.json({ code: 'invalid_request', issues: parsed.error.issues }, { status: 400 });
-    const directCandidates = searchStandards(catalog, parsed.data, 30);
+    const subjectAreas = subjectAreasForSelection({ schoolLevel: parsed.data.schoolLevel, subject: parsed.data.subject });
+    const directCandidates = searchStandards(catalog, { ...parsed.data, subjectAreas }, 30);
     try {
         const ranked = await chatJson({ messages: standardsRecommendationMessages({ query: parsed.data.query, candidates: directCandidates }), schema: responseSchema });
         const byCode = new Map(directCandidates.map(item => [item.code, item]));

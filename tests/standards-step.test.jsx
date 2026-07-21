@@ -6,6 +6,7 @@ import { StandardsStep } from '@/components/lesson-plan/StandardsStep.jsx';
 
 const basics = { schoolLevel: 'elementary', grade: '5', subject: '과학', intent: '식물의 구조와 기능을 관찰한다' };
 const middleBasics = { schoolLevel: 'middle', grade: '2', subject: '과학', intent: '빛의 성질을 탐구한다' };
+const middleSocialBasics = { schoolLevel: 'middle', grade: '2', subject: '사회', intent: '위치와 공간 정보를 탐구한다' };
 
 function StandardsSelectionHarness() {
     const [selected, setSelected] = useState([]);
@@ -135,4 +136,50 @@ test('includes a directly entered display subject in the AI recommendation query
     } finally {
         vi.unstubAllGlobals();
     }
+});
+
+test('사회 교사는 AI 추천과 별개로 지리·일반사회 공식 목록을 직접 선택한다', () => {
+    // Given / When
+    render(<StandardsStep basics={middleSocialBasics} selected={[]} onChange={() => {}} onBack={() => {}} onNext={() => {}}/>);
+
+    // Then
+    expect(screen.getByText(/사회 · 지리\/일반사회/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI 추천' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '교육과정에서 직접 선택' })).toBeInTheDocument();
+    expect(screen.getByText('9사(지리)01-01')).toBeInTheDocument();
+    expect(screen.queryByText(/^9역/)).not.toBeInTheDocument();
+});
+
+test('모든 과목에서 AI 추천을 받은 뒤에도 공식 목록 직접 검색을 유지한다', async () => {
+    // Given
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ recommendations: [{ code: '6과11-02', text: '식물 기관의 구조와 기능을 관찰한다.', reason: '수업 주제와 연결됨' }] })));
+    try {
+        render(<StandardsStep basics={basics} selected={[]} onChange={() => {}} onBack={() => {}} onNext={() => {}}/>);
+
+        // When
+        await user.click(screen.getByRole('button', { name: 'AI로 추천받기' }));
+
+        // Then
+        expect(await screen.findByText('수업 주제와 연결됨')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: '교육과정에서 직접 선택' })).toBeInTheDocument();
+        expect(screen.getByLabelText('공식 성취기준 검색')).toBeInTheDocument();
+    } finally {
+        vi.unstubAllGlobals();
+    }
+});
+
+test('직접 선택은 열 개를 넘기지 않고 기존 선택을 유지한다', async () => {
+    // Given
+    const user = userEvent.setup();
+    const selected = Array.from({ length: 10 }, (_, index) => ({ code: `선택-${index + 1}`, text: `선택한 성취기준 ${index + 1}` }));
+    const onChange = vi.fn();
+    render(<StandardsStep basics={basics} selected={selected} onChange={onChange} onBack={() => {}} onNext={() => {}}/>);
+
+    // When
+    await user.click(screen.getByRole('checkbox', { name: /6과11-02/ }));
+
+    // Then
+    expect(screen.getByRole('alert')).toHaveTextContent('최대 10개');
+    expect(onChange).not.toHaveBeenCalled();
 });

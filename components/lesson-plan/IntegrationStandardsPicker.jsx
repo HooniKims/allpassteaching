@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import catalog from '@/data/curriculum.json';
 import { searchStandards } from '@/lib/curriculum/search';
+import { subjectAreasForSelection } from '@/lib/curriculum/scope';
 import { catalogSubjectsFor, CUSTOM_SUBJECT_VALUE, subjectGroupsFor } from '@/lib/subject-options';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 
@@ -41,17 +42,22 @@ export function IntegrationStandardsPicker({ basics, primaryStandards, value, in
         () => selectedSubject ? catalogSubjectsFor(basics.schoolLevel, basics.grade, selectedSubject) : [],
         [basics.grade, basics.schoolLevel, selectedSubject],
     );
+    const subjectAreas = useMemo(
+        () => subjectAreasForSelection({ schoolLevel: basics.schoolLevel, subject: selectedSubject }),
+        [basics.schoolLevel, selectedSubject],
+    );
     const scope = useMemo(() => ({
         schoolLevel: basics.schoolLevel,
         gradeBand: gradeBand(basics),
+        subject: selectedSubject,
         subjects: mappedSubjects,
+        subjectAreas,
         query: [selectedSubject, query].filter(Boolean).join(' '),
-    }), [basics, mappedSubjects, query, selectedSubject]);
+    }), [basics, mappedSubjects, query, selectedSubject, subjectAreas]);
     const direct = useMemo(
-        () => mappedSubjects.length ? searchStandards(catalog, scope, 30) : [],
+        () => mappedSubjects.length ? searchStandards(catalog, scope, catalog.length) : [],
         [mappedSubjects.length, scope],
     );
-    const visible = recommendations.length ? recommendations : direct;
     useEffect(() => () => { activeRecommendation.current?.abort(); }, []);
 
     const selectSubject = integrationSubject => {
@@ -132,7 +138,16 @@ export function IntegrationStandardsPicker({ basics, primaryStandards, value, in
             }}/></label><button type="button" onClick={recommend} disabled={status === 'loading'}>{status === 'loading' ? '분석 중…' : 'AI로 추천받기'}</button></div>
             {message && <p className="form-alert" role="alert">{message}</p>}
             {status === 'done' && <p className="recommendation-note">연계 교과의 공식 성취기준 후보입니다. 융합 활동에서 실제로 다룰 기준을 직접 선택해주세요.</p>}
-            <div className="standard-list integration-standards__list">{visible.map(item => {
+            {recommendations.length > 0 && <><h4>AI 추천</h4><div className="standard-list integration-standards__list">{recommendations.map(item => {
+                const selected = selectedStandards.some(valueItem => valueItem.code === item.code);
+                return <label className={selected ? 'standard-item is-selected' : 'standard-item'} key={`recommended:${item.subject}:${item.code}`}>
+                    <input type="checkbox" aria-label={`${selectedSubject} 추천 ${item.code} ${item.text}`} checked={selected} disabled={!selected && selectionLimitReached} onChange={() => toggle(item)}/>
+                    <span><strong>{item.code}</strong><span>{item.text}</span>{item.reason && <small><b>추천 이유</b> {item.reason}</small>}</span>
+                    {item.score != null && <em>{Math.round(item.score)}%</em>}
+                </label>;
+            })}</div></>}
+            <h4>교육과정에서 직접 선택</h4>
+            <div className="standard-list integration-standards__list">{direct.map(item => {
                 const selected = selectedStandards.some(valueItem => valueItem.code === item.code);
                 return <label className={selected ? 'standard-item is-selected' : 'standard-item'} key={`${item.subject}:${item.code}`}>
                     <input type="checkbox" aria-label={`${selectedSubject} ${item.code} ${item.text}`} checked={selected} disabled={!selected && selectionLimitReached} onChange={() => toggle(item)}/>
@@ -140,7 +155,7 @@ export function IntegrationStandardsPicker({ basics, primaryStandards, value, in
                     {item.score != null && <em>{Math.round(item.score)}%</em>}
                 </label>;
             })}</div>
-            {!visible.length && <p className="empty-state">연계 교과에서 검색 결과를 찾지 못했습니다. 다른 개념어로 검색해보세요.</p>}
+            {!direct.length && <p className="empty-state">연계 교과에서 검색 결과를 찾지 못했습니다. 다른 개념어로 검색해보세요.</p>}
         </>}
     </section>;
 }

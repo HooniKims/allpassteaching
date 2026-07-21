@@ -89,3 +89,21 @@ test('융합 성취기준은 두 교과 합계 10개를 넘겨 선택할 수 없
     expect(screen.getByText(/주교과 성취기준을 9개 이하로 줄여야/)).toBeVisible();
     expect(screen.getByRole('button', { name: '지도안 생성 →' })).toBeDisabled();
 });
+
+test('중학교 융합 수업에서 사회를 고르면 역사 성취기준을 섞지 않는다', async () => {
+    // Given
+    const user = userEvent.setup();
+    const basics = { schoolLevel: 'middle', grade: '2', subject: '과학', displaySubject: '과학', mappedSubjects: ['과학'], intent: '지역의 공간 정보를 과학 자료와 연결한다' };
+    function Harness() {
+        const [selected, setSelected] = useState({ id: 'integrated', name: '융합수업', stages: [], integrationSubject: '', integrationStandards: [] });
+        return <InstructionModelStep basics={basics} primaryStandards={[{ code: '9과01-01', text: '과학 자료를 탐구한다.', subject: '과학' }]} lessonIntent={basics.intent} selected={selected} onChange={setSelected} onBack={() => {}} onNext={() => {}}/>;
+    }
+    render(<Harness/>);
+
+    // When
+    await user.selectOptions(screen.getByLabelText('융합 연계 교과'), '사회');
+
+    // Then
+    expect(await screen.findByText('9사(지리)01-01')).toBeInTheDocument();
+    expect(screen.queryByText(/^9역/)).not.toBeInTheDocument();
+});

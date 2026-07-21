@@ -38,3 +38,21 @@ test('allows recommendations from the confirmed union of official subjects', asy
     expect(body.recommendations).toHaveLength(2);
     expect(body.recommendations.every(item => ['과학', '사회'].includes(item.subject))).toBe(true);
 });
+
+test('중학교 사회 추천은 역사 코드를 서버 후보와 응답에서 모두 제외한다', async () => {
+    // Given
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ recommendations: [
+        { code: '9사(지리)01-01', score: 94, reason: '공간 정보와 연결됨', keyPhrase: '위치' },
+        { code: '9역01-01', score: 99, reason: '범위 밖 역사', keyPhrase: '역사' },
+    ] }) } }] }), { status: 200 })));
+
+    // When
+    const response = await POST(request({ schoolLevel: 'middle', gradeBand: '7-9', subject: '사회', subjects: ['사회'], query: '위치와 공간 정보' }));
+    const body = await response.json();
+
+    // Then
+    expect(response.status).toBe(200);
+    expect(body.directCandidates.every(item => ['지리', '일반사회'].includes(item.subjectArea))).toBe(true);
+    expect(body.recommendations.map(item => item.code)).toEqual(['9사(지리)01-01']);
+});
