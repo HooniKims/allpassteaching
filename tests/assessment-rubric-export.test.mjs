@@ -198,7 +198,7 @@ test('returns a safe 422 instead of a server error when a valid rubric exceeds t
         levels: assessment.rubric.levels.map((level, levelIndex) => ({
             levelId: level.id,
             score: 10 - levelIndex,
-            description: `수준 설명\n${'\n'.repeat(40)}끝`,
+            description: `${levelIndex + 1}수준 설명\n${'\n'.repeat(40)}끝`,
         })),
     }));
     assessment.backwardDesign.evidenceMap[0] = {

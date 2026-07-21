@@ -65,6 +65,16 @@ describe('백워드 설계 수행평가 계약', () => {
         expect(parsed.error.issues.some(issue => issue.message.includes('높은 점수부터'))).toBe(true);
     });
 
+    test('Given 평가영역의 모든 수준 설명이 같으면 When 완성된 평가를 검증하면 Then 구분되지 않는 수행 기술을 거부한다', () => {
+        const assessment = makeAssessment();
+        assessment.rubric.criteria[0].levels.forEach(level => { level.description = '모든 수준에 반복된 설명'; });
+
+        const parsed = assessmentOutputSchema.safeParse(assessment);
+
+        expect(parsed.success).toBe(false);
+        expect(parsed.error.issues.some(issue => issue.path.join('.') === 'rubric.criteria.0.levels')).toBe(true);
+    });
+
     test('Given 표지 섹션 When id나 순서가 중복되면 Then 안정적인 편집 계약을 거부한다', () => {
         const assessment = makeAssessment();
         assessment.cover.sections[1].id = assessment.cover.sections[0].id;

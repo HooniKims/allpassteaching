@@ -6,6 +6,7 @@ import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
 import { makeGeneratedPlan } from '../tests/fixtures/lesson-plan.mjs';
 import { makeAssessment } from '../tests/fixtures/workflow.mjs';
+import { createAssessmentFallback } from '../lib/assessment-fallback.js';
 import { sourceHash } from '../lib/source-hash.js';
 
 async function downloadBytes(page, action) {
@@ -56,6 +57,47 @@ test('실제적 수행과제는 배운 내용의 실제 상황 적용을 쉬운 
 
     await page.getByRole('radio', { name: /실제적 수행과제/ }).click();
     await expect(page.locator('.assessment-approach-picker__selected')).toContainText('학생이 실제와 비슷한 역할과 상황에서 배운 내용을 실제 상황에 적용해 보게 하는 평가예요.');
+});
+
+test('AI 복구용 루브릭도 수준별 관찰 가능한 수행 기술을 편집 표에 구분해 보여준다', async ({ page }) => {
+    const lessonPlan = makeGeneratedPlan();
+    const base = makeAssessment();
+    const assessmentRequest = {
+        assessmentName: base.assessmentName,
+        teacherIntent: base.backwardDesign.teacherIntent,
+        totalPoints: base.totalPoints,
+        levelCount: base.rubric.levels.length,
+        includeProcessInScore: base.scoring.includeProcessInScore,
+        processWeightPercent: base.scoring.processWeightPercent,
+        outputTypes: base.generationSettings.outputTypes,
+        answerTypes: base.generationSettings.answerTypes,
+        stages: base.generationSettings.stages,
+        visualAnalysisRequired: base.visualAnalysisRequired,
+        includeStudentCover: base.includeStudentCover,
+        additionalRequirements: base.generationSettings.additionalRequirements,
+        assessmentApproachId: base.generationSettings.assessmentApproachId,
+    };
+    const assessment = { ...createAssessmentFallback(lessonPlan, assessmentRequest), sourceHash: sourceHash(lessonPlan), approved: false };
+    await page.addInitScript(({ plan, storedAssessment, storedAssessmentRequest }) => {
+        sessionStorage.setItem('allpass.teaching-workflow', JSON.stringify({
+            version: 3,
+            data: {
+                activeProcess: 'assessment', lessonSnapshot: { plan }, worksheet: null,
+                assessmentRequest: storedAssessmentRequest, assessment: storedAssessment,
+                students: [], submissions: [], records: [],
+            },
+        }));
+    }, { plan: lessonPlan, storedAssessment: assessment, storedAssessmentRequest: assessmentRequest });
+
+    await page.goto('/');
+
+    const firstCriterion = assessment.rubric.criteria[0];
+    const criterionCard = page.locator('.rubric-criterion-card').first();
+    await expect(criterionCard.locator('.rubric-level-grid')).toBeVisible();
+    for (const [index, level] of firstCriterion.levels.entries()) {
+        await expect(criterionCard.getByLabel('수행 기술').nth(index)).toHaveValue(level.description);
+    }
+    expect(await page.locator('textarea').evaluateAll(elements => elements.map(element => element.value))).not.toContain('해당 수준의 관찰 가능한 수행 기술');
 });
 
 test('교사가 수정한 루브릭을 네 형식의 실제 파일로 내려받는다', async ({ page }, testInfo) => {

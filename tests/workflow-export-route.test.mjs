@@ -201,7 +201,7 @@ test('rejects a schema-valid assessment whose aggregate render content exceeds t
         levels: assessment.rubric.criteria[0].levels.map((level, levelIndex) => ({
             ...level,
             score: (criterionIndex < 10 ? 7 : 6) - levelIndex,
-            description: '수준별 관찰 설명입니다. '.repeat(65),
+            description: `${'수준별 관찰 설명입니다. '.repeat(65)}${levelIndex + 1}수준`,
         })),
     }));
     assessment.backwardDesign.evidenceMap[0].criterionIds = assessment.rubric.criteria.map(criterion => criterion.id);

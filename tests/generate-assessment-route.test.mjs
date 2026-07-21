@@ -56,6 +56,21 @@ test('Upstage가 두 번 연속 잘못된 형식을 반환해도 교사 설정�
     expect(assessmentOutputSchema.safeParse(body.assessment).success).toBe(true);
 });
 
+test('Upstage가 두 번 실패해도 폴백 루브릭은 수준별로 구분되는 관찰 가능한 수행 기술을 만든다', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion('올바른 수행평가 JSON이 아님'))));
+
+    const response = await POST(request({ lessonPlan: makeGeneratedPlan(), assessmentRequest }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    for (const criterion of body.assessment.rubric.criteria) {
+        const descriptions = criterion.levels.map(level => level.description);
+        expect(new Set(descriptions).size).toBe(descriptions.length);
+        expect(descriptions.every(description => description.includes(criterion.evidence))).toBe(true);
+    }
+});
+
 test('국어와 과학 융합 수행평가 폴백은 교과별 근거와 통합 근거를 따로 채점한다', async () => {
     const lessonPlan = makeLanguageScienceIntegratedPlan();
     process.env.UPSTAGE_API_KEY = 'test-key';
