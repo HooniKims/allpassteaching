@@ -33,6 +33,16 @@ async function downloadFile(url, value, filename, signal) {
 }
 
 const rubricFormats = [{ id: 'pdf', label: 'PDF' }, { id: 'hwpx', label: 'HWPX' }, { id: 'docx', label: 'DOCX' }, { id: 'xlsx', label: 'Excel' }];
+const sheetFormats = [{ id: 'pdf', label: 'PDF' }, { id: 'hwpx', label: 'HWPX' }];
+
+function SaveMenu({ label, formats, onSave, disabled }) {
+    const [format, setFormat] = useState(formats[0].id);
+    return <div className="save-menu">
+        <span className="save-menu__label">{label}</span>
+        <select aria-label={`${label} 저장 형식`} value={format} onChange={event => setFormat(event.target.value)} disabled={disabled}>{formats.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => onSave(format)}>저장</button>
+    </div>;
+}
 
 function LessonSource({ lessonPlan }) {
     return <section className="assessment-source-card" aria-label="AI 초안 생성 기준"><div><p className="eyebrow">AI가 읽을 확정 정보</p><h2>{lessonPlan.title}</h2><p>{lessonPlan.subject} · {lessonPlan.grade}</p></div><ul>{lessonPlan.standards.map(standard => <li key={standard.code}><strong>[{standard.code}]</strong> {standard.text}</li>)}</ul></section>;
@@ -79,7 +89,8 @@ export function AssessmentDesignStage({ lessonPlan, design, value, request, onDe
 
     const updateDesign = next => onDesignChange({ ...next, sourceHash: design.sourceHash });
     const updateAssessment = next => onChange({ ...next, approved: false });
-    const exportRubric = async format => {
+    const exportRubric = async formatId => {
+        const format = rubricFormats.find(item => item.id === formatId) ?? rubricFormats[0];
         const exportValue = { ...value, ...cleanDesign, studentSheet: value.studentSheet, cover: value.cover };
         try { await runOperation({ kind: `rubric-export-${format.id}`, label: `루브릭 ${format.label} 저장`, phase: 'serverWaiting', cancelable: true }, ({ signal }) => downloadFile(`/api/export-rubric/${format.id}`, exportValue, downloadFilename(cleanDesign.assessmentName, '루브릭', format.id), signal)); }
         catch (error) { if (!(error instanceof OperationBusyError)) setStatus({ type: 'error', message: error.message }); }
@@ -101,18 +112,24 @@ export function AssessmentDesignStage({ lessonPlan, design, value, request, onDe
             <RubricEditor value={design} request={request} onRequestChange={onRequestChange} onChange={updateDesign}/>
             <div className="assessment-primary-action assessment-primary-action--sheet"><div><strong>교사 수정이 끝났나요?</strong><p>현재 화면의 설계를 그대로 고정해 학생용 문항과 교사용 채점 참고를 생성합니다.</p></div><button type="button" disabled={operationActive || stale || !designValidation?.success} onClick={generateStudentSheet}>이 설계로 수행평가지 만들기</button></div>
         </>}
-        {value && <section className="assessment-complete-panel"><div className="assessment-flow-step"><span>2</span><div><strong>학생용 수행평가지 검토</strong><p>학생 문항과 응답 공간을 확인하고 필요한 문구를 수정합니다.</p></div></div>
-            {designChanged && <p className="form-alert" role="alert">설계 변경됨: 학생용 수행평가지는 이전 설계로 만들어졌습니다. 현재 설계로 다시 만들어야 확인 완료할 수 있습니다.</p>}
-            {!assessmentValidation?.success && <p className="form-alert" role="alert">학생용 문항, 채점 참고와 표지 내용을 확인해주세요.</p>}
-            <div className="rubric-download-panel" role="group" aria-label="루브릭 다운로드"><div><strong>현재 루브릭 다운로드</strong><p>교사가 수정한 수행과제와 루브릭을 네 가지 편집·인쇄 형식으로 저장합니다.</p></div><div className="rubric-download-panel__actions">{rubricFormats.map(format => <button key={format.id} type="button" className="secondary-button" disabled={operationActive || !designValidation?.success} onClick={() => exportRubric(format)}>루브릭 {format.label} 저장</button>)}</div></div>
-            <div className="stage-document-actions assessment-export-actions">
-                <button type="button" className="secondary-button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => exportAssessment('assessment-sheet', 'pdf', '제출용 수행평가지')}>제출용 수행평가지 PDF 저장</button>
-                <button type="button" className="secondary-button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => exportAssessment('assessment-sheet', 'hwpx', '제출용 수행평가지')}>제출용 수행평가지 HWPX 저장</button>
-                {value.includeStudentCover && <><button type="button" className="secondary-button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => exportAssessment('assessment-cover', 'pdf', '학생 안내문')}>학생 안내문 PDF 저장</button><button type="button" className="secondary-button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => exportAssessment('assessment-cover', 'hwpx', '학생 안내문')}>학생 안내문 HWPX 저장</button><button type="button" className="secondary-button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => exportAssessment('assessment', 'pdf', '안내문과 수행평가지 전체')}>안내문과 수행평가지 전체 PDF 저장</button><button type="button" className="secondary-button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => exportAssessment('assessment', 'hwpx', '안내문과 수행평가지 전체')}>안내문과 수행평가지 전체 HWPX 저장</button></>}
+        {value && <section className="assessment-complete-panel"><div className="assessment-flow-step"><span>2</span><div><strong>완성 · 저장 · 확인</strong><p>학생용 수행평가지가 만들어졌어요. 여기서 바로 저장하고, 확인 완료를 눌러 OCR·채점 단계를 여세요.</p></div></div>
+            {designChanged && <p className="form-alert" role="alert">설계가 바뀌었어요. 위의 &lsquo;이 설계로 수행평가지 만들기&rsquo;를 다시 눌러야 저장·확인 완료할 수 있습니다.</p>}
+            {!designChanged && !assessmentValidation?.success && <p className="form-alert" role="alert">학생용 문항·채점 참고·표지 내용을 확인해주세요.</p>}
+            <div className="assessment-complete-bar">
+                <div className="assessment-complete-bar__saves" role="group" aria-label="저장">
+                    <SaveMenu label="루브릭" formats={rubricFormats} disabled={operationActive || !designValidation?.success} onSave={exportRubric}/>
+                    <SaveMenu label="수행평가지" formats={sheetFormats} disabled={operationActive || designChanged || !assessmentValidation?.success} onSave={format => exportAssessment('assessment-sheet', format, '제출용 수행평가지')}/>
+                    {value.includeStudentCover && <><SaveMenu label="학생 안내문" formats={sheetFormats} disabled={operationActive || designChanged || !assessmentValidation?.success} onSave={format => exportAssessment('assessment-cover', format, '학생 안내문')}/><SaveMenu label="안내문+평가지 전체" formats={sheetFormats} disabled={operationActive || designChanged || !assessmentValidation?.success} onSave={format => exportAssessment('assessment', format, '안내문과 수행평가지 전체')}/></>}
+                </div>
+                <div className="assessment-complete-bar__approve">
+                    <button type="button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => onChange({ ...value, approved: !value.approved })}>{value.approved ? '확인 완료 취소' : '수행평가·루브릭 확인 완료'}</button>
+                    {value.approved ? <p className="approve-hint approve-hint--done">확인 완료됨 · OCR·채점 단계가 열렸습니다.</p> : (designChanged || !assessmentValidation?.success) ? <p className="approve-hint">위 안내를 해결하면 확인 완료를 누를 수 있어요.</p> : <p className="approve-hint">확인 완료를 누르면 다음 단계(OCR·채점)가 열립니다.</p>}
+                </div>
             </div>
-            <AssessmentSheetEditor value={value} onChange={updateAssessment}/>
-            {value.includeStudentCover ? <AssessmentCoverEditor value={value} onChange={updateAssessment}/> : <p className="cover-disabled-notice" role="status">학생당 안내 표지를 사용하지 않습니다.</p>}
-            <div className="stage-document-actions"><button type="button" disabled={operationActive || designChanged || !assessmentValidation?.success} onClick={() => onChange({ ...value, approved: !value.approved })}>{value.approved ? '확인 완료 취소' : '수행평가·루브릭 확인 완료'}</button></div>
+            <details className="assessment-review-editors"><summary>학생 문항·표지 자세히 보고 고치기</summary>
+                <AssessmentSheetEditor value={value} onChange={updateAssessment}/>
+                {value.includeStudentCover ? <AssessmentCoverEditor value={value} onChange={updateAssessment}/> : <p className="cover-disabled-notice" role="status">학생당 안내 표지를 사용하지 않습니다.</p>}
+            </details>
         </section>}
     </section>;
 }
