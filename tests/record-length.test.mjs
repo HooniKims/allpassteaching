@@ -12,8 +12,8 @@ test('measures Korean subject record text by UTF-8 bytes', () => {
     expect(recordUtf8ByteLength('가 A')).toBe(5);
 });
 
-test('normalizes teacher-selected record byte limits without changing the 700byte default', () => {
-    expect(DEFAULT_RECORD_TARGET_BYTES).toBe(700);
+test('normalizes teacher-selected record byte limits without changing the 1000byte default', () => {
+    expect(DEFAULT_RECORD_TARGET_BYTES).toBe(1000);
     expect(normalizeRecordTargetBytes('850')).toBe(850);
     expect(normalizeRecordTargetBytes('')).toBe(DEFAULT_RECORD_TARGET_BYTES);
     expect(normalizeRecordTargetBytes(1)).toBe(MIN_RECORD_TARGET_BYTES);

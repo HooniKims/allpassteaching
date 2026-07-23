@@ -135,6 +135,43 @@ test('repairs a generated record that exceeds the selected UTF-8 byte limit', as
     expect(fetch).toHaveBeenCalledTimes(2);
 });
 
+test('compresses a record that still exceeds the byte limit after one repair', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const overLimit = '가'.repeat(234);
+    vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(completion(claims(overLimit)))
+        .mockResolvedValueOnce(completion(claims(overLimit)))
+        .mockResolvedValueOnce(completion(claims(text))));
+
+    const response = await POST(request(input({ targetBytes: 700 })));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).record.text).toBe(text);
+    expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+test('returns 422 when the compression retry still exceeds the byte limit', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const overLimit = '가'.repeat(234);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(claims(overLimit)))));
+
+    const response = await POST(request(input({ targetBytes: 700 })));
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).code).toBe('invalid_generation');
+    expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+test('does not run the compression retry for non-length failures', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(claims(`${text} 총점 85점.`)))));
+
+    const response = await POST(request(input()));
+
+    expect(response.status).toBe(422);
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 test('rejects grading created for an older rubric', async () => {
     const changedAssessment = { ...assessment, task: { ...assessment.task, title: '바뀐 과제' } };
     const response = await POST(request(input({ currentAssessment: changedAssessment })));

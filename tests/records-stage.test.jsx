@@ -63,15 +63,15 @@ test('shows only approved students and saves an editable generated draft', async
     await user.click(screen.getByRole('button', { name: '김학생 세특 생성' }));
 
     expect(await screen.findByDisplayValue(generatedText)).toBeInTheDocument();
-    expect(screen.getByText(`${generatedText.length}자 · ${new TextEncoder().encode(generatedText).byteLength}byte / 700byte`)).toBeInTheDocument();
+    expect(screen.getByText(`${generatedText.length}자 · ${new TextEncoder().encode(generatedText).byteLength}byte / 1000byte`)).toBeInTheDocument();
 });
 
-test('defaults to a 700byte record limit and sends a teacher-entered custom byte target', async () => {
+test('defaults to a 1000byte record limit and sends a teacher-entered custom byte target', async () => {
     const user = userEvent.setup();
     vi.stubGlobal('fetch', mockRecordFetch(Response.json({ record: { text: generatedText } })));
     render(<Harness/>);
 
-    expect(screen.getByRole('combobox', { name: '세특 분량 선택' })).toHaveValue('700');
+    expect(screen.getByRole('combobox', { name: '세특 분량 선택' })).toHaveValue('1000');
     await user.selectOptions(screen.getByRole('combobox', { name: '세특 분량 선택' }), 'custom');
     const customInput = screen.getByRole('spinbutton', { name: '직접 입력 분량(byte)' });
     await user.clear(customInput);
@@ -318,7 +318,7 @@ test('Given a queued class generation When the teacher cancels Then no new stude
 
 test('shows typed candidate reasons for stale evidence, length limits, unsupported claims, and expired context', async () => {
     const currentHash = recordSourceHash(assessment, submissions[0]);
-    const base = { submissionId: 's1', studentId: 'student-1', studentName: '김학생', sourceHash: currentHash, status: 'done', text: '현재 교사 문장', error: '', approved: false, candidateText: generatedText, candidateClaims, candidateEvidenceCriterionIds: ['criterion-1'], candidateSourceHash: currentHash, candidateTargetBytes: 700 };
+    const base = { submissionId: 's1', studentId: 'student-1', studentName: '김학생', sourceHash: currentHash, status: 'done', text: '현재 교사 문장', error: '', approved: false, candidateText: generatedText, candidateClaims, candidateEvidenceCriterionIds: ['criterion-1'], candidateSourceHash: currentHash, candidateTargetBytes: 1000 };
     function ReasonHarness({ initial }) { const [records, setRecords] = useState([initial]); return <RecordsStage lessonPlan={makeGeneratedPlan()} assessment={assessment} students={students} submissions={[submissions[0]]} records={records} onChange={setRecords}/>; }
 
     const staleView = render(<ReasonHarness initial={{ ...base, candidateSourceHash: 'record-v2:stale' }}/>);

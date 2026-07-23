@@ -153,9 +153,11 @@ test('gives the model a score-valid outcome and process rubric example when proc
 
     const shape = outputShape(assessmentMessages(makeGeneratedPlan(), assessmentRequest));
 
-    expect(shape.rubric.criteria).toHaveLength(2);
+    expect(shape.rubric.criteria).toHaveLength(4);
     expect(shape.rubric.criteria.map(criterion => ({ kind: criterion.kind, maxPoints: criterion.maxPoints }))).toEqual([
-        { kind: 'outcome', maxPoints: 80 },
+        { kind: 'outcome', maxPoints: 32 },
+        { kind: 'outcome', maxPoints: 28 },
+        { kind: 'outcome', maxPoints: 20 },
         { kind: 'process', maxPoints: 20 },
     ]);
     expect(shape.studentSheet.document.sections).toHaveLength(4);

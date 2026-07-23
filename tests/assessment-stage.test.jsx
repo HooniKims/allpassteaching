@@ -54,7 +54,7 @@ test('AI가 설정을 자동 완성한 설계 초안을 만들고 교사 수정�
     await user.click(screen.getByRole('button', { name: '이 설계로 수행평가지 만들기' }));
 
     expect(await screen.findByRole('heading', { name: '실제 수행평가지 편집' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: '루브릭 다운로드' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '저장' })).toBeInTheDocument();
     expect(fetch).toHaveBeenNthCalledWith(2, '/api/generate-assessment', expect.objectContaining({ body: expect.stringContaining('교사가 수정한 생태 탐구 과제') }));
 });
 

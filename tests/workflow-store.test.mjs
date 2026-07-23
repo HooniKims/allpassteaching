@@ -30,14 +30,14 @@ test('source hashes use the full canonical SHA-256 digest', () => {
     expect(sourceHash(value)).toBe(`src-${expected}`);
 });
 
-test('persists the selected record byte target and defaults older workspaces to 700byte', () => {
+test('persists the selected record byte target and defaults older workspaces to 1000byte', () => {
     const project = { ...createEmptyWorkflow(), recordTargetBytes: 850 };
     saveWorkflow(project);
     expect(loadWorkflow()).toMatchObject({ recordTargetBytes: 850 });
 
     window.localStorage.clear();
     window.localStorage.setItem(WORKFLOW_KEY, JSON.stringify({ version: 4, data: { activeProcess: 'records' } }));
-    expect(loadWorkflow()).toMatchObject({ recordTargetBytes: 700 });
+    expect(loadWorkflow()).toMatchObject({ recordTargetBytes: 1000 });
 });
 
 test('local persistence keeps structured results for refresh but never selected PDF objects', () => {

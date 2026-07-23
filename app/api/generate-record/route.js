@@ -8,7 +8,7 @@ import { gradingIsCurrent } from '@/lib/workflow-lineage';
 import { sourceHash } from '@/lib/source-hash';
 import { recordOutputSchema } from '@/lib/record-schema';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
-import { recordMessages, repairRecordMessages } from '@/lib/workflow-prompts';
+import { compressRecordMessages, recordMessages, repairRecordMessages } from '@/lib/workflow-prompts';
 import { recordEvidenceBundle } from '@/lib/record-evidence';
 import { hasUnsupportedGrowthInference } from '@/lib/record-schema';
 import { recordContextIncludesSubmission, verifyRecordContext } from '@/lib/record-context-token';
@@ -161,6 +161,11 @@ export async function POST(request) {
         if (!checked.success) {
             const repaired = await chatContent({ messages: repairRecordMessages(input, checked.value, checked.issues), timeoutMs: 60000 });
             checked = parseRecord(repaired, input.targetBytes, evidence);
+        }
+        // 길이 초과만 남은 실패는 하드 실패 대신 인용을 유지한 채 본문만 줄이는 압축 재시도로 복구한다.
+        if (!checked.success && checked.issues.every(issue => issue.path?.[0] === 'text' && String(issue.message).includes('이내로 작성'))) {
+            const compressed = await chatContent({ messages: compressRecordMessages(input, checked.value), timeoutMs: 60000 });
+            checked = parseRecord(compressed, input.targetBytes, evidence);
         }
         if (!checked.success) return json({ code: 'invalid_generation', message: '세특 초안의 길이와 기록 문체를 복구하지 못했습니다.', issues: publicValidationIssues(checked.issues) }, { status: 422 });
         return json({ record: checked.data });
