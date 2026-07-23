@@ -22,6 +22,12 @@ function reconcileTeacherOwnedFields(value, lessonPlan, assessmentRequest) {
         ...value,
         assessmentName: assessmentRequest.assessmentName,
         subject: lessonPlan.subject,
+        totalPoints: assessmentRequest.totalPoints,
+        scoring: {
+            includeProcessInScore: assessmentRequest.includeProcessInScore,
+            processWeightPercent: assessmentRequest.processWeightPercent,
+            processTargetPoints: assessmentRequest.includeProcessInScore ? Math.round(assessmentRequest.totalPoints * assessmentRequest.processWeightPercent / 100) : 0,
+        },
         visualAnalysisRequired: assessmentRequest.visualAnalysisRequired,
         includeStudentCover: assessmentRequest.includeStudentCover,
         generationSettings: {
@@ -55,7 +61,9 @@ function parseAssessmentDesign(content, lessonPlan, assessmentRequest) {
         const parsed = assessmentDesignSchema.safeParse(value);
         if (!parsed.success) return { success: false, value, issues: parsed.error.issues };
         if (JSON.stringify(parsed.data.backwardDesign.teacherIntent) !== JSON.stringify(assessmentRequest.teacherIntent)) return { success: false, value, issues: [{ path: ['backwardDesign', 'teacherIntent'], message: '교사가 입력한 도착점과 증거 질문을 정확히 보존해야 합니다.' }] };
-        const issues = [...teacherContractIssues(parsed.data, assessmentRequest), ...integrationIssuesFor(lessonPlan, parsed.data, false).map(issue => ({ path: issue.path, message: issueMessage(issue) }))];
+        const outcomeCount = parsed.data.rubric.criteria.filter(criterion => criterion.kind === 'outcome').length;
+        const subdivisionIssues = outcomeCount < 2 ? [{ path: ['rubric', 'criteria'], message: '결과 평가영역을 하나로 합치지 말고 개념 이해·탐구 수행·자료 분석/결론처럼 서로 다른 능력별로 최소 2개 이상 세분화해야 합니다. 각 영역의 이름·설명·수준을 이 수업 내용으로 구체적으로 쓰세요.' }] : [];
+        const issues = [...teacherContractIssues(parsed.data, assessmentRequest), ...integrationIssuesFor(lessonPlan, parsed.data, false).map(issue => ({ path: issue.path, message: issueMessage(issue) })), ...subdivisionIssues];
         return issues.length ? { success: false, value, issues } : { success: true, data: parsed.data };
     } catch (error) {
         return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] };
