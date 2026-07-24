@@ -357,12 +357,37 @@ test('학생 표지 PDF는 교사가 정한 섹션 순서·라벨·내용과 모
     expect(text).toContain('관찰 기록이 매우 제한적임');
 });
 
-test('repeats the rubric criterion context when its levels continue on a new page', async () => {
+test('채점 루브릭은 평가영역 행과 성취수준 열을 가진 표로 그린다', async () => {
+    const assessment = makeAssessment();
+    const events = [];
+
+    await buildWorkflowPdf('assessment-rubric', assessment, { onDraw: event => events.push(event) });
+    const table = events.find(event => event.kind === 'rubric-table');
+    const cells = events.filter(event => event.kind === 'rubric-cell');
+
+    expect(table).toMatchObject({ rowCount: assessment.rubric.criteria.length + 1, columnCount: assessment.rubric.levels.length + 1 });
+    expect(cells.filter(cell => cell.rowIndex === 0).map(cell => cell.text)).toEqual(['평가영역', ...assessment.rubric.levels.map(level => level.label)]);
+    for (const [criterionIndex, criterion] of assessment.rubric.criteria.entries()) {
+        for (const [levelIndex, level] of assessment.rubric.levels.entries()) {
+            expect(cells).toContainEqual(expect.objectContaining({
+                rowIndex: criterionIndex + 1,
+                columnIndex: levelIndex + 1,
+                text: `${level.label} · ${criterion.levels[levelIndex].score}점\n${criterion.levels[levelIndex].description}`,
+            }));
+        }
+    }
+});
+
+test('splits an over-tall rubric row across pages and repeats the header row', async () => {
     const assessment = makeAssessment();
     assessment.rubric.criteria[0].description = '관찰 근거를 구체적으로 설명한다. '.repeat(180);
     const events = [];
 
-    await buildWorkflowPdf('assessment-rubric', assessment, { onDraw: event => events.push(event) });
+    const bytes = await buildWorkflowPdf('assessment-rubric', assessment, { onDraw: event => events.push(event) });
+    const pdf = await PDFDocument.load(bytes);
+    const headerCells = events.filter(event => event.kind === 'rubric-cell' && event.rowIndex === 0 && event.columnIndex === 0);
 
-    expect(events.map(event => event.text)).toContain('1. 관찰 근거 · 계속');
+    expect(pdf.getPageCount()).toBeGreaterThan(1);
+    expect(new Set(headerCells.map(event => event.pageIndex)).size).toBe(pdf.getPageCount());
+    expect(events.filter(event => event.kind === 'rubric-cell' && event.rowIndex === 1).map(event => event.text).join('\n')).toContain('관찰 근거를 구체적으로 설명한다.');
 });
