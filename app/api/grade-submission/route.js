@@ -78,7 +78,7 @@ function reviewReasonFor(input, sourceElements, criterion) {
     return '';
 }
 
-function validateAiGrading(value, input) {
+function validateAiGrading(value, input, { strictDistinctEvidence = false } = {}) {
     const parsed = aiGradingOutputSchema.safeParse(value);
     if (!parsed.success) return { success: false, value, issues: parsed.error.issues };
     const expected = input.assessment.rubric.criteria;
@@ -108,23 +108,45 @@ function validateAiGrading(value, input) {
         }
         return { ...criterion, decisionSource: 'ai', reviewRequired: false, sourceRefs: refs, teacherConfirmed: false };
     });
+    // Finalize rejects gradings where two criteria share an OCR element, so catch it here:
+    // the first pass asks the model to repair; a repeated collision downgrades that criterion
+    // to teacher_review instead of failing the whole generation.
+    const evidenceOwnerByElementId = new Map();
+    const resolvedCriteria = criteria.map((criterion, index) => {
+        if (criterion.status !== 'scored') return criterion;
+        const collision = (criterion.sourceRefs ?? []).find(ref => evidenceOwnerByElementId.has(ref.elementId));
+        if (!collision) {
+            (criterion.sourceRefs ?? []).forEach(ref => evidenceOwnerByElementId.set(ref.elementId, index));
+            return criterion;
+        }
+        const ownerName = expected[evidenceOwnerByElementId.get(collision.elementId)]?.name ?? '다른';
+        if (strictDistinctEvidence) {
+            issues.push(issue(['criteria', index, 'sourceRefs'], `${expected[index]?.name ?? criterion.criterionId} 평가영역은 ${ownerName} 평가영역과 서로 다른 OCR 요소를 근거로 연결해야 합니다.`));
+            return criterion;
+        }
+        return {
+            status: 'teacher_review', criterionId: criterion.criterionId, selectedLevelId: null, score: null,
+            evidence: criterion.evidence, reviewReason: `'${ownerName}' 평가영역과 같은 원본 근거가 연결되어 교사가 서로 다른 근거를 골라 확인해야 합니다.`,
+            confidence: criterion.confidence, sourceRefs: criterion.sourceRefs, teacherConfirmed: false, reviewRequired: true,
+        };
+    });
     if (issues.length) return { success: false, value, issues };
-    const provisionalTotal = criteria.reduce((sum, criterion) => sum + (criterion.status === 'scored' ? criterion.score : 0), 0);
-    const reviewOrigins = criteria.map(canonicalGradingOrigin);
+    const provisionalTotal = resolvedCriteria.reduce((sum, criterion) => sum + (criterion.status === 'scored' ? criterion.score : 0), 0);
+    const reviewOrigins = resolvedCriteria.map(canonicalGradingOrigin);
     const originRevision = input.gradingRevision + 1;
     const provenance = gradingProvenance({ ...input, gradingRevision: originRevision });
     return { success: true, data: {
-        ...parsed.data, criteria, provisionalTotal, totalScore: null,
-        sourceHash: gradingSourceHash(input.assessment, input.extractedText, input.elements, criteria, provenance),
+        ...parsed.data, criteria: resolvedCriteria, provisionalTotal, totalScore: null,
+        sourceHash: gradingSourceHash(input.assessment, input.extractedText, input.elements, resolvedCriteria, provenance),
         reviewOrigins, originRevision,
         originToken: createGradingOriginToken(input.assessment, input.extractedText, input.elements, provenance, reviewOrigins),
     } };
 }
 
-function parseGrading(content, input) {
+function parseGrading(content, input, options = {}) {
     try {
         const value = JSON.parse(content);
-        return validateAiGrading(value, input);
+        return validateAiGrading(value, input, options);
     } catch (error) {
         return { success: false, value: content, issues: [issue([], `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}`)] };
     }
@@ -200,7 +222,7 @@ function finalizeGrading(input) {
 async function generate(input) {
     try {
         const first = await chatContent({ messages: gradingMessages(input), timeoutMs: 60000 });
-        let checked = parseGrading(first, input);
+        let checked = parseGrading(first, input, { strictDistinctEvidence: true });
         if (!checked.success) {
             const repaired = await chatContent({ messages: repairGradingMessages(input, checked.value, checked.issues), timeoutMs: 60000 });
             checked = parseGrading(repaired, input);

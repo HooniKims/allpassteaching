@@ -37,6 +37,23 @@ test('accepts only bounded criterion scores with complete evidence and feedback'
     expect(gradingContentIsValid(assessment, { ...current, criteria: current.criteria.map((item, index) => index ? item : { ...item, evidence: '' }) }, '', baseElements)).toBe(false);
 });
 
+test('rejects a grading where two scored criteria share the same evidence element', () => {
+    const assessment = makeAssessment();
+    const current = { ...grading, sourceHash: gradingSourceHash(assessment, '', baseElements, grading.criteria) };
+    const duplicated = { ...current, criteria: current.criteria.map((item, index) => index === 2
+        ? { ...item, evidence: current.criteria[0].evidence, sourceRefs: current.criteria[0].sourceRefs }
+        : item) };
+    expect(gradingContentIsValid(assessment, duplicated, '', baseElements)).toBe(false);
+});
+
+test('matches evidence quoted without the OCR line breaks', () => {
+    const assessment = makeAssessment();
+    const wrappedElements = baseElements.map((element, index) => index === 0 ? { ...element, text: '뿌리에\n가는 털' } : element);
+    const criteria = grading.criteria.map((item, index) => index === 0 ? { ...item, sourceRefs: [canonicalGradingSourceRef(wrappedElements[0])] } : item);
+    const current = { ...grading, criteria, sourceHash: gradingSourceHash(assessment, '', wrappedElements, criteria) };
+    expect(gradingContentIsValid(assessment, current, '', wrappedElements)).toBe(true);
+});
+
 test('keeps existing numeric grading consumers compatible with dynamic rubric level arrays', () => {
     const assessment = makeAssessment();
 

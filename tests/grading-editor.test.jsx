@@ -20,6 +20,22 @@ function Harness() {
     return <><GradingEditor assessment={makeAssessment()} submission={value} onChange={setValue}/><output data-testid="grading-state">{JSON.stringify(value)}</output></>;
 }
 
+test('warns and blocks confirmation when two criteria link the same source element', () => {
+    const duplicated = {
+        ...initial,
+        grading: { ...initial.grading, criteria: initial.grading.criteria.map((criterion, index) => index === 1 ? { ...criterion, sourceRefs: [sourceRef] } : criterion) },
+    };
+    function DuplicateHarness() {
+        const [value, setValue] = useState(duplicated);
+        return <GradingEditor assessment={makeAssessment()} submission={value} onChange={setValue}/>;
+    }
+    render(<DuplicateHarness/>);
+
+    expect(screen.getAllByText(/같은 원본 근거를 사용하고 있어요/)).toHaveLength(2);
+    expect(screen.getByText(/‘구조와 기능 설명’ 평가영역과 같은 원본 근거/)).toBeInTheDocument();
+    expect(screen.getByLabelText('관찰 근거 근거와 수준 확인 완료')).toBeDisabled();
+});
+
 test('Given a scoreless criterion When the editor renders Then the reason, evidence, feedback and exact rubric level controls are visible', () => {
     render(<Harness/>);
 

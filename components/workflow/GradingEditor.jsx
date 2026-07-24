@@ -1,4 +1,4 @@
-import { canonicalGradingSourceRef, gradingEvidenceRiskIds } from '@/lib/grading-evidence.js';
+import { canonicalGradingSourceRef, gradingEvidenceRiskIds, sharedGradingEvidenceElementIds } from '@/lib/grading-evidence.js';
 import { nextGradingRevision } from '@/lib/grading-generation.js';
 import { gradingSourceHash } from '@/lib/workflow-lineage.js';
 
@@ -10,6 +10,16 @@ function criterionIsConfirmable(criterion) {
 
 export function GradingEditor({ assessment, submission, onChange, onSourceSelect = () => {} }) {
     const rubricById = new Map(assessment.rubric.criteria.map(item => [item.id, item]));
+    const sharedEvidenceOwners = sharedGradingEvidenceElementIds(submission.grading.criteria);
+    const sharedEvidencePartners = criterion => {
+        const partners = new Set();
+        for (const sourceRef of criterion.sourceRefs ?? []) {
+            for (const ownerId of sharedEvidenceOwners.get(sourceRef.elementId) ?? []) {
+                if (ownerId !== criterion.criterionId) partners.add(rubricById.get(ownerId)?.name ?? ownerId);
+            }
+        }
+        return [...partners];
+    };
     const applyGrading = grading => {
         const provisionalTotal = grading.criteria.reduce((sum, criterion) => sum + (criterion.status === 'scored' ? criterion.score : 0), 0);
         const revisedSubmission = { ...submission, gradingRevision: nextGradingRevision(submission) };
@@ -57,6 +67,7 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
         <div className="grading-criteria">{submission.grading.criteria.map((criterion, index) => {
             const rubric = rubricById.get(criterion.criterionId);
             if (!rubric) return null;
+            const sharedWith = sharedEvidencePartners(criterion);
             return <fieldset key={criterion.criterionId} className={criterion.status === 'teacher_review' ? 'grading-criterion grading-criterion--review' : 'grading-criterion'}>
                 <legend>{rubric.name}</legend>
                 <div className="grading-criterion__status"><span className={`review-badge${criterion.status === 'teacher_review' ? ' review-badge--warning' : ''}`}>{criterion.status === 'teacher_review' ? '교사 확인 필요' : criterion.decisionSource === 'teacher' ? '교사 선택' : 'AI 수준 추천'}</span><span>신뢰도 {Math.round(criterion.confidence * 100)}%</span></div>
@@ -70,6 +81,7 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
                     : <span>원본 위치 연결 안 됨</span>}
                     {availableElements.length > 0 && <label className="grading-source-picker">원본 근거 위치<select aria-label={`${rubric.name} 원본 근거 위치 연결`} value={criterion.sourceRefs?.[0]?.elementId ?? ''} onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) { const reviewRequired = criterion.reviewRequired === true || gradingEvidenceRiskIds(submission, [element]).length > 0; updateCriterion(index, { sourceRefs: [canonicalGradingSourceRef(element)], reviewRequired, ...(reviewRequired && criterion.status === 'scored' ? { decisionSource: 'teacher' } : {}) }); } else { updateCriterion(index, { sourceRefs: [] }); } }}><option value="">OCR 요소 선택</option>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50) || element.category}</option>)}</select></label>}
                 </div>
+                {sharedWith.length > 0 && <p className="grading-duplicate-warning" role="alert">‘{sharedWith.join('’, ‘')}’ 평가영역과 같은 원본 근거를 사용하고 있어요. 승인하려면 위의 원본 근거 위치에서 이 영역만의 다른 문단을 골라주세요.</p>}
                 {rubric.kind === 'process' && revisionCheckpoint && <div className="grading-revision-evidence">
                     <strong>실제 수정 전후 근거</strong>
                     {!criterion.revisionEvidence
@@ -84,7 +96,7 @@ export function GradingEditor({ assessment, submission, onChange, onSourceSelect
                         } })}>수정 전후 원본 연결</button>
                         : <><label>수정 전 원본<select aria-label={`${rubric.name} 수정 전 원본`} value={criterion.revisionEvidence.beforeSourceRef.elementId} onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, beforeEvidence: element.text, beforeSourceRef: canonicalGradingSourceRef(element), teacherConfirmed: false } }); }}>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50)}</option>)}</select></label><label>수정 후 원본<select aria-label={`${rubric.name} 수정 후 원본`} value={criterion.revisionEvidence.afterSourceRef.elementId} onChange={event => { const element = availableElements.find(item => item.id === event.target.value); if (element) updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, afterEvidence: element.text, afterSourceRef: canonicalGradingSourceRef(element), teacherConfirmed: false } }); }}>{availableElements.map(element => <option value={element.id} key={element.id}>{element.page}쪽 · {element.text.slice(0, 50)}</option>)}</select></label><label>수정 이유<textarea aria-label={`${rubric.name} 수정 이유`} rows="2" value={criterion.revisionEvidence.changeReason} onChange={event => updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, changeReason: event.target.value, teacherConfirmed: false } })}/></label><label className="grading-confirm"><input type="checkbox" aria-label={`${rubric.name} 수정 전후 근거 확인 완료`} checked={criterion.revisionEvidence.teacherConfirmed} disabled={criterion.revisionEvidence.beforeSourceRef.elementId === criterion.revisionEvidence.afterSourceRef.elementId || !criterion.revisionEvidence.changeReason.trim()} onChange={event => updateCriterion(index, { revisionEvidence: { ...criterion.revisionEvidence, teacherConfirmed: event.target.checked } })}/><span>수정 전후 원본과 수정 이유를 확인했습니다.</span></label></>}
                 </div>}
-                <label className="grading-confirm"><input type="checkbox" aria-label={`${rubric.name} 근거와 수준 확인 완료`} checked={criterion.teacherConfirmed === true} disabled={!criterionIsConfirmable(criterion)} onChange={event => updateCriterion(index, { teacherConfirmed: event.target.checked })}/><span>원본 근거와 선택 수준을 확인했습니다.</span></label>
+                <label className="grading-confirm"><input type="checkbox" aria-label={`${rubric.name} 근거와 수준 확인 완료`} checked={criterion.teacherConfirmed === true} disabled={!criterionIsConfirmable(criterion) || sharedWith.length > 0} onChange={event => updateCriterion(index, { teacherConfirmed: event.target.checked })}/><span>원본 근거와 선택 수준을 확인했습니다.</span></label>
             </fieldset>;
         })}</div>
         <label>종합 의견<textarea rows="3" value={submission.grading.summary} onChange={event => applyGrading({ ...submission.grading, summary: event.target.value })}/></label>

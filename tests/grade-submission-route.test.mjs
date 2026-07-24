@@ -46,6 +46,48 @@ async function gradingReadyForApproval() {
     return grading;
 }
 
+test('scores evidence quoted without the OCR line breaks', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const wrappedElements = elements.map(element => element.id === 'text-1' ? { ...element, text: '뿌리에 가는\n털이 있다' } : element);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(completion(aiOutput)));
+
+    const response = await POST(request(generateBody({ elements: wrappedElements })));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.grading.criteria[0]).toMatchObject({ status: 'scored', selectedLevelId: 'proficient', score: 35 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test('asks the model to repair when two criteria share the same evidence element', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const duplicated = structuredClone(aiOutput);
+    duplicated.criteria[2] = { ...duplicated.criteria[2], evidence: '뿌리에 가는 털이 있다', sourceRefs: [{ elementId: 'text-1', page: 1 }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(completion(duplicated)).mockResolvedValueOnce(completion(aiOutput)));
+
+    const response = await POST(request(generateBody()));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.grading.criteria[2]).toMatchObject({ status: 'scored', sourceRefs: [expect.objectContaining({ elementId: 'text-2' })] });
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('downgrades a still-duplicated criterion to teacher review instead of failing the grading', async () => {
+    process.env.UPSTAGE_API_KEY = 'test-key';
+    const duplicated = structuredClone(aiOutput);
+    duplicated.criteria[2] = { ...duplicated.criteria[2], evidence: '뿌리에 가는 털이 있다', sourceRefs: [{ elementId: 'text-1', page: 1 }] };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(completion(duplicated))));
+
+    const response = await POST(request(generateBody()));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.grading.criteria[2]).toMatchObject({ status: 'teacher_review', selectedLevelId: null, score: null, reviewRequired: true, teacherConfirmed: false });
+    expect(body.grading.criteria[2].reviewReason).toContain('관찰 근거');
+    expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 test('Given one text source and one uncertain equation When grading is generated Then only verified evidence scores and final total stays null', async () => {
     const { response, body } = await generatedMixedGrading();
 
