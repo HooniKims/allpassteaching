@@ -222,6 +222,16 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .subject-mapping-list input { width: 18px; min-height: 18px; margin: 2px 0 0; accent-color: var(--color-action); }
 .subject-mapping-list strong, .subject-mapping-list small { display: block; }
 .subject-mapping-list small { margin-top: 3px; color: var(--color-muted); font-weight: 400; }
+.basics label > small { display: block; margin-top: 6px; color: var(--color-muted); font-size: 12px; font-weight: 400; line-height: 1.6; }
+.teaching-tools { margin: 22px 0; }
+.teaching-tools label { margin: 0; }
+.teaching-tools__status { margin: 8px 0 0; min-height: 22px; }
+.teaching-tools__action { display: flex; justify-content: flex-end; margin-top: 10px; }
+.teaching-tools__list { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.teaching-tools__list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; background: var(--color-subdued); border-radius: var(--radius-control); }
+.teaching-tools__list strong, .teaching-tools__list small { display: block; }
+.teaching-tools__list small { margin-top: 3px; color: var(--color-muted); font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.teaching-tools__list a { color: var(--color-action-hover); }
 .teaching-workflow { min-height: 100vh; }
 .process-rail { position: sticky; z-index: 10; top: 0; padding: 10px clamp(16px, 4vw, 48px); background: rgba(246, 245, 242, .96); border-bottom: 1px solid var(--color-border); }
 .process-rail__inner { width: min(100%, 1240px); display: grid; grid-template-columns: clamp(128px, 12vw, 160px) minmax(0, 1fr); align-items: stretch; gap: 12px; margin: 0 auto; }
@@ -360,6 +370,8 @@ button:disabled { opacity: .48; cursor: not-allowed; }
     .workspace__main { padding: 32px 20px 64px; }.field-grid, .choice-row, .assessment-approach-picker > div { grid-template-columns: 1fr; }
     .basics footer { align-items: stretch; flex-direction: column; }.basics footer button { width: 100%; }
     .subject-mapping__action { align-items: stretch; flex-direction: column; }.subject-mapping__action button { width: 100%; }
+    .teaching-tools__action button { width: 100%; }
+    .teaching-tools__list li { grid-template-columns: minmax(0, 1fr); }
     .student-roster { padding: 20px 16px; }.student-roster__heading { align-items: stretch; flex-direction: column; gap: 10px; }.student-roster__heading > strong { align-self: flex-start; }.submission-link-field { align-items: stretch; flex-direction: column; }.submission-link-field p { margin-bottom: 0; }
 }
 @media (max-width: 800px) {

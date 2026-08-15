@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
-import { worksheetGenerationRequestSchema, worksheetOutputSchema } from '@/lib/worksheet-schema';
+import { withoutQuestionNumbering, worksheetGenerationRequestSchema, worksheetOutputSchema } from '@/lib/worksheet-schema';
 import { worksheetFormats, worksheetFormatById } from '@/lib/worksheet-formats';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { repairWorksheetMessages, worksheetMessages } from '@/lib/workflow-prompts';
@@ -27,7 +27,7 @@ function parseWorksheet(content, lessonPlan, selectedFormatId, generationRequest
             path: ['document', 'sections'],
             message: issue.kind === 'disciplinary' ? `${issue.subject} 교과의 고유한 관점과 방법을 확인하는 문항이 필요합니다.` : '두 교과의 근거를 함께 사용해 통합 설명이나 공동 산출물을 만드는 문항이 필요합니다.',
         })) };
-        return { success: true, data: parsed.data };
+        return { success: true, data: withoutQuestionNumbering(parsed.data) };
     } catch (error) {
         return { success: false, value: content, issues: [{ path: [], message: `JSON 파싱 오류: ${error instanceof Error ? error.message : '올바른 JSON이 아닙니다.'}` }] };
     }

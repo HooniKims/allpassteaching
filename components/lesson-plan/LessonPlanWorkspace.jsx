@@ -8,17 +8,17 @@ import { InstructionModelStep } from './InstructionModelStep.jsx';
 import { GenerationStatus } from './GenerationStatus.jsx';
 import { LessonPlanEditor } from './LessonPlanEditor.jsx';
 import { GenerationSummary } from './GenerationSummary.jsx';
-import { buildLessonPlanGenerationRequest, createGenerationSnapshot, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
+import { buildLessonPlanGenerationRequest, createGenerationSnapshot, emptyToolEvidence, hasGenerationInputChanged, normalizeLessonMetadata } from '@/lib/lesson-input';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
 import { instructionModels } from '@/data/instruction-models';
 
-const emptyBasics = { schoolLevel: 'middle', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], lessonType: 'single', integrationSubject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', metadata: normalizeLessonMetadata(), error: '' };
+const emptyBasics = { schoolLevel: 'middle', grade: '', subject: '', subjectMode: 'official', displaySubject: '', mappedSubjects: [], lessonType: 'single', integrationSubject: '', mode: 'single', sessions: 1, intent: '', studentNeeds: '', teachingTools: '', toolEvidence: { ...emptyToolEvidence }, metadata: normalizeLessonMetadata(), error: '' };
 const emptyDraft = { step: 1, maxReached: 1, basics: emptyBasics, standards: [] };
 function hasDraftContent(draft) {
     const basics = draft.basics ?? {};
     return Boolean(draft.plan || draft.instructionModel || draft.standards?.length || draft.step > 1 || draft.maxReached > 1
         || basics.schoolLevel !== 'middle' || basics.grade || basics.subject || basics.displaySubject || basics.mappedSubjects?.length || basics.lessonType === 'integrated' || basics.integrationSubject
-        || basics.mode === 'multi' || basics.sessions !== 1 || basics.intent?.trim() || basics.studentNeeds?.trim()
+        || basics.mode === 'multi' || basics.sessions !== 1 || basics.intent?.trim() || basics.studentNeeds?.trim() || basics.teachingTools?.trim()
         || Object.values(normalizeLessonMetadata(basics.metadata)).some(Boolean));
 }
 

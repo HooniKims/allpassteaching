@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { normalizeLessonMetadata } from '@/lib/lesson-input';
 import { CUSTOM_SUBJECT_VALUE, catalogSubjectsFor, subjectGroupsFor } from '@/lib/subject-options';
 import { useOperation } from '@/components/workflow/OperationProvider.jsx';
+import { TeachingToolsField } from './TeachingToolsField.jsx';
 
 const gradeOptions = { elementary: ['1','2','3','4','5','6'], middle: ['1','2','3'], high: ['1','2','3'] };
 
@@ -142,7 +143,11 @@ export function LessonBasicsStep({ value, onChange, onNext }) {
             <label>수업자 <span className="optional">선택</span><input aria-label="수업자" value={metadata.teacherName} onChange={event => updateMetadata('teacherName', event.target.value)}/></label>
         </div>
         <label>수업할 개념 및 내용<textarea aria-label="수업할 개념 및 내용" rows="5" value={value.intent} onChange={event => update('intent', event.target.value)} placeholder="예: 식물이 자라는 데 필요한 조건을 예상하고 실험으로 확인한다."/></label>
-        <label>학생 특성 또는 지원 필요 사항 <span className="optional">선택</span><textarea rows="3" value={value.studentNeeds} onChange={event => update('studentNeeds', event.target.value)} placeholder="예: 관찰 기록에 어려움이 있는 학생에게 문장 틀을 제공해요."/></label>
+        <label>학생 특성 또는 지원 필요 사항 <span className="optional">선택</span>
+            <textarea rows="3" value={value.studentNeeds} onChange={event => update('studentNeeds', event.target.value)} placeholder="예: 분수 개념이 약한 학생이 4명 있고, 관찰한 내용을 문장으로 쓰는 걸 어려워해요"/>
+            <small>선수학습 수준, 어려워하는 기능, 통합학급·언어 지원처럼 우리 반 학생이 어떤 상태인지 적어주세요. 적으면 지도안의 &apos;개별화·지원 전략&apos;과 세안의 &apos;학습자 분석&apos;에 반영됩니다. 사용할 도구와 준비물은 아래 칸에 적어주세요.</small>
+        </label>
+        <TeachingToolsField value={value} onChange={onChange}/>
         <footer><span>입력 내용은 이 브라우저에 저장됩니다.</span><button type="submit">성취기준 찾기 <span aria-hidden="true">→</span></button></footer>
     </form>;
 }

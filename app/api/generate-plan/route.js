@@ -3,6 +3,7 @@ import { lessonPlanSchema } from '@/lib/lesson-plan-schema';
 import { chatContent, UpstageError } from '@/lib/upstage/client';
 import { lessonPlanMessages, repairLessonPlanMessages } from '@/lib/upstage/prompts';
 import { labelInstructionModelActivities, validateInstructionModelAlignment, validateIntegrationAlignment } from '@/lib/instruction-model-alignment';
+import { TOOL_SEARCH_LIMITS } from '@/lib/tool-search';
 
 const lessonPhases = ['도입', '전개', '정리'];
 const generationRequiredFieldsSchema = z.object({
@@ -24,8 +25,16 @@ const generationRequiredFieldsSchema = z.object({
     }),
 }).passthrough();
 const selectedStandardSchema = z.object({ code: z.string(), text: z.string(), subject: z.string().default('') });
+const emptyToolEvidence = { query: '', source: 'unverified', verified: false, summary: '' };
+// 교사가 적은 도구를 검색해 확보한 근거입니다. 검색이 막혀도 지도안 생성은 막지 않으므로 모든 값에 기본값을 둡니다.
+const toolEvidenceSchema = z.object({
+    query: z.string().default(''),
+    source: z.string().default('unverified'),
+    verified: z.boolean().default(false),
+    summary: z.string().max(TOOL_SEARCH_LIMITS.summary).default(''),
+}).default(emptyToolEvidence);
 const draftSchema = z.object({
-    basics: z.object({ schoolLevel: z.enum(['elementary','middle','high']), grade: z.string(), subject: z.string(), subjectMode: z.enum(['official','custom']).default('official'), displaySubject: z.string().default(''), mappedSubjects: z.array(z.string()).max(3).default([]), lessonType: z.enum(['single','integrated']).default('single'), integrationSubject: z.string().default(''), mode: z.enum(['single','multi']), sessions: z.number().int().min(1).max(10), sessionMinutes: z.number().int().positive().default(40), intent: z.string().min(2), studentNeeds: z.string().default(''), metadata: z.object({ date: z.string().default(''), period: z.string().default(''), place: z.string().default(''), className: z.string().default(''), teacherName: z.string().default('') }).default({ date: '', period: '', place: '', className: '', teacherName: '' }) }),
+    basics: z.object({ schoolLevel: z.enum(['elementary','middle','high']), grade: z.string(), subject: z.string(), subjectMode: z.enum(['official','custom']).default('official'), displaySubject: z.string().default(''), mappedSubjects: z.array(z.string()).max(3).default([]), lessonType: z.enum(['single','integrated']).default('single'), integrationSubject: z.string().default(''), mode: z.enum(['single','multi']), sessions: z.number().int().min(1).max(10), sessionMinutes: z.number().int().positive().default(40), intent: z.string().min(2), studentNeeds: z.string().default(''), teachingTools: z.string().max(2000).default(''), toolEvidence: toolEvidenceSchema, metadata: z.object({ date: z.string().default(''), period: z.string().default(''), place: z.string().default(''), className: z.string().default(''), teacherName: z.string().default('') }).default({ date: '', period: '', place: '', className: '', teacherName: '' }) }),
     standards: z.array(selectedStandardSchema).min(1).max(10),
     instructionModel: z.object({ id: z.string(), name: z.string(), stages: z.array(z.string()) }).passthrough(),
     integration: z.object({
